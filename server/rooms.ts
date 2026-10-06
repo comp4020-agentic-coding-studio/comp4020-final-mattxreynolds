@@ -206,6 +206,26 @@ function clear(room: Room, module: G.ModuleId, text: string): void {
 const inRange = (n: unknown, length: number): n is number =>
   Number.isInteger(n) && (n as number) >= 0 && (n as number) < length;
 
+const FIELD: Record<Action["type"], string | null> = {
+  start: null,
+  cut: "wire",
+  symbol: "index",
+  key: "position",
+  flip: "index",
+  engage: null,
+  override: null,
+  newMission: null,
+};
+
+/** Checks an action's shape before it can touch the room (or start the clock). */
+function isAction(body: unknown): body is Action {
+  if (typeof body !== "object" || body === null) return false;
+  const { type } = body as { type?: unknown };
+  if (typeof type !== "string" || !Object.hasOwn(FIELD, type)) return false;
+  const field = FIELD[type as Action["type"]];
+  return field === null || Number.isInteger((body as Record<string, unknown>)[field]);
+}
+
 /** Applies one action; returns an error message if it was refused. */
 function apply(room: Room, player: Player, action: Action): string | null {
   const m = room.mission;
@@ -432,7 +452,8 @@ roomRoutes.post("/:code/actions", (req, res) => {
   const player = playerFrom(req);
   if (!room) return void res.status(404).json({ error: "no such room" });
   if (!player) return void res.status(401).json({ error: "unknown player" });
-  const error = apply(room, player, req.body as Action);
+  if (!isAction(req.body)) return void res.status(400).json({ error: "malformed action" });
+  const error = apply(room, player, req.body);
   if (error) return void res.status(409).json({ error });
   save(room);
   broadcast(room);

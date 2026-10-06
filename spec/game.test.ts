@@ -87,6 +87,18 @@ describe("rooms", () => {
     expect(Date.now() - sent).toBeLessThan(1000);
   });
 
+  it("refuse malformed actions without starting the clock", async () => {
+    const alice = await newPlayer();
+    const code = await openRoom(alice);
+    const res = await fetch(url(`/api/rooms/${code}/actions`), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-player": alice.id },
+      body: JSON.stringify({ type: "cut", wire: "red" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await look(code, "operator")).status).toBe("ready");
+  });
+
   it("load a fresh device for the next mission once a run ends", async () => {
     const alice = await newPlayer();
     const code = await openRoom(alice);
