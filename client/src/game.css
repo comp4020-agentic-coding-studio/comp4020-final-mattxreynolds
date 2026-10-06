@@ -42,6 +42,14 @@ footer a{color:#a9b8bf}
 .console.over.defused .console-head span:last-child{color:var(--lime)}
 .console.over:not(.defused) .console-head span:last-child{color:var(--coral)}
 #timer.urgent{color:var(--coral)}
+.console.struck{animation:struck .6s}
+@keyframes struck{0%,100%{transform:none;border-color:#465056}20%{transform:translateX(-6px);border-color:var(--coral)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@media(prefers-reduced-motion:reduce){.console.struck{animation:none;border-color:var(--coral)}}
+.result{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:22px 22px 0;padding:18px 20px;border:1px solid var(--coral);border-left-width:3px;background:#2a1a17;border-radius:4px}
+.result.defused{border-color:var(--lime);background:#1c2820}
+.result strong{display:block;font:600 26px 'Barlow Condensed',sans-serif;color:var(--coral)}
+.result.defused strong{color:var(--lime)}
+.result span{font:12px 'IBM Plex Mono',monospace;color:#c0c9cd}
 .console.over.exploded #timer,.console.over.timeout #timer{color:var(--coral)}
 #log{list-style:none;padding:0;min-height:120px}
 #log li{margin-bottom:8px;font-size:13px;line-height:1.5}

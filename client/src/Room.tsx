@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { MAX_STRIKES, MODULES } from "../../shared/game.ts";
+import { useEffect, useRef, useState } from "react";
+import { formatClock, MAX_STRIKES, MODULES } from "../../shared/game.ts";
 import type { Role } from "../../shared/view.ts";
 import { rememberRoom, type Me } from "./api.ts";
 import { navigate } from "./App.tsx";
@@ -22,6 +22,20 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
   const { view, missing, error, act, offset } = useRoom(code, role, me);
   const clock = useClock(view, offset);
   const [copied, setCopied] = useState(false);
+  const [struck, setStruck] = useState(false);
+  const strikes = useRef(0);
+
+  // flash the console on every new strike, on every screen in the room
+  useEffect(() => {
+    const now = view?.strikes ?? 0;
+    if (now > strikes.current) {
+      setStruck(true);
+      const t = setTimeout(() => setStruck(false), 600);
+      strikes.current = now;
+      return () => clearTimeout(t);
+    }
+    strikes.current = now;
+  }, [view?.strikes]);
 
   useEffect(() => rememberRoom(code), [code]);
   const choose = (r: Role) => {
@@ -111,7 +125,7 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
       </nav>
 
       <div className="workspace">
-        <section className={`console ${status}${view?.outcome ? ` ${view.outcome}` : ""}`}>
+        <section className={`console ${status}${view?.outcome ? ` ${view.outcome}` : ""}${struck ? " struck" : ""}`}>
           <div className="console-head">
             <span>DEVICE // {view?.device?.serial ? `DA-${view.device.serial.slice(-3)}` : "NOT IN VIEW"}</span>
             <span>{condition}</span>
@@ -136,6 +150,27 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
               </div>
             </div>
           </div>
+
+          {view?.status === "over" ? (
+            <div className={`result ${view.outcome}`} role="status">
+              <div>
+                <strong>
+                  {view.outcome === "defused"
+                    ? "Device secured."
+                    : view.outcome === "timeout"
+                      ? "Out of time."
+                      : "Three strikes."}
+                </strong>
+                <span>
+                  {solvedCount}/{MODULES.length} modules · {formatClock(view.msLeft)} left · logged to the
+                  station
+                </span>
+              </div>
+              <button className="primary small" onClick={() => act({ type: "newMission" })}>
+                New mission
+              </button>
+            </div>
+          ) : null}
 
           {!view ? (
             <div className="loading">Establishing link to room {code}…</div>
