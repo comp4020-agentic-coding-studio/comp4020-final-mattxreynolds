@@ -4,6 +4,10 @@ import type { StationLog } from "../../shared/view.ts";
 import { api, lastRoom, type Me } from "./api.ts";
 import { navigate } from "./App.tsx";
 
+// The lobby shows only the latest runs; every run stays in the database, so
+// the totals and your own record still count all of them.
+const RUNS_SHOWN = 8;
+
 const OUTCOME_TEXT = { defused: "SECURED", exploded: "LOST · STRIKES", timeout: "LOST · TIME" };
 
 function ago(at: number): string {
@@ -24,7 +28,7 @@ export function Lobby({ me, rename }: { me: Me | null; rename: (c: string) => Pr
 
   useEffect(() => {
     if (!me) return;
-    const load = () => api<StationLog>("/api/log?limit=25", me).then(setLog, () => {});
+    const load = () => api<StationLog>(`/api/log?limit=${RUNS_SHOWN}`, me).then(setLog, () => {});
     load();
     const t = setInterval(load, 10_000);
     return () => clearInterval(t);
@@ -164,7 +168,7 @@ export function Lobby({ me, rename }: { me: Me | null; rename: (c: string) => Pr
           <h2 id="station-log-title">Every shift, on the record.</h2>
           <p>
             {log
-              ? `${log.totals.missions} mission${log.totals.missions === 1 ? "" : "s"} logged · ${log.totals.defused} secured`
+              ? `${log.totals.missions} mission${log.totals.missions === 1 ? "" : "s"} logged · ${log.totals.defused} secured${log.totals.missions > RUNS_SHOWN ? ` · latest ${RUNS_SHOWN} shown` : ""}`
               : "Reading the log…"}
           </p>
           {log && log.runs.length === 0 ? (
