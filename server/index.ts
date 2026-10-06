@@ -1,7 +1,9 @@
 import express from "express";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { players } from "./players.ts";
 import { renderReadme } from "./readme.ts";
+import { logRoutes, roomRoutes } from "./rooms.ts";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DEV = process.env.NODE_ENV !== "production";
@@ -13,6 +15,9 @@ app.use(express.json());
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
+app.use("/api/players", players);
+app.use("/api/rooms", roomRoutes);
+app.use("/api/log", logRoutes);
 
 app.get(["/readme", "/readme/"], (_req, res) => {
   res.type("html").send(renderReadme(path.join(root, "README.md")));

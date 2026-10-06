@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch-path=server server/index.ts",
+    "dev": "node --watch-path=server --watch-path=shared server/index.ts",
     "build": "vite build",
     "start": "NODE_ENV=production node server/index.ts",
     "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
