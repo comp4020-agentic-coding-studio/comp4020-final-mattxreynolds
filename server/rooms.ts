@@ -348,7 +348,10 @@ function view(room: Room, role: Role): RoomView {
     v.device = {
       serial: d.serial,
       wires: d.wires.map((color, i) => ({ color, cut: m.cut.includes(i) })),
-      symbols: d.symbols.map((glyph, i) => ({ glyph, pressed: m.symbolPresses.includes(i) })),
+      symbols: d.symbols.map((glyph, i) => {
+        const step = m.symbolPresses.indexOf(i);
+        return { glyph, step: step === -1 ? null : step };
+      }),
       keypad: current
         ? { stage, display: current.display, keys: current.keys }
         : { stage, display: null, keys: d.keypad[d.keypad.length - 1].keys },

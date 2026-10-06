@@ -28,7 +28,7 @@ export interface CrewMember {
 export interface OperatorDevice {
   serial: string;
   wires: { color: WireColor; cut: boolean }[];
-  symbols: { glyph: string; pressed: boolean }[];
+  symbols: { glyph: string; step: number | null }[]; // step: when it was pressed in the sequence
   keypad: { stage: number; display: number | null; keys: number[] };
   switches: { lights: LightColor[]; up: boolean[] };
   override: { casing: CasingColor; label: OverrideLabel };
