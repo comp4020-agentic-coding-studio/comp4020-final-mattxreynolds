@@ -7,5 +7,23 @@ import { defineConfig } from "vite";
 export default defineConfig({
   root: "client",
   plugins: [react()],
+  server: {
+    fs: {
+      // Preserve Vite's default deny rules and exclude repository docs/skills
+      // from /@fs/ requests, including ?raw imports.
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem,key,p12,pfx,cer,der}",
+        ".npmrc",
+        ".yarnrc.yml",
+        "**/.git/**",
+        "**/docs/**",
+        "**/.agents/**",
+        "**/.claude/**",
+        "**/.codex/**",
+      ],
+    },
+  },
   build: { outDir: "../dist/client", emptyOutDir: true },
 });

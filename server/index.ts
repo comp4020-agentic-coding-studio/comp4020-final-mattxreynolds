@@ -22,7 +22,10 @@ app.use("/api/log", logRoutes);
 app.get(["/readme", "/readme/"], (_req, res) => {
   res.type("html").send(renderReadme(path.join(root, "README.md")));
 });
-app.use("/docs", express.static(path.join(root, "docs")));
+// Repository docs are private to the development workflow, including in dev.
+app.use("/docs", (_req, res) => {
+  res.sendStatus(404);
+});
 
 if (DEV) {
   const { createServer } = await import("vite");

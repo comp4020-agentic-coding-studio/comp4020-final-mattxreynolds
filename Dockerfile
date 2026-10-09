@@ -27,5 +27,4 @@ COPY --from=build /app/dist ./dist
 COPY package.json README.md ./
 COPY server ./server
 COPY shared ./shared
-COPY docs ./docs
 CMD ["node", "server/index.ts"]
