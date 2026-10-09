@@ -16,8 +16,9 @@ Desktop.ini
 mise.local.toml
 *.pem
 
-# Claude Code's project directory is machine-local: settings in here can hold
-# your course API key, and this repo goes public when you ship. Your tracked
-# harness is CLAUDE.md (and any AGENTS.md), not this directory.
-.claude/
+# Track skill sources in .agents/skills/, skills-lock.json, and Claude's
+# skill shortcuts as project evidence. Keep other Claude files machine-local:
+# settings can contain API keys.
+.claude/*
+!.claude/skills/
 data/
