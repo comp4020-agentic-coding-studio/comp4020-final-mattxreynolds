@@ -5,10 +5,24 @@
 node_modules
 dist
 *.log
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
 .env
 .env.*
 .envrc
 mise.local.toml
 *.pem
+# Skills are tracked as project evidence, but are not needed to build or run
+# the game. Exclude agent configuration and docs from the deployment context.
 .claude
+.codex
+.agents
+skills-lock.json
+CLAUDE.md
+AGENTS.md
+GLOSSARY.md
+GLOSSARY-MAP.md
+docs
 data
