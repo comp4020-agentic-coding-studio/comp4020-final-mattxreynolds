@@ -1,6 +1,6 @@
 {
-  // Covers the supplied harness (spec/, scripts/) and the app: server/,
-  // shared/ and the client.
+  // Covers the supplied harness (spec/, scripts/); widen `include` if your app
+  // is TypeScript and you want `pnpm typecheck` to cover it too.
   "compilerOptions": {
     "target": "ES2023",
     "module": "ESNext",
@@ -14,10 +14,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "moduleDetection": "force",
-    "verbatimModuleSyntax": true,
-    // the server runs its .ts directly under node, which only strips types
-    "erasableSyntaxOnly": true,
-    "jsx": "react-jsx"
+    "verbatimModuleSyntax": true
   },
-  "include": ["*.ts", "spec", "scripts", "server", "shared", "client/src"]
+  "include": ["*.ts", "spec", "scripts"]
 }

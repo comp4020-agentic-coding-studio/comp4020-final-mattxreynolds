@@ -21,4 +21,3 @@ mise.local.toml
 # settings can contain API keys.
 .claude/*
 !.claude/skills/
-data/
