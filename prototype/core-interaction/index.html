@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE – core interaction (throwaway)</title>
+<style>
+  :root { --ink:#1c1917; --mute:#78716c; --line:#e7e5e4; --bg:#fafaf9; --card:#fff; --accent:#c2410c; --ok:#15803d; --bad:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:20px 24px 8px; max-width:1500px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:20px; }
+  .banner { display:inline-block; background:var(--accent); color:#fff; font-size:11px; letter-spacing:.08em; padding:2px 8px; border-radius:3px; margin-bottom:8px; }
+  .q { color:var(--mute); max-width:900px; margin:0; }
+  nav, .bar { max-width:1500px; margin:0 auto; padding:0 24px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  nav { margin-top:16px; border-bottom:1px solid var(--line); }
+  nav button { border:0; background:none; padding:10px 14px; font:inherit; cursor:pointer; color:var(--mute); border-bottom:3px solid transparent; }
+  nav button.on { color:var(--ink); border-color:var(--accent); font-weight:600; }
+  .bar { margin-top:14px; }
+  main { max-width:1500px; margin:0 auto; padding:14px 24px 60px; }
+  button.b { font:inherit; padding:7px 12px; border:1px solid var(--ink); background:var(--card); border-radius:6px; cursor:pointer; }
+  button.b:hover { background:#f5f5f4; }
+  button.b.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.b.big { padding:14px 18px; font-size:20px; min-width:56px; }
+  button.b.sel { background:var(--ink); color:#fff; }
+  .say { background:#fff7ed; border:1px solid #fed7aa; padding:10px 14px; border-radius:6px; margin:12px 0; max-width:1000px; }
+  .players { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; }
+  .panel { flex:1 1 420px; background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:460px; }
+  .phone .panel { flex:0 0 390px; width:390px; height:844px; }
+  .panel h3 { margin:0; padding:10px 14px; border-bottom:1px solid var(--line); font-size:14px; }
+  .panel h3 small { color:var(--mute); font-weight:400; }
+  .screen { padding:14px; overflow:auto; flex:1; }
+  .screen h4 { margin:0 0 6px; }
+  .hint { color:var(--mute); font-size:13px; margin:4px 0 10px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; align-items:center; }
+  .glyphs { font-size:28px; letter-spacing:.3em; }
+  .grid { display:grid; gap:3px; }
+  .cell { aspect-ratio:1; display:grid; place-items:center; background:#f5f5f4; border-radius:4px; font-size:22px; position:relative; min-width:34px; }
+  .cell.off { background:#292524; }
+  .cell.me { outline:3px solid var(--accent); }
+  .cell.trap { background:#fecaca; }
+  .cell.exit { background:#bbf7d0; }
+  .cell.start { background:#dbeafe; }
+  .tag { position:absolute; top:1px; left:3px; font-size:10px; color:var(--mute); }
+  .lamp { display:inline-block; width:16px; height:16px; border-radius:50%; vertical-align:middle; }
+  .bar2 { position:relative; height:22px; background:#f5f5f4; border-radius:4px; margin:4px 0 10px; }
+  .bar2 .band { position:absolute; top:0; bottom:0; background:#bbf7d0; }
+  .bar2 .fill { position:absolute; top:6px; bottom:6px; left:0; background:var(--ink); border-radius:3px; }
+  .msg { margin:10px 0 0; padding:8px 12px; border-left:4px solid var(--accent); background:#fff; border-radius:0 6px 6px 0; }
+  .ref { margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:20px; }
+  @media (max-width:900px) { .ref { grid-template-columns:1fr; } }
+  .ref section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .ref h3 { margin:0 0 8px; font-size:14px; }
+  dl { margin:0; display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; font-size:13px; }
+  dt { color:var(--mute); } dd { margin:0; font-family:ui-monospace, monospace; }
+  ol.log { margin:0; padding-left:20px; font-size:13px; color:var(--mute); }
+  table { border-collapse:collapse; width:100%; background:var(--card); }
+  th, td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; text-align:left; font-size:13px; }
+  th { background:#f5f5f4; }
+  .good { color:var(--ok); font-weight:600; } .warn { color:var(--bad); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <div class="banner">PROTOTYPE · THROWAWAY · WIPE ME</div>
+  <h1>Which core interaction makes communication essential?</h1>
+  <p class="q"><b>Question.</b> Three rough candidates for the cooperative game's core interaction. Play each one as <i>both</i> Players (click in either panel) and notice: does each Player hold something the other needs, does it work when you're saying it out loud, does it survive a phone-sized screen, could it fill 15–30 minutes with replays, and could it be built in about five days? State is in memory; nothing persists. "Referee view" at the bottom shows everything the server would know, secrets included, so you can cheat.</p>
+</header>
+
+<nav id="tabs"></nav>
+<div class="bar">
+  <button class="b" id="reseed">New random attempt</button>
+  <button class="b" id="layout">Layout: split desktop</button>
+  <button class="b" id="pause" hidden>Pause clock</button>
+  <span style="color:var(--mute);font-size:13px" id="seedlbl"></span>
+</div>
+<main id="main"></main>
+
+<script>
+/* ============================================================
+   PORTABLE LOGIC. Pure: no DOM. Each module = init(seed) + act(state, action).
+   action = { p: 1|2, t: type, v: payload }.  Returns a NEW state with state.msg set.
+   ============================================================ */
+const rng = seed => { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+const shuffle = (r, arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+/* ---------- A. Separated rooms ---------- */
+const Rooms = {
+  init(seed) {
+    const r = rng(seed);
+    const symbols = ['▲', '●', '■', '★', '◆', '✚'], colours = ['red', 'blue', 'green', 'amber'];
+    return { seed, stage: 1, symbols, colours, code: shuffle(r, symbols).slice(0, 3), order: shuffle(r, colours).slice(0, 3),
+             entered: [], pulled: [], ready: { 1: false, 2: false }, strikes: 0, msg: 'New attempt. Player 1 is in the Cellar, Player 2 in the Attic.' };
+  },
+  act(s0, a) {
+    const s = structuredClone(s0), no = m => { s.msg = '(ignored) ' + m; return s; };
+    if (a.t === 'sym') {
+      if (s.stage !== 1 || a.p !== 1) return no('Only Player 1 has the keypad, and only in stage 1.');
+      s.entered.push(a.v);
+      if (s.entered.length === 3) {
+        if (s.entered.join() === s.code.join()) { s.stage = 2; s.entered = []; s.msg = 'Click. The hatch opens. Player 2 can now reach the levers.'; }
+        else { s.entered = []; s.strikes++; s.msg = 'Buzz. Wrong code, keypad resets. (+1 strike)'; }
+      }
+    } else if (a.t === 'clear') {
+      if (s.stage !== 1 || a.p !== 1) return no('Nothing to clear.'); s.entered = []; s.msg = 'Keypad cleared.';
+    } else if (a.t === 'lever') {
+      if (s.stage !== 2 || a.p !== 2) return no('Only Player 2 has the levers, and only in stage 2.');
+      const i = s.pulled.length;
+      if (a.v !== s.order[i]) { s.pulled = []; s.strikes++; s.msg = 'Clunk. Wrong lever, all levers reset. (+1 strike)'; }
+      else { s.pulled.push(a.v); s.msg = 'Lever ' + a.v + ' holds.'; if (s.pulled.length === 3) { s.stage = 3; s.msg = 'The gears mesh. One last thing: both of you must turn your key.'; } }
+    } else if (a.t === 'ready') {
+      if (s.stage !== 3) return no('Not time yet.'); s.ready[a.p] = true;
+      s.msg = 'Player ' + a.p + ' turned their key.'; if (s.ready[1] && s.ready[2]) { s.stage = 'done'; s.msg = 'Both keys turned. The door opens. Escaped!'; }
+    }
+    return s;
+  },
+};
+
+/* ---------- B. Blind navigator ---------- */
+const Nav = {
+  init(seed) {
+    const r = rng(seed), N = 6, G = ['▲', '●', '■', '★', '◆'];
+    const glyph = Array.from({ length: N }, () => Array.from({ length: N }, () => G[Math.floor(r() * G.length)]));
+    const path = [[0, 0]]; let x = 0, y = 0;
+    while (x < N - 1 || y < N - 1) { if (x === N - 1) y++; else if (y === N - 1) x++; else if (r() < .5) x++; else y++; path.push([x, y]); }
+    const onPath = new Set(path.map(p => p.join()));
+    const free = []; for (let yy = 0; yy < N; yy++) for (let xx = 0; xx < N; xx++) if (!onPath.has(xx + ',' + yy)) free.push([xx, yy]);
+    const traps = shuffle(r, free).slice(0, 9).map(p => p.join());
+    return { seed, N, glyph, traps, pos: { x: 0, y: 0 }, steps: 0, strikes: 0, won: false, msg: 'New attempt. The Walker stands on the blue start tile.' };
+  },
+  act(s0, a) {
+    const s = structuredClone(s0);
+    if (a.t !== 'move' || a.p !== 1) { s.msg = '(ignored) Only the Walker (Player 1) can move.'; return s; }
+    if (s.won) { s.msg = '(ignored) Already escaped.'; return s; }
+    const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[a.v], nx = s.pos.x + d[0], ny = s.pos.y + d[1];
+    if (nx < 0 || ny < 0 || nx >= s.N || ny >= s.N) { s.msg = 'Bump. Edge of the world.'; return s; }
+    s.pos = { x: nx, y: ny }; s.steps++;
+    if (s.traps.includes(nx + ',' + ny)) { s.pos = { x: 0, y: 0 }; s.strikes++; s.msg = 'The floor gives way! Back to the start. (+1 strike)'; }
+    else if (nx === s.N - 1 && ny === s.N - 1) { s.won = true; s.msg = 'The Walker reaches the exit!'; }
+    else s.msg = 'Moved ' + a.v + '.';
+    return s;
+  },
+  walkerView(s) { const c = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = s.pos.x + dx, y = s.pos.y + dy; c.push(x < 0 || y < 0 || x >= s.N || y >= s.N ? null : { g: s.glyph[y][x], exit: x === s.N - 1 && y === s.N - 1, start: !x && !y }); } return c; },
+};
+
+/* ---------- C. Split instrument ---------- */
+const Inst = {
+  init(seed) {
+    const r = rng(seed), pick = () => Math.floor(r() * 10);
+    return { seed, ticks: 0, valves: [pick(), pick(), pick()], trims: [0, 0, 0], wobble: [0, 0, 0],
+             targets: [2 + Math.floor(r() * 6), 2 + Math.floor(r() * 6), 2 + Math.floor(r() * 6)], hold: 0, need: 5, won: false, msg: 'New attempt. The reactor is live. Nothing stops to wait for you.' };
+  },
+  gauges(s) { return s.valves.map((v, i) => v + s.trims[i] + s.wobble[i]); },
+  inBand(s) { return Inst.gauges(s).every((g, i) => Math.abs(g - s.targets[i]) <= 1); },
+  act(s0, a) {
+    const s = structuredClone(s0);
+    if (s.won) { s.msg = '(ignored) Reactor already stable.'; return s; }
+    if (a.t === 'valve') { if (a.p !== 1) { s.msg = '(ignored) Valves are Player 1\'s.'; return s; } s.valves[a.v.i] = clamp(s.valves[a.v.i] + a.v.d, 0, 9); s.msg = 'Player 1 moved valve ' + (a.v.i + 1) + '.'; }
+    else if (a.t === 'trim') { if (a.p !== 2) { s.msg = '(ignored) Trims are Player 2\'s.'; return s; } s.trims[a.v.i] = clamp(s.trims[a.v.i] + a.v.d, -2, 2); s.msg = 'Player 2 trimmed gauge ' + (a.v.i + 1) + '.'; }
+    else if (a.t === 'tick') {
+      s.ticks++;
+      if (s.ticks % 4 === 0) { const r = rng(s.seed * 1000 + s.ticks), i = Math.floor(r() * 3); s.wobble[i] = clamp(s.wobble[i] + (r() < .5 ? -1 : 1), -2, 2); s.msg = 'The reactor drifts (gauge ' + (i + 1) + ').'; }
+      s.hold = Inst.inBand(s) ? s.hold + 1 : 0;
+      if (s.hold >= s.need) { s.won = true; s.msg = 'Stable for ' + s.need + ' seconds. Reactor locked!'; }
+    }
+    return s;
+  },
+};
+
+/* ============================================================
+   THROWAWAY PAGE SHELL
+   ============================================================ */
+const COLOUR = { red: '#dc2626', blue: '#2563eb', green: '#16a34a', amber: '#d97706' };
+const mods = { rooms: Rooms, nav: Nav, inst: Inst };
+let cur = 'rooms', seed = 7, phone = false, paused = false, log = [];
+let states = {};
+const reset = () => { states = { rooms: Rooms.init(seed), nav: Nav.init(seed), inst: Inst.init(seed) }; log = []; };
+reset();
+
+const btn = (p, t, v, label, cls = '') => `<button class="b ${cls}" data-p="${p}" data-t="${t}" data-v='${JSON.stringify(v ?? null)}'>${label}</button>`;
+const panel = (who, role, html) => `<section class="panel"><h3>${who} <small>· ${role}</small></h3><div class="screen">${html}</div></section>`;
+
+const SAY = {
+  rooms: 'Out loud: "I\'ve got a keypad with six symbols and nothing on the wall." / "I\'m looking at a mural: triangle, star, circle." … later: "Pull blue first? I\'ve got a wiring card here."',
+  nav: 'Out loud: "I\'m standing on a circle. Star above me, square to my right." / "Hmm, that\'s the middle of row three. Go right, then down, then down."',
+  inst: 'Out loud (fast): "Valve two up one! Up! More!" / "Wait, gauge three is drifting, hold it, don\'t touch anything." (Both Players act at the same time, with a 1 s clock running.)',
+};
+
+/* --- views: each Player's panel only reads fields that Player is allowed to see --- */
+function viewRooms(s) {
+  let p1, p2;
+  if (s.stage === 1) {
+    p1 = `<h4>The Cellar</h4><p class="hint">A heavy hatch overhead. Beside it, a keypad. A plaque reads: "Three symbols, in order."</p>
+      <div class="glyphs">${s.entered.join(' ') || '·&nbsp;·&nbsp;·'}</div>
+      <div class="row">${s.symbols.map(g => btn(1, 'sym', g, g, 'big')).join('')}</div><div class="row">${btn(1, 'clear', null, 'Clear')}</div>`;
+    p2 = `<h4>The Attic</h4><p class="hint">A faded mural covers the wall. A row of coloured levers is bolted shut under a trapdoor.</p>
+      <div class="glyphs">${s.code.join(' ')}</div><p class="hint">The mural. You can't open the trapdoor yet.</p>`;
+  } else if (s.stage === 2) {
+    p1 = `<h4>The Cellar</h4><p class="hint">The hatch is open. On the wall, a wiring card:</p>
+      <ol>${s.order.map(c => `<li style="color:${COLOUR[c]}"><b>${c}</b></li>`).join('')}</ol><p class="hint">Nothing else to touch here.</p>`;
+    p2 = `<h4>The Attic</h4><p class="hint">The trapdoor swung open. Four levers, a missing order. Pulled so far: ${s.pulled.length}/3</p>
+      <div class="row">${s.colours.map(c => btn(2, 'lever', c, c, 'big')).join('')}</div>`;
+  } else {
+    const label = p => s.ready[p] ? '<b class="good">Key turned. Waiting…</b>' : btn(p, 'ready', null, 'Turn your key', 'pri big');
+    p1 = `<h4>The Cellar</h4><p class="hint">${s.stage === 'done' ? 'Escaped!' : 'A keyhole glows.'}</p>${s.stage === 'done' ? '' : label(1)}`;
+    p2 = `<h4>The Attic</h4><p class="hint">${s.stage === 'done' ? 'Escaped!' : 'A keyhole glows.'}</p>${s.stage === 'done' ? '' : label(2)}`;
+  }
+  return [panel('Player 1', 'the Cellar', p1), panel('Player 2', 'the Attic', p2)];
+}
+function viewNav(s) {
+  const wv = Nav.walkerView(s), cellsW = wv.map((c, i) => `<div class="cell ${c ? (c.exit ? 'exit' : c.start ? 'start' : '') : 'off'} ${i === 4 ? 'me' : ''}">${c ? c.g : ''}</div>`).join('');
+  const walker = `<h4>The Walker</h4><p class="hint">It is dark. You can only see the tiles touching you. You can't see trapdoors.</p>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);max-width:260px">${cellsW}</div>
+    <div class="row" style="justify-content:center;max-width:260px;margin-top:14px">${btn(1, 'move', 'up', '↑', 'big')}</div>
+    <div class="row" style="justify-content:center;max-width:260px">${btn(1, 'move', 'left', '←', 'big')}${btn(1, 'move', 'down', '↓', 'big')}${btn(1, 'move', 'right', '→', 'big')}</div>
+    <p class="hint">Steps ${s.steps} · Strikes ${s.strikes}</p>`;
+  const cells = []; for (let y = 0; y < s.N; y++) for (let x = 0; x < s.N; x++) {
+    const trap = s.traps.includes(x + ',' + y), ex = x === s.N - 1 && y === s.N - 1, st = !x && !y;
+    cells.push(`<div class="cell ${trap ? 'trap' : ex ? 'exit' : st ? 'start' : ''}">${trap ? '☠' : ''}${s.glyph[y][x]}${ex ? '<span class="tag">EXIT</span>' : st ? '<span class="tag">START</span>' : ''}</div>`);
+  }
+  const guide = `<h4>The Cartographer</h4><p class="hint">You have the whole map: landmarks, trapdoors (☠), the exit. You can't tell where the Walker is. They'll have to describe it.</p>
+    <div class="grid" style="grid-template-columns:repeat(${s.N},1fr)">${cells.join('')}</div>`;
+  return [panel('Player 1', 'Walker', walker), panel('Player 2', 'Cartographer', guide)];
+}
+function viewInst(s) {
+  const g = Inst.gauges(s), ok = Inst.inBand(s);
+  const p1 = `<h4>Control desk</h4><p class="hint">Three valves. You have no gauges, only a lamp that says "something's wrong" without saying what.</p>
+    ${s.valves.map((v, i) => `<div class="row"><b>Valve ${i + 1}</b>${btn(1, 'valve', { i, d: -1 }, '−', 'big')}<span style="font-size:22px;min-width:24px;text-align:center">${v}</span>${btn(1, 'valve', { i, d: 1 }, '+', 'big')}</div>`).join('')}
+    <p>Lamp: <span class="lamp" style="background:${ok ? '#16a34a' : '#dc2626'}"></span> ${ok ? 'all fine' : 'something is out of range'}</p>`;
+  const p2 = `<h4>Instrument wall</h4><p class="hint">Keep every gauge in its green band. You can only fine-trim; the valves are across the room.</p>
+    ${g.map((x, i) => `<div><b>Gauge ${i + 1}</b> <span style="color:var(--mute)">reads ${x}, target ${s.targets[i]}±1</span>
+      <div class="bar2"><div class="band" style="left:${(s.targets[i] - 1) / 13 * 100}%;width:${3 / 13 * 100}%"></div><div class="fill" style="width:${clamp(x, 0, 13) / 13 * 100}%"></div></div>
+      <div class="row" style="margin-top:-6px">${btn(2, 'trim', { i, d: -1 }, '−trim')}${btn(2, 'trim', { i, d: 1 }, '+trim')}<span style="color:var(--mute)">trim ${s.trims[i]}</span></div></div>`).join('')}`;
+  const shared = `<div class="msg">Stability: ${s.hold}/${s.need} s ${s.won ? '<b class="good">LOCKED</b>' : ''}</div>`;
+  return [panel('Player 1', 'valves', p1 + shared), panel('Player 2', 'gauges', p2 + shared)];
+}
+
+function refereeRows(s) {
+  if (cur === 'rooms') return [['Stage', s.stage], ['Hatch code (P2 sees)', s.code.join(' ')], ['Keypad entered (P1 sees)', s.entered.join(' ') || '—'], ['Lever order (P1 sees)', s.order.join(', ')], ['Levers pulled', s.pulled.join(', ') || '—'], ['Keys ready', `P1 ${s.ready[1]} / P2 ${s.ready[2]}`], ['Strikes', s.strikes]];
+  if (cur === 'nav') return [['Walker position', `(${s.pos.x},${s.pos.y})`], ['Steps / strikes', `${s.steps} / ${s.strikes}`], ['Trapdoors', s.traps.length + ' hidden (map shows them to Player 2)'], ['Won', s.won]];
+  return [['Tick', s.ticks], ['Valves (P1)', s.valves.join(', ')], ['Trims (P2)', s.trims.join(', ')], ['Hidden drift', s.wobble.join(', ')], ['Gauges (P2 sees)', Inst.gauges(s).join(', ')], ['Targets (P2 sees)', s.targets.join(', ')], ['Stable seconds', `${s.hold}/${s.need}`]];
+}
+
+const SCORE = `<table>
+<tr><th></th><th>A. Separated rooms</th><th>B. Blind navigator</th><th>C. Split instrument</th></tr>
+<tr><th>Does each Player hold something the other needs?</th><td class="good">Yes, strongly. The flow alternates: P2's mural unlocks P1's keypad; P1's card unlocks P2's levers. Information is the only way forward.</td><td class="good">Yes, asymmetrically. Cartographer has the traps, Walker has the position. Neither alone can proceed.</td><td>Mostly lopsided. P2 holds all the information, P1 holds all the control. P1 is easy to turn into a remote control.</td></tr>
+<tr><th>Works out loud, in the same room?</th><td>Yes: describing symbols and colours is natural. Risk: players <i>can</i> glance at each other's screens.</td><td class="good">Yes: "I see a star above me" is exactly what people say.</td><td class="good">Yes, and the loudest. Shouted real-time corrections are the fun.</td></tr>
+<tr><th>Plays at 390×844?</th><td class="good">Easy. Symbol pads and big buttons.</td><td class="good">Easy. D-pad and a 3×3 view, or a 6×6 map.</td><td>Fine for valves; 3 gauges with bands is tight but works.</td></tr>
+<tr><th>Stretches to 15–30 min with replays?</th><td class="warn">Content-hungry. Each puzzle is authored by hand; randomised symbols make a repeat feel like a repeat. ~8 puzzles for 20 min.</td><td>Procedural maps replay forever, but one 6×6 takes minutes. Needs bigger maps, hazard kinds, or multi-level chaining.</td><td>Natural pressure and randomised targets, but one contraption is solved after a few tries. Needs several contraptions.</td></tr>
+<tr><th>Five-day build?</th><td class="warn">Engine is trivial; the content is the cost.</td><td class="good">Cheapest per hour of play: one generator, two views, one reducer.</td><td>Real-time sync is the hard part, and also the part the brief rewards (simultaneous actions, ~1 s state).</td></tr>
+</table>
+<p class="hint" style="margin-top:14px">These are my notes to react to, not the verdict. The decision is yours.<br>
+<b>One catch shared by all three:</b> a marker playing alone in two Chrome windows sees both screens, so secrecy between Players is only enforced by what the server sends each client, never by honour.</p>`;
+
+function render() {
+  document.getElementById('tabs').innerHTML = [['rooms', 'A · Separated rooms'], ['nav', 'B · Blind navigator'], ['inst', 'C · Split instrument'], ['score', 'Scorecard']]
+    .map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  document.getElementById('pause').hidden = cur !== 'inst';
+  document.getElementById('pause').textContent = paused ? 'Resume clock' : 'Pause clock';
+  document.getElementById('layout').textContent = 'Layout: ' + (phone ? '390×844 phone frames' : 'split desktop');
+  document.getElementById('seedlbl').textContent = 'seed ' + seed;
+  const m = document.getElementById('main');
+  if (cur === 'score') { m.innerHTML = SCORE; return; }
+  const s = states[cur], panels = { rooms: viewRooms, nav: viewNav, inst: viewInst }[cur](s);
+  m.innerHTML = `<div class="say">${SAY[cur]}</div><div class="players ${phone ? 'phone' : ''}">${panels.join('')}</div>
+    <div class="msg">${s.msg}</div>
+    <div class="ref"><section><h3>Referee view · everything the server knows</h3><dl>${refereeRows(s).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
+    <section><h3>What just happened</h3><ol class="log">${log.slice(-8).reverse().map(l => `<li>${l}</li>`).join('')}</ol></section></div>`;
+}
+
+function dispatch(a) {
+  const before = states[cur].msg;
+  states[cur] = mods[cur].act(states[cur], a);
+  if (a.t !== 'tick' || states[cur].msg !== before) log.push((a.t === 'tick' ? 'clock' : 'Player ' + a.p) + ': ' + states[cur].msg);
+  render();
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]'); if (t) { cur = t.dataset.tab; render(); return; }
+  const b = e.target.closest('[data-t]'); if (b) dispatch({ p: +b.dataset.p, t: b.dataset.t, v: JSON.parse(b.dataset.v) });
+});
+document.getElementById('reseed').onclick = () => { seed = Math.floor(Math.random() * 9000) + 1; reset(); render(); };
+document.getElementById('layout').onclick = () => { phone = !phone; render(); };
+document.getElementById('pause').onclick = () => { paused = !paused; render(); };
+setInterval(() => { if (cur === 'inst' && !paused && !states.inst.won) dispatch({ p: 0, t: 'tick' }); }, 1000);
+render();
+</script>
+</body>
+</html>
