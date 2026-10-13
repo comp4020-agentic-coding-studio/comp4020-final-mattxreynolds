@@ -37,3 +37,13 @@ _Avoid_: Message, chat, ping, channel
 **Draw**:
 The set of Puzzles chosen for one attempt, together with the answers and Clues generated for them.
 _Avoid_: Deal, run, seed
+
+## Competition
+
+**Score**:
+The result of one Team's attempt, computed by the game from what happened in it. It always belongs to the Team, never to one Player.
+_Avoid_: Points, time, result
+
+**Leaderboard**:
+The lasting ranking of Teams by their Scores.
+_Avoid_: High scores, rankings, scoreboard
