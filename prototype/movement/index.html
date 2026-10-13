@@ -13,8 +13,9 @@
   One greybox Engine Room with furniture to walk around, nine control schemes switchable via
   ?variant= and the floating bottom bar (or [ and ]; the arrow keys are taken by walking):
     Desktop  D1 WASD + drag to look   D2 WASD + mouse look (pointer lock)
-             D3 WASD + right-drag look   D4 point and click (no keyboard)
+             D3 WASD + right-drag look   D4 point and click (no keyboard)   D5 D2 + D4 blended
     Touch    T1 joystick   T2 arrow buttons   T3 tap to walk   T4 hold to walk   T5 viewpoints + look
+             T6 joystick + tap to walk (T1 + T3 blended)
   ⇄ on the bar swaps between the desktop and touch sets. The page opens on the touch set when the
   pointer is coarse (DevTools device mode with touch).
 
@@ -104,6 +105,8 @@ const VARIANTS = [
     help: '<b>WASD</b> to walk · hold the <b>right button</b> and move to look · <b>left-click</b> the floor to walk there, a thing to use it' },
   { key: 'D4', set: 'desktop', name: 'Point and click', look: 'drag', tapWalk: true,
     help: '<b>Click the floor</b> to walk there · <b>click a thing</b> to walk up and use it · <b>drag</b> to look · no keyboard' },
+  { key: 'D5', set: 'desktop', name: 'WASD + mouse look + click to walk', keys: true, look: 'lock', tapWalk: true,
+    help: '<b>Click</b> to capture the mouse · <b>move</b> to look · <b>WASD</b> to walk · <b>click</b> the floor under the crosshair to walk there, a thing to walk up and use it · <b>Esc</b> releases' },
   { key: 'T1', set: 'touch', name: 'Joystick', look: 'drag', ui: 'stick',
     help: '<b>Stick</b>: push up to walk, sideways to turn · <b>drag the view</b> to look · <b>tap a thing</b> to walk up and use it' },
   { key: 'T2', set: 'touch', name: 'Arrow buttons', look: 'drag', ui: 'pad',
@@ -114,6 +117,8 @@ const VARIANTS = [
     help: '<b>Press and hold</b> to walk the way you face · <b>drag while holding</b> to steer · a quick <b>drag</b> looks · <b>tap a thing</b> to use it' },
   { key: 'T5', set: 'touch', name: 'Viewpoints + look', look: 'drag', ui: 'vp',
     help: '<b>◀ ▶</b> to move between spots · <b>drag</b> to look · <b>tap a thing</b> to go to it' },
+  { key: 'T6', set: 'touch', name: 'Joystick + tap to walk', look: 'drag', ui: 'stick', tapWalk: true,
+    help: '<b>Stick</b>: push up to walk, sideways to turn · <b>tap the floor</b> to walk there · <b>drag the view</b> to look · <b>tap a thing</b> to walk up and use it' },
 ];
 
 /* ============================================================
@@ -360,6 +365,7 @@ function bindCanvas() {
       if (document.pointerLockElement !== el) { el.requestPointerLock(); return; }
       countInput();
       const hit = pick(0, 0);
+      if (V.tapWalk) { if (hit.thing) approach(hit.thing); else if (hit.floor) { P.tYaw = null; walkTo({ x: hit.floor.x, z: hit.floor.z }); } return; }
       if (hit.thing) { if (hit.dist < 2.2) { P.tYaw = null; arrive(hit.thing); } else toast(`<b>${hit.thing.label}</b> is too far away. Walk closer.`); }
       return;
     }
@@ -368,7 +374,7 @@ function bindCanvas() {
     if (V.look === 'hold') IN.ptr.timer = setTimeout(() => { const p = IN.ptr; if (p && !p.drag) { p.hold = true; IN.hold = true; countInput(); cancelPath(); P.tYaw = P.tPitch = null; showRing(p.lx, p.ly); } }, 220);
   });
   el.addEventListener('pointermove', e => {
-    if (V.look === 'lock') { if (document.pointerLockElement === el) { P.yaw -= e.movementX * 0.0025; P.pitch = clamp(P.pitch - e.movementY * 0.0025, -1.2, 1.0); } return; }
+    if (V.look === 'lock') { if (document.pointerLockElement === el) { if (e.movementX || e.movementY) P.tYaw = P.tPitch = null; P.yaw -= e.movementX * 0.0025; P.pitch = clamp(P.pitch - e.movementY * 0.0025, -1.2, 1.0); } return; }
     const p = IN.ptr; if (!p || p.id !== e.pointerId) return;
     const dx = e.clientX - p.lx, dy = e.clientY - p.ly; p.lx = e.clientX; p.ly = e.clientY;
     if (p.hold) { P.yaw -= dx * 0.008; showRing(p.lx, p.ly); return; }  // steering: drag right turns right
