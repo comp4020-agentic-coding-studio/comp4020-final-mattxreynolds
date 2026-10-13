@@ -6,7 +6,7 @@ An unfinished Voyage has to resume after a redeploy, because the marker comes ba
 
 - **Seed only, regenerate on load:** rejected. A redeploy that touches a generator silently gives a resumed Voyage different answers and Clues.
 - **Store the full Draw, but let in-progress Voyages break on deploy:** rejected. This fails the brief's "still there when they come back" in exactly the case the marker tests.
-- **Migrate stored Draws forward on deploy:** rejected for now. Rewriting answers and Clue data under a Team mid-attempt risks changing what one Player has already described to the other.
+- **Migrate stored Draws forward on deploy:** rejected for now. Rewriting answers and Clue data under a Team mid-Voyage risks changing what one Player has already described to the other.
 
 ## Consequences
 
