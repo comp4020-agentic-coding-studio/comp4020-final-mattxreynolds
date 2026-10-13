@@ -30,8 +30,19 @@ export const openRoom = async (p: TestPlayer): Promise<string> =>
 export const look = (code: string, role: Role): Promise<RoomView> =>
   call(`/api/rooms/${code}?role=${role}`, null);
 
-export const act = (p: TestPlayer, code: string, action: Action): Promise<RoomView> =>
-  call(`/api/rooms/${code}/actions?role=operator`, p, { method: "POST", body: JSON.stringify(action) });
+export const act = async (p: TestPlayer, code: string, action: Action): Promise<RoomView> => {
+  const seen = await look(code, "operator");
+  return call(`/api/rooms/${code}/actions?role=operator`, p, {
+    method: "POST", body: JSON.stringify({ ...action, missionNo: seen.missionNo, revision: seen.revision }),
+  });
+};
+
+/** Supply the actual observed view when testing races; never silently fetch a newer one. */
+export const command = (p: TestPlayer, seen: RoomView, action: Action, role: Role = "operator") =>
+  fetch(url(`/api/rooms/${seen.code}/actions?role=${role}`), {
+    method: "POST", headers: { "content-type": "application/json", "x-player": p.id },
+    body: JSON.stringify({ ...action, missionNo: seen.missionNo, revision: seen.revision }),
+  });
 
 export const stationLog = (p: TestPlayer | null): Promise<StationLog> => call("/api/log?limit=100", p);
 
@@ -42,6 +53,7 @@ export async function stream(code: string, role: Role, p: TestPlayer) {
     signal: controller.signal,
   });
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+  if (!res.ok) throw new Error(`stream: ${res.status}`);
   let buffer = "";
   return {
     async next(): Promise<RoomView> {

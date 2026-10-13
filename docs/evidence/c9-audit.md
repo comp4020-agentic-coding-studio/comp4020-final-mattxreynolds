@@ -40,3 +40,18 @@ Production Vite build, Node 24 server with disposable SQLite in
 
 The definition of good stays: communication is the game; a strike should
 reflect a mistaken instruction, not an invisible race or an accidental retry.
+
+## First verification
+
+Two Chromium contexts (1440×900 and 390×844) joined through the actual UI,
+with different local-storage player ids. Operator override → Expert strike
+rendered in 48 ms. Taking the Expert offline left `LINK: LIVE` visible after
+1.2 seconds, confirming the connection-state defect in the real browser.
+
+After revision guards, bounds validation and transactional state/log writes:
+`pnpm check` passed 23 tests; the expanded
+`pnpm exec vitest run spec/multiplayer.test.ts` passed 14 checks, including
+same-snapshot flips, keypad duplicates, Expert Begin vs Operator flip,
+old-mission actions, concurrent resets, filtered conflict views and invalid
+bounds/revisions. These are arrival-order checks, not assertions that a
+particular player always wins.
