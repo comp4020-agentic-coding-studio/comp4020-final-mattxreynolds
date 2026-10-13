@@ -122,3 +122,6 @@ button:disabled:not(.override){opacity:.7}
   .button-module{grid-template-columns:1fr}
   .button-module .override{grid-column:1;grid-row:auto;height:64px}
 }
+
+/* Recovery feedback stays above the long Expert manual, including on phones. */
+.link-warning{padding:14px 22px;color:var(--coral);background:#30201e;border-bottom:1px solid var(--coral);font-size:14px;line-height:1.5}

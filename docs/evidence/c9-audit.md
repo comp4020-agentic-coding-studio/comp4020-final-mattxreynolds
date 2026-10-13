@@ -55,3 +55,30 @@ same-snapshot flips, keypad duplicates, Expert Begin vs Operator flip,
 old-mission actions, concurrent resets, filtered conflict views and invalid
 bounds/revisions. These are arrival-order checks, not assertions that a
 particular player always wins.
+
+## Recovery, and correction from screenshots
+
+`spec/realtime.test.ts`: live fan-out to both projections, isolated SSE,
+transient presence, reconnect after end, personalised live station logs.
+`spec/persistence.test.ts`: independent server restarts with the same SQLite
+file preserve device/revision/deadline and late crew; expiry during downtime
+logs exactly once; a C8 room loads with revision zero.
+
+`spec/browser.test.ts`: independent Chromium contexts, actual join/seat/action
+buttons, visible strikes in under one second, isolated third room, refreshed
+Expert seat, offline controls, completion seen by an open lobby, recovery to
+the final result, Expert starting the next mission, leave/rejoin presence,
+390px device/manual layouts, racing buttons and a delayed real HTTP response.
+Both browser tests passed. Screenshot inspection found the reconnect warning
+was below the long manual on a phone. Moved it above the timer and added a
+viewport assertion. A first rerun hit stale asset references because the
+production server still held the previous build's index; restarting after the
+build corrected the verification setup. The clean rerun passed both tests.
+
+Separately drove a whole defusal using the UI's displayed wires, symbols,
+keypad and switches, with Expert Begin and Operator actions in separate
+contexts. Expert's clock was deliberately 45 seconds fast: both showed 04:51
+at override, the run ended secured with zero strikes, and both browser
+page-error/console-error lists were empty. Desktop and narrow screenshots were
+visually inspected, alongside the reconnect screenshot. This is agent-run UI
+inspection, not evidence of classmates enjoying the game or a human pod trial.

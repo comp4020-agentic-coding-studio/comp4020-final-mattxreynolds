@@ -1,8 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium, type Page } from "playwright";
 import { expect, it } from "vitest";
-import { act, look, url } from "./helpers.ts";
+import { look, url } from "./helpers.ts";
 
 const live = (p: Page) => p.getByText("LINK: LIVE", { exact: true }).waitFor();
 const strikes = (p: Page, n: number) => p.waitForFunction(
@@ -46,7 +46,9 @@ it("plays through independent desktop/mobile seats, live lobby, isolation and of
       headers: { "x-player": localStorage.getItem("dead-air.player")! },
     })).json());
     await op.getByText("2 connected", { exact: false }).waitFor();
-    const sent = performance.now(); await op.locator(".override").click(); await strikes(ex, 1);
+    const actionSent = op.waitForRequest(r => r.method() === "POST" && r.url().includes("/actions?"))
+      .then(() => performance.now());
+    await op.locator(".override").click(); const sent = await actionSent; await strikes(ex, 1);
     const propagationMs = performance.now() - sent;
     expect(propagationMs).toBeLessThan(1000);
     console.log(`browser action → Expert render: ${Math.round(propagationMs)}ms`);
@@ -63,9 +65,14 @@ it("plays through independent desktop/mobile seats, live lobby, isolation and of
     await exContext.setOffline(true);
     await ex.getByText("LINK: RECONNECTING", { exact: true }).waitFor();
     expect(await ex.getByRole("button", { name: "Mission in progress" }).isDisabled()).toBe(true);
+    const warning = await ex.locator(".link-warning").boundingBox();
+    expect(warning).not.toBeNull();
+    expect(warning!.y + warning!.height).toBeLessThan(844);
     await evidence(ex, "mobile-reconnecting");
     await op.locator(".override").click(); await strikes(op, 2);
-    const ended = performance.now(); await op.locator(".override").click();
+    const finishSent = op.waitForRequest(r => r.method() === "POST" && r.url().includes("/actions?"))
+      .then(() => performance.now());
+    await op.locator(".override").click(); const ended = await finishSent;
     await lobby.locator(".run-when").filter({ hasText: `ROOM ${code}` }).waitFor();
     const logMs = performance.now() - ended;
     expect(logMs).toBeLessThan(1000);
@@ -87,6 +94,8 @@ it("plays through independent desktop/mobile seats, live lobby, isolation and of
     await ex.locator(".override").waitFor();
     expect(await ex.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await evidence(ex, "mobile-operator");
+    if (process.env.EVIDENCE_DIR) writeFileSync(path.join(process.env.EVIDENCE_DIR, "timings.json"),
+      JSON.stringify({ propagationMs: Math.round(propagationMs), logMs: Math.round(logMs) }, null, 2));
     expect(player.id).toBe(ids[0]);
     expect(errors).toEqual([]);
   } finally { await browser.close(); }

@@ -131,6 +131,11 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
             <span>DEVICE // {view?.device?.serial ? `DA-${view.device.serial.slice(-3)}` : "NOT IN VIEW"}</span>
             <span>{condition}</span>
           </div>
+          {connection === "reconnecting" ? (
+            <div className="link-warning" role="status">
+              Link lost. Controls paused; the clock keeps running. Reconnecting to the current mission…
+            </div>
+          ) : null}
           <div className="status">
             <div>
               <span className="label">TIME REMAINING</span>
@@ -230,11 +235,6 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
                 </li>
               ))}
           </ol>
-          {connection === "reconnecting" ? (
-            <p className="error" role="status">
-              Link lost. Controls paused; the clock keeps running. Reconnecting to the current mission…
-            </p>
-          ) : null}
           {pending ? <p className="hint" role="status">Waiting for the station…</p> : null}
           {error ? (
             <p className="error" role="alert">

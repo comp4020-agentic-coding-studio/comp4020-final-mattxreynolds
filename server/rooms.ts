@@ -484,8 +484,6 @@ roomRoutes.get("/:code/stream", (req, res) => {
   set.add(client);
   if (room.mission.status === "live") { enlist(room, player); save(room); }
   broadcast(room);
-
-
 });
 
 roomRoutes.post("/:code/actions", (req, res) => {
