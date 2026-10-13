@@ -13,7 +13,7 @@ Exactly two Players attempting the game together.
 _Avoid_: Crew, pair, party, group
 
 **Player name**:
-The name a Player goes by, shown beside their partner's on the public board.
+The name the person playing goes by outside the ship, shown beside their partner's on the Leaderboard. Never a character name.
 _Avoid_: Username, handle, display name, nickname
 
 **Room**:
