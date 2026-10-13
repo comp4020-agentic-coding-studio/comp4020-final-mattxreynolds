@@ -1,0 +1,17 @@
+# One package, with answers and checkers only under `server/`
+
+A Player must never receive an answer or the other Deck's data, and every Puzzle version's checker has to stay loadable beside the others ([ADR 0001](0001-versioned-puzzle-draw-data.md)). We keep one package with three folders. `server/puzzles/<id>/v<n>.ts` holds each Puzzle version's generator, checker and answers, behind a registry keyed `"id@v"`. `shared/` holds only types, intent schemas, rule-text generators that never touch answers, and Room data with its box-collision check. `client/` imports only `shared/`. The wire type of a Draw (`PublicDraw`, in `shared/`) is separate from the stored one (`StoredDraw`, in `server/`), so the compiler can't hand answers to the client. Three guards back this up: that type split, a scan of the built `dist/` for a server-only canary string, and the payload-secrecy `spec/` check over every Deck.
+
+## Considered Options
+
+- **A pnpm workspace** (shared, server and client packages): a real build boundary, but Vite only bundles what the client imports, so it adds nothing the import rule doesn't. It also carries a runtime trap: Node's type stripping refuses `.ts` files under `node_modules`, which is where a deployed workspace package lands (measured: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), and a production-only install for the image gets fiddly. **Reopen it only if a second deployable appears or the bundle scan ever finds a leak.**
+- **Contract-first RPC (oRPC, Hono RPC, tRPC):** the validators are runtime schemas, not a secrecy boundary, and SSE is less simple through them than raw `fetch` plus `EventSource`. One schema library (zod 4) validates intents and stored Draws instead.
+
+## Consequences
+
+- The course CI runs `tsc --noEmit` and `vitest` at the repo root, so `tsconfig.json` widens its `include` to `server`, `client` and `shared`; `.dockerignore` already drops `docs/`, so the image must not depend on it, and `README.md` still goes in for `/readme/`.
+- Tests: Vitest runs everything in `spec/`, including Playwright's library API (no `@playwright/test`), with one extra CI step to install Chromium (`pnpm exec playwright install --with-deps --only-shell chromium`, about 12 s). The CI container's `/data` is a tmpfs that a restart wipes, so restart, previous-version-Draw, reconnect and Clock checks start a second server from source with a temporary `DATA_DIR` and a preloaded fake clock (`node --import ./spec/fake-clock.ts server/index.ts`); a test-only "set the time" endpoint is rejected because it would be a production risk if its gate failed. The Clock is a pure function of stored state and `now()`, compared lazily at launch, so "a launch just before zero wins, just after is a 409" is just `now()`.
+- Image: multi-stage `node:24.21.0-slim` with a production-only install, serving the Vite output from the Node process with `.br` and `.gz` precompressed at image build (about 0.05 ms per request against 4–9 ms for on-the-fly gzip, roughly 4× that on the throttled CPU), hashed assets `immutable` and `index.html` `no-cache`. A sidecar server would cost memory and a process manager for nothing.
+- WebGL under headless Chromium on a real GitHub runner is unverified; the first CI run will tell us, and the runner's preinstalled Chrome is the fallback.
+
+Evidence: [the stack comparison](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/research/stack-comparison/docs/research/stack-comparison.md).
