@@ -17,7 +17,7 @@ A Person who signs in with credentials they chose and is recognised in any brows
 _Avoid_: Login, profile, member
 
 **Player**:
-One of the two people in a Team, each on their own Deck and known only by it, never by a character name.
+A Person's role in one Team, on their own Deck for each Voyage. Inside the ship a Player is known only by their Deck, never by a character name.
 _Avoid_: User, client, participant, character, Mate, Stoker
 
 **Team**:
@@ -31,7 +31,7 @@ _Avoid_: Username, handle, display name, nickname
 ## Ship
 
 **Voyage**:
-One Team's play of the game, from the first Puzzle to the Lifeboat, on a ship with its own drawn name.
+One Team's play of the game, on a ship with its own drawn name, from the first Puzzle until the Lifeboat is launched or the Voyage ends without it.
 _Avoid_: Attempt, playthrough, run, session, game, match, escape
 
 **Deck**:
@@ -75,7 +75,7 @@ _Avoid_: Deal, run, seed
 ## Competition
 
 **Score**:
-The result of one Team's attempt, computed by the game from what happened in it. It always belongs to the Team, never to one Player.
+The result of one Team's Voyage, computed by the game from what happened in it. It always belongs to the Team, never to one Player.
 _Avoid_: Points, time, result
 
 **Leaderboard**:
