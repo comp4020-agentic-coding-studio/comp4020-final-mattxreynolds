@@ -8,10 +8,10 @@ function Led({ done }: { done: boolean }) {
   return <span className={`led${done ? " done" : ""}`} aria-label={done ? "cleared" : "armed"} />;
 }
 
-export function Device({ view, clock, act }: { view: RoomView; clock: string; act: Act }) {
+export function Device({ view, clock, act, disabled = false }: { view: RoomView; clock: string; act: Act; disabled?: boolean }) {
   const d = view.device!;
   const { solved } = view;
-  const over = view.status === "over";
+  const over = view.status === "over" || disabled;
   const sequence = d.symbols
     .filter((s) => s.step !== null)
     .sort((a, b) => a.step! - b.step!)

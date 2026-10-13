@@ -57,6 +57,7 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const rooms = new Map<string, Room>();
 const timers = new Map<string, NodeJS.Timeout>();
 const clients = new Map<string, Set<Client>>();
+const logClients = new Set<{ res: Response; player: Player; limit: number }>();
 
 function newMission(no: number): Mission {
   const device = G.generateDevice();
@@ -143,6 +144,7 @@ function change(room: Room, mutate: (next: Room) => string | null): string | nul
   rooms.set(next.code, next);
   arm(next);
   broadcast(next);
+  if (next.mission.status === "over" && room.mission.status !== "over") broadcastLog();
   return null;
 }
 
@@ -408,11 +410,30 @@ function view(room: Room, role: Role): RoomView {
   return v;
 }
 
+function writeEvent(res: Response, data: unknown): void {
+  if (res.destroyed || res.writableEnded) return;
+  // Bound queued writes: a slow receiver reconnects to a full snapshot.
+  if (res.writableLength > 64 * 1024) { res.destroy(); return; }
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function openStream(res: Response, close: () => void): void {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+  const heartbeat = setInterval(() => {
+    if (res.writableLength > 64 * 1024) res.destroy();
+    else res.write(": keep-alive\n\n");
+  }, 25_000);
+  res.on("close", () => { clearInterval(heartbeat); close(); });
+}
+
 function send(c: Client, room: Room): void {
-  if (c.res.destroyed || c.res.writableEnded) return;
-  // A slow receiver reconnects for a snapshot rather than growing an unbounded buffer.
-  if (c.res.writableLength > 64 * 1024) { c.res.destroy(); return; }
-  c.res.write(`data: ${JSON.stringify(view(room, c.role))}\n\n`);
+  writeEvent(c.res, view(room, c.role));
 }
 
 function broadcast(room: Room): void {
@@ -452,29 +473,19 @@ roomRoutes.get("/:code/stream", (req, res) => {
   if (!room) return void res.status(404).json({ error: "no such room" });
   if (!player) return void res.status(401).json({ error: "unknown player" });
 
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  res.flushHeaders();
-
   const client: Client = { res, player, role: roleOf(req.query.role) };
   const set = clients.get(room.code) ?? new Set();
   clients.set(room.code, set);
-  set.add(client);
-  if (room.mission.status === "live") { enlist(room, player); save(room); }
-  broadcast(room);
-
-  // a comment line every 25s keeps idle proxies from closing the stream
-  const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 25_000);
-  res.on("close", () => {
-    clearInterval(heartbeat);
+  openStream(res, () => {
     set.delete(client);
     if (set.size === 0) clients.delete(room.code);
     broadcast(rooms.get(room.code)!);
   });
+  set.add(client);
+  if (room.mission.status === "live") { enlist(room, player); save(room); }
+  broadcast(room);
+
+
 });
 
 roomRoutes.post("/:code/actions", (req, res) => {
@@ -500,9 +511,9 @@ roomRoutes.post("/:code/actions", (req, res) => {
 
 export const logRoutes = Router();
 
-logRoutes.get("/", (req, res) => {
-  const player = playerFrom(req);
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+const logLimit = (raw: unknown): number => Math.min(100, Math.max(1, Math.floor(Number(raw)) || 25));
+
+function stationView(player: Player | null, limit: number): StationLog {
   const rows = db
     .prepare(
       `SELECT id, room_code, mission_no, outcome, modules_cleared, strikes, ms_left, crew, ended_at
@@ -540,5 +551,24 @@ logRoutes.get("/", (req, res) => {
       : null,
     runs,
   };
-  res.json(log);
+  return log;
+}
+
+function broadcastLog(): void {
+  for (const c of logClients) {
+    writeEvent(c.res, stationView(c.player, c.limit));
+  }
+}
+
+logRoutes.get("/", (req, res) => {
+  res.json(stationView(playerFrom(req), logLimit(req.query.limit)));
+});
+
+logRoutes.get("/stream", (req, res) => {
+  const player = getPlayer(req.query.player);
+  if (!player) return void res.status(401).json({ error: "unknown player" });
+  const client = { res, player, limit: logLimit(req.query.limit) };
+  openStream(res, () => logClients.delete(client));
+  logClients.add(client);
+  writeEvent(res, stationView(player, client.limit));
 });

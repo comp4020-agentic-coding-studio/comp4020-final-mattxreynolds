@@ -6,48 +6,72 @@ import { api, type Me } from "./api.ts";
 // Subscribes to a room's stream from one seat. Switching seat reconnects with
 // the other role, which is also how the server knows who's sitting where.
 export function useRoom(code: string, role: Role, me: Me | null) {
-  const [view, setView] = useState<RoomView | null>(null);
+  const [snapshot, setView] = useState<RoomView | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const offset = useRef(0); // server clock minus ours
-
-  const receive = useCallback((v: RoomView) => {
-    offset.current = v.serverNow - Date.now();
-    setView(v);
-  }, []);
+  const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting">("connecting");
+  const [pending, setPending] = useState(false);
+  const sending = useRef(false);
+  const offset = useRef(0); // server clock minus ours; approximate by receive time
+  // A seat change must immediately hide the previous seat's projection.
+  const view = snapshot?.role === role ? snapshot : null;
 
   useEffect(() => {
+    setView(null);
+    setMissing(false);
+    setError(null);
+    setConnection("connecting");
     if (!me) return;
+    let closed = false;
     const es = new EventSource(
       `/api/rooms/${code}/stream?role=${role}&player=${encodeURIComponent(me.id)}`,
     );
-    es.onmessage = (e) => receive(JSON.parse(e.data));
-    es.onerror = () => {
-      if (es.readyState !== EventSource.CLOSED) return; // it'll retry by itself
-      fetch(`/api/rooms/${code}`).then((r) => r.status === 404 && setMissing(true));
+    es.onmessage = (e) => {
+      if (closed) return;
+      const v: RoomView = JSON.parse(e.data);
+      if (v.role !== role || v.code !== code) return;
+      offset.current = v.serverNow - Date.now();
+      setView((previous) => previous && previous.revision > v.revision ? previous : v);
+      setConnection("live");
     };
-    return () => es.close();
-  }, [code, role, me, receive]);
+    const lost = () => { if (!closed) setConnection("reconnecting"); };
+    es.onerror = () => {
+      lost();
+      if (es.readyState !== EventSource.CLOSED) return;
+      fetch(`/api/rooms/${code}?role=${role}`)
+        .then((r) => { if (!closed && r.status === 404) setMissing(true); })
+        .catch(() => {});
+    };
+    addEventListener("offline", lost);
+    return () => { closed = true; removeEventListener("offline", lost); es.close(); };
+  }, [code, role, me]);
 
   const act = useCallback(
     async (action: Action) => {
-      if (!me) return;
+      if (!me || !view || connection !== "live" || sending.current) return;
+      sending.current = true;
+      setPending(true);
       try {
         setError(null);
-        receive(
-          await api<RoomView>(`/api/rooms/${code}/actions?role=${role}`, me, {
-            method: "POST",
-            body: JSON.stringify(action),
-          }),
-        );
+        // SSE owns room state. A delayed HTTP acknowledgement must never roll
+        // back a newer event (including a new mission or final result).
+        await api<RoomView>(`/api/rooms/${code}/actions?role=${role}`, me, {
+          method: "POST",
+          body: JSON.stringify({ ...action, missionNo: view.missionNo, revision: view.revision }),
+        });
       } catch (e) {
-        setError((e as Error).message);
+        setError(e instanceof TypeError
+          ? "Request outcome uncertain. Check the recovered device before acting again."
+          : (e as Error).message);
+      } finally {
+        sending.current = false;
+        setPending(false);
       }
     },
-    [code, role, me, receive],
+    [code, role, me, view, connection],
   );
 
-  return { view, missing, error, act, offset };
+  return { view, missing, error, act, offset, connection, pending };
 }
 
 /** The countdown as shown, ticking while the mission is live. */
