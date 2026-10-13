@@ -108,7 +108,8 @@ controls without replaying the command. Its browser check first failed, then
 passed after the correction; the harness now requires bounded waits.
 Independent specification review caught body-read timeouts being swallowed by
 the API helper. A real HTTP response with a stalled body reproduced it; the
-helper now preserves the abort and that regression check passes.
+helper now preserves the abort and that regression check passes
+([`4871e5f`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/4871e5f)).
 
 ## Backpressure and limits
 
@@ -131,4 +132,7 @@ CLAUDE.md now records server authority, information separation, observed-state
 commands, persistence before broadcast and independent-session verification.
 The reflection is an evidence-based draft for my review. Deployment remains
 unchanged: this public repo's CI checks and deploys `main` after merge; the
-branch itself has only been verified locally in production mode.
+branch has passed local production checks and the
+[Docker-based PR CI](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/actions/runs/38334327937),
+including all 45 tests, evidence checks and secret scans. It remains undeployed
+until merge.

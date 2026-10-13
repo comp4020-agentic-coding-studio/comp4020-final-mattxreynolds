@@ -123,3 +123,12 @@ The existing PR CI builds/runs the Docker image and repeats the checks. GitHub
 reports a public, non-template repo with `FLY_API_TOKEN` configured; merge to
 `main` triggers the unchanged Fly deployment job. Already-open C8 tabs must
 refresh once after deployment to load the new command contract.
+
+## GitHub image verification
+
+[PR #20](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/pull/20)
+is open into `main`, unmerged. [CI run 38334327937](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/actions/runs/38334327937)
+on implementation commit `4871e5f` completed successfully: locked install,
+Docker build/start, Chromium installation, all 45 tests, process evidence and
+both secret scans. This supplies the image verification unavailable locally.
+The branch includes remote `main`; production deployment still awaits merge.
