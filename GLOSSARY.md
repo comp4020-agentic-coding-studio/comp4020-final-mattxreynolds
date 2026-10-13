@@ -12,6 +12,10 @@ _Avoid_: User, client, participant
 Exactly two Players attempting the game together.
 _Avoid_: Crew, pair, party, group
 
+**Player name**:
+The name a Player goes by, shown beside their partner's on the public board.
+_Avoid_: Username, handle, display name, nickname
+
 **Room**:
 One of the two separated spaces in an attempt, chosen by one Player and hidden from the other, holding the Clues for the other Room's Puzzles.
 _Avoid_: Level, side, half, station, view, screen
