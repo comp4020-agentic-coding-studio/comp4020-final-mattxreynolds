@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PROTOTYPE – in-scene Puzzles (throwaway)</title>
+<!--
+  PROTOTYPE · THROWAWAY · never merged.
+  Question (wayfinder ticket "What does working a Puzzle in the scene mean, and what's the fallback at 390×844?"):
+  the three Puzzle Types worked directly in the 3D Room (keypad buttons, a dark-floor crossing, valve wheels
+  and gauge trims), and how that stays usable on a phone with one pointer.
+
+  Four variants, switchable with ?variant=A|B|C|D, the floating bottom bar, or [ and ]:
+    A  Frame it       tap a Puzzle within reach and the camera glides in to frame it; its real 3D controls are
+                      pressed there. The drag gesture is free while framed. "Step back" returns.
+    B  In place       no framing: walk up and press the 3D controls where you stand. Every control gets a 22 px
+                      minimum hit radius on screen (nearest control to the tap wins).
+    C  2D close-up    the C10 baseline: tap a Puzzle within reach and a flat 2D panel opens over the scene.
+    D  A on wide, C on small   the proposal: frame in the scene at 700 px and wider, 2D close-up below that.
+
+  Movement is the settled scheme from the movement ticket: WASD + mouse look (pointer lock) on desktop, a joystick
+  on a coarse pointer; use only within 2.2 m and in front. ?lock=0 turns off pointer lock (drag to look, click to
+  use); ?stick=1 forces the joystick on a desktop. ?deck=1|2 picks the Lower Deck (Engine Room) or Upper Deck
+  (Wheelhouse). The blind navigator's crossing can be ?cross=free (walk, tile entries are the events) or
+  ?cross=tiles (tap an adjacent lit tile to step).
+
+  Both Decks share one Voyage through localStorage (key PROTOTYPE-in-scene-wipe-me), so a second window on the
+  other Deck is the other Player. The pose is never synced. The blue chip shows each control's size on screen.
+  three.js 0.170 loads from jsdelivr, so this needs a network connection.
+-->
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#0b0a09; color:#f5f5f4; font:14px/1.35 system-ui, sans-serif; }
+  #view { position:fixed; inset:0; }
+  #view canvas { display:block; width:100%; height:100%; touch-action:none; }
+  .nogl { position:fixed; inset:0; display:grid; place-items:center; padding:24px; text-align:center; }
+  .hud { position:fixed; left:8px; right:8px; top:8px; pointer-events:none; display:flex; flex-direction:column; gap:5px; align-items:flex-start; z-index:5; }
+  .chip { background:rgba(0,0,0,.62); padding:5px 9px; border-radius:6px; max-width:calc(100% - 18px); }
+  .chip b { color:#fbbf24; }
+  .chip.said { background:rgba(194,65,12,.88); color:#fff; }
+  .chip.probe { font:11px/1.4 ui-monospace, monospace; background:rgba(30,58,138,.8); }
+  .chip.probe .bad { color:#fca5a5; font-weight:700; } .chip.probe .ok { color:#86efac; font-weight:700; }
+  .chip.small { font-size:12px; }
+  .bar { display:flex; gap:5px; flex-wrap:wrap; pointer-events:none; }
+  .bar button, .b { pointer-events:auto; font:inherit; font-size:12px; padding:4px 9px; border-radius:6px; border:0; background:#f5f5f4; color:#1c1917; cursor:pointer; touch-action:manipulation; }
+  #flash { position:fixed; inset:0; background:rgba(220,38,38,.45); pointer-events:none; opacity:0; z-index:8; }
+  #flash.go { animation:fade .7s forwards; } @keyframes fade { from { opacity:1; } to { opacity:0; } }
+  #crosshair { position:fixed; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; pointer-events:none; display:none; z-index:4; }
+  #crosshair::before, #crosshair::after { content:''; position:absolute; background:#fff; mix-blend-mode:difference; }
+  #crosshair::before { left:6px; top:0; width:2px; height:14px; } #crosshair::after { top:6px; left:0; height:2px; width:14px; }
+  #lockhint { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.7); padding:10px 14px; border-radius:8px; pointer-events:none; display:none; z-index:4; }
+  #stick { position:fixed; left:24px; bottom:72px; width:132px; height:132px; border-radius:50%; background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.35); touch-action:none; display:none; z-index:6; }
+  #stick .knob { position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(245,245,244,.85); pointer-events:none; }
+  #back { position:fixed; right:16px; bottom:72px; display:none; z-index:7; font-size:16px; padding:14px 20px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.45); }
+
+  /* C: the flat close-up, the C10 baseline */
+  #closeup { position:fixed; left:50%; transform:translateX(-50%); bottom:64px; width:min(440px, calc(100% - 16px)); max-height:62%; overflow:auto; background:#fffdf8; color:#1c1917; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); display:none; z-index:7; }
+  #closeup header { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-bottom:1px solid #e7e5e4; font-weight:600; }
+  #closeup header button { border:0; background:none; font-size:20px; cursor:pointer; width:44px; height:40px; }
+  .cu { padding:10px 12px 12px; } .cu .hint { color:#78716c; font-size:13px; margin:2px 0 8px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; align-items:center; }
+  .b.big { padding:12px 16px; font-size:20px; min-width:52px; background:#fff; border:1px solid #1c1917; }
+  .glyphs { font-size:30px; letter-spacing:.3em; }
+  .grid { display:grid; gap:3px; }
+  .cell { aspect-ratio:1; display:grid; place-items:center; background:#f5f5f4; border-radius:4px; font-size:20px; position:relative; min-width:30px; }
+  .cell.trap { background:#fecaca; } .cell.exit { background:#bbf7d0; } .cell.start { background:#dbeafe; }
+  .tag { position:absolute; top:1px; left:3px; font-size:9px; color:#78716c; }
+  .lamp { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:middle; }
+  .gbar { position:relative; height:20px; background:#f5f5f4; border-radius:4px; margin:3px 0 6px; }
+  .gbar .band { position:absolute; top:0; bottom:0; background:#bbf7d0; } .gbar .fill { position:absolute; top:6px; bottom:6px; left:0; background:#1c1917; border-radius:3px; }
+  .lbl { color:#78716c; font-size:13px; }
+
+  #switcher { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:4px; background:#0f172a; color:#fff; padding:5px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:13px; white-space:nowrap; max-width:calc(100% - 12px); }
+  #switcher button { border:0; background:#334155; color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:16px; touch-action:manipulation; flex:none; }
+  #switcher span { padding:0 8px; overflow:hidden; text-overflow:ellipsis; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+</head>
+<body>
+<div id="view"></div>
+<div class="hud">
+  <div class="chip small" id="help"></div>
+  <div class="chip" id="hint"></div>
+  <div class="chip said" id="said" style="display:none"></div>
+  <div class="chip probe" id="probe" style="display:none"></div>
+  <div class="bar" id="bar"></div>
+</div>
+<div id="flash"></div>
+<div id="crosshair"></div>
+<div id="lockhint">Click to look around · Esc releases the mouse</div>
+<div id="stick"><div class="knob"></div></div>
+<button class="b" id="back">⤺ Step back</button>
+<div id="closeup"></div>
+<div id="switcher"><button id="prev" title="previous variant ([)">‹</button><span id="vlabel"></span><button id="next" title="next variant (])">›</button></div>
+
+<script type="module">
+let THREE = null;
+try { THREE = await import('three'); } catch (e) { console.warn('three.js failed to load', e); }
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ============================================================
+   PURE LOGIC (carried over from the world-form prototype; rules stay server-side in a real build).
+   Player 1 = Lower Deck (Engine Room), Player 2 = Upper Deck (Wheelhouse).
+   ============================================================ */
+const rng = seed => { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+const shuffle = (r, arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const SYMBOLS = ['▲', '●', '■', '★', '◆', '✚'];
+const N = 5, START = [2, 4];
+function init(seed) {
+  const r = rng(seed);
+  const code = shuffle(r, SYMBOLS).slice(0, 3);
+  const glyph = Array.from({ length: N }, () => Array.from({ length: N }, () => SYMBOLS[Math.floor(r() * SYMBOLS.length)]));
+  const ex = Math.floor(r() * N);
+  let x = START[0], y = START[1]; const path = [[x, y]];
+  for (let row = START[1]; row >= 0; row--) {
+    const target = row === 0 ? ex : Math.floor(r() * N);
+    while (x !== target) { x += Math.sign(target - x); path.push([x, y]); }
+    if (row > 0) { y--; path.push([x, y]); }
+  }
+  const onPath = new Set(path.map(p => p.join()));
+  const free = []; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (!onPath.has(i + ',' + j)) free.push(i + ',' + j);
+  const pick = () => Math.floor(r() * 10);
+  return { seed, stage: 1, code, entered: [], glyph, exit: [ex, 0], traps: shuffle(r, free).slice(0, 8), walker: null, steps: 0,
+    valves: [pick(), pick(), pick()], trims: [0, 0, 0], wobble: [0, 0, 0], targets: [0, 0, 0].map(() => 2 + Math.floor(r() * 6)),
+    hold: 0, need: 5, ticks: 0, paused: false, strikes: 0,
+    msg: 'New Voyage. The Lower Deck and the Upper Deck are sealed off from each other.', msgTo: 0 };
+}
+const gauges = s => s.valves.map((v, i) => v + s.trims[i] + s.wobble[i]);
+const inBand = s => gauges(s).every((g, i) => Math.abs(g - s.targets[i]) <= 1);
+const isTrap = (s, i, j) => s.traps.includes(i + ',' + j);
+function act(s0, a) {
+  const s = structuredClone(s0);
+  const say = (m, to = 0) => { s.msg = m; s.msgTo = to; return s; };
+  const no = m => say('(ignored) ' + m, a.p);
+  switch (a.t) {
+    case 'sym':
+      if (s.stage !== 1 || a.p !== 1) return no('The keypad only answers in stage 1.');
+      s.entered.push(a.v);
+      if (s.entered.length < 3) return say('Pressed ' + a.v + '.', 1);
+      if (s.entered.join() === s.code.join()) { s.stage = 2; s.entered = []; s.walker = { x: START[0], y: START[1] }; return say('Click. The cabinet swings open in the Engine Room, and in the Wheelhouse the rope across the rotten floor drops.'); }
+      s.entered = []; s.strikes++; return say('Buzz. Wrong code; the keypad resets. (+1 strike)');
+    case 'clear':
+      if (s.stage !== 1 || a.p !== 1) return no('Nothing to clear.');
+      s.entered = []; return say('Keypad cleared.', 1);
+    case 'step': {
+      if (s.stage !== 2 || a.p !== 2) return no('Only the Wheelhouse walks the floor, and only in stage 2.');
+      const { x, y } = a.v, w = s.walker;
+      if (x < 0 || y < 0 || x >= N || y >= N) return no('That way is a wall.');
+      if (Math.abs(x - w.x) + Math.abs(y - w.y) !== 1) return no('One step at a time, onto a tile beside you.');
+      s.steps++;
+      if (isTrap(s, x, y)) { s.walker = { x: START[0], y: START[1] }; s.strikes++; return say('Crack! The boards give way and you scramble back to the start. (+1 strike)'); }
+      s.walker = { x, y };
+      if (x === s.exit[0] && y === s.exit[1]) { s.stage = 3; return say('You reach the instrument wall. Down in the Engine Room, the valves unseize. The pressure is climbing.'); }
+      return say('Stepped onto a ' + s.glyph[y][x] + '.', 2);
+    }
+    case 'valve':
+      if (s.stage !== 3 || a.p !== 1) return no('The valves only turn in stage 3.');
+      s.valves[a.v.i] = clamp(s.valves[a.v.i] + a.v.d, 0, 9); return say('Turned valve ' + (a.v.i + 1) + '.', 1);
+    case 'trim':
+      if (s.stage !== 3 || a.p !== 2) return no('The trims only work in stage 3.');
+      s.trims[a.v.i] = clamp(s.trims[a.v.i] + a.v.d, -2, 2); return say('Trimmed gauge ' + (a.v.i + 1) + '.', 2);
+    case 'tick': {
+      if (s.stage !== 3 || s.paused) return s;
+      s.ticks++;
+      if (s.ticks % 4 === 0) { const r = rng(s.seed * 1000 + s.ticks), i = Math.floor(r() * 3); s.wobble[i] = clamp(s.wobble[i] + (r() < .5 ? -1 : 1), -2, 2); say('Gauge ' + (i + 1) + ' drifts.', 2); }
+      s.hold = inBand(s) ? s.hold + 1 : 0;
+      if (s.hold >= s.need) { s.stage = 4; say('Stable for ' + s.need + ' seconds. The door unbolts. Both aboard: the Lifeboat is away!'); }
+      return s;
+    }
+    case 'pause': s.paused = !s.paused; return say(s.paused ? 'Clock paused (prototype only).' : 'Clock running.');
+  }
+  return no('Unknown action.');
+}
+
+/* ============================================================
+   ROOM DATA: one description per Deck's Room. Metres; x west→east, z north→south; yaw 0 looks north.
+   A Puzzle is a panel on a wall (wall + position along it + centre height + plate size). The renderer builds
+   the controls; the rules above never learn about them.
+   ============================================================ */
+const REACH = 2.2, SLOP = 22, MIN_TARGET = 44;
+const ROOMS = {
+  1: { name: 'Engine Room', deck: 'Lower Deck', w: 8, d: 7, h: 3, floor: 0x3f3a35, wall: 0x6f5f50, ceil: 0x221d19, lamp: 0xffcf8a, start: { x: 0.4, z: 2.8, yaw: -0.1 },
+    solids: [{ x: -3.2, z: 2.6, sx: 1.4, sz: 1.6 }, { x: 2.6, z: 2.6, sx: 1.2, sz: 1.0 }, { x: -0.2, z: -0.2, sx: 1.6, sz: 1.2 }],
+    things: [
+      { id: 'keypad', label: 'Keypad', wall: 'N', at: -1.5, y: 1.45, w: 0.64, h: 0.9 },
+      { id: 'cabinet', label: 'Cabinet', wall: 'E', at: 0, y: 1.4, w: 1.0, h: 1.0 },
+      { id: 'valves', label: 'Valve wheels', wall: 'W', at: 0, y: 1.35, w: 2.1, h: 1.1 },
+    ] },
+  2: { name: 'Wheelhouse', deck: 'Upper Deck', w: 8, d: 7, h: 2.6, floor: 0x2b2622, wall: 0x6b6f7a, ceil: 0x1f2023, lamp: 0xbfd4ff, tiles: true, start: { x: 0, z: 3.0, yaw: 0 },
+    solids: [{ x: -3.2, z: 2.9, sx: 1.0, sz: 0.8 }],
+    things: [
+      { id: 'mural', label: 'Mural', wall: 'E', at: 2.4, y: 1.45, w: 1.5, h: 1.0 },
+      { id: 'gauges', label: 'Instrument wall', wall: 'N', at: 0, y: 1.5, w: 2.4, h: 1.3 },
+    ] },
+};
+const tileXZ = (i, j) => ({ x: i - 2, z: -2.5 + j });
+const tileAt = (x, z) => [Math.floor(x + 2.5), Math.floor(z + 3)];
+const wallPose = (R, th) => ({ N: { x: th.at, z: -R.d / 2, yaw: 0 }, S: { x: th.at, z: R.d / 2, yaw: Math.PI }, W: { x: -R.w / 2, z: th.at, yaw: Math.PI / 2 }, E: { x: R.w / 2, z: th.at, yaw: -Math.PI / 2 } })[th.wall];
+const HINT = {
+  1: ['', 'A keypad by the door. A locked cabinet. Valve wheels rusted solid.', 'The cabinet is open: a plan of some floor that isn\'t this one.', 'The valve wheels turn now, but there are no gauges down here.', 'The door is open.'],
+  2: ['', 'A faded mural. A rope across a dark, rotten floor.', 'You\'re on the dark floor. Only the tiles beside you are lit.', 'The instrument wall: keep every gauge in its band.', 'Something below unbolts.'],
+};
+
+/* ============================================================
+   STATE (shared across windows through localStorage; the pose is never shared)
+   ============================================================ */
+const KEY = 'PROTOTYPE-in-scene-wipe-me', WIN = Math.random().toString(36).slice(2);
+const q = new URLSearchParams(location.search);
+const coarse = matchMedia('(pointer:coarse)').matches;
+const cfg = { variant: q.get('variant') || 'A', deck: +(q.get('deck') || 1), cross: q.get('cross') || 'free', stick: coarse || q.get('stick') === '1' };
+cfg.lock = !cfg.stick && q.get('lock') !== '0';
+const VARIANTS = {
+  A: { name: 'Frame it', help: 'Tap a Puzzle within reach: the camera glides in and you press its real 3D controls. <b>Step back</b> (or Esc) returns.' },
+  B: { name: 'In place', help: 'No framing. Walk up and press the 3D controls where you stand. Each control has at least a 22 px hit radius.' },
+  C: { name: '2D close-up (C10 baseline)', help: 'Tap a Puzzle within reach: a flat 2D panel opens over the scene.' },
+  D: { name: 'Frame wide, close-up small', help: 'Frame it in the scene at 700 px and wider, the 2D close-up below that. Resize the window across 700 px to see it switch.' },
+};
+const mode = () => ({ A: 'frame', B: 'place', C: 'closeup', D: innerWidth < 700 ? 'closeup' : 'frame' })[cfg.variant];
+let state, deck = cfg.deck;
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY))?.s; } catch { return null; } };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ s: state, from: WIN })); } catch {} };
+state = load() || init(7); save();
+addEventListener('storage', e => { if (e.key === KEY && e.newValue) { const prev = state; state = JSON.parse(e.newValue).s; onState(prev); } });
+function dispatch(a) { const prev = state; state = act(state, a); save(); onState(prev); }
+
+/* ============================================================
+   THE 2D CLOSE-UP (variant C, and D on small screens): the C10 baseline. Reads only what this Deck may see.
+   ============================================================ */
+const bt = (p, t, v, label, cls = '') => `<button class="b ${cls}" data-p="${p}" data-t="${t}" data-v='${JSON.stringify(v ?? null)}'>${label}</button>`;
+const stability = s => `<div style="margin-top:8px;font-weight:600">Stability: ${s.hold}/${s.need} s</div>`;
+function floorPlan(s) {
+  const cells = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const trap = isTrap(s, i, j), ex = i === s.exit[0] && j === s.exit[1], st = i === START[0] && j === START[1];
+    cells.push(`<div class="cell ${trap ? 'trap' : ex ? 'exit' : st ? 'start' : ''}">${trap ? '☠' : ''}${s.glyph[j][i]}${ex ? '<span class="tag">EXIT</span>' : st ? '<span class="tag">START</span>' : ''}</div>`);
+  }
+  return `<div class="grid" style="grid-template-columns:repeat(${N},1fr);max-width:300px">${cells.join('')}</div>`;
+}
+const CLOSEUPS = {
+  keypad: s => s.stage === 1 ? `<p class="hint">A plaque: "Three symbols, in order."</p><div class="glyphs">${s.entered.join(' ') || '·&nbsp;·&nbsp;·'}</div><div class="row">${SYMBOLS.map(g => bt(1, 'sym', g, g, 'big')).join('')}</div><div class="row">${bt(1, 'clear', null, 'Clear')}</div>` : '<p class="hint">Dark now. It did its job.</p>',
+  cabinet: s => s.stage === 1 ? '<p class="hint">Locked. A brass plate: "Opened from the keypad."</p>' : `<p class="hint">Pinned inside: a plan of a rotten floor. ☠ marks the boards that won't hold.</p>${floorPlan(s)}`,
+  valves: s => s.stage < 3 ? '<p class="hint">Three valve wheels, rusted solid.</p>' : `<p class="hint">Three valves. No gauges, only a lamp.</p>${s.valves.map((v, i) => `<div class="row"><b>Valve ${i + 1}</b>${bt(1, 'valve', { i, d: -1 }, '−', 'big')}<span style="font-size:20px;min-width:22px;text-align:center">${v}</span>${bt(1, 'valve', { i, d: 1 }, '+', 'big')}</div>`).join('')}<p>Lamp: <span class="lamp" style="background:${inBand(s) ? '#16a34a' : '#dc2626'}"></span> ${inBand(s) ? 'all fine' : 'something is out of range'}</p>${stability(s)}`,
+  mural: s => `<p class="hint">A faded mural: three symbols in a row.</p><div class="glyphs" style="font-size:40px">${s.code.join(' ')}</div>`,
+  gauges: s => s.stage < 3 ? '<p class="hint">An instrument wall across the floor, too far to read.</p>' : `<p class="hint">Keep every gauge in its green band. The valves are somewhere else.</p>${gauges(s).map((g, i) => `<div><b>Gauge ${i + 1}</b> <span class="lbl">reads ${g}, target ${s.targets[i]}±1</span><div class="gbar"><div class="band" style="left:${(s.targets[i] - 1) / 13 * 100}%;width:${3 / 13 * 100}%"></div><div class="fill" style="width:${clamp(g, 0, 13) / 13 * 100}%"></div></div><div class="row" style="margin-top:-4px">${bt(2, 'trim', { i, d: -1 }, '−trim')}${bt(2, 'trim', { i, d: 1 }, '+trim')}<span class="lbl">trim ${s.trims[i]}</span></div></div>`).join('')}${stability(s)}`,
+};
+let closeupId = null;
+function drawCloseup() {
+  const el = $('#closeup'), th = closeupId && ROOMS[deck].things.find(t => t.id === closeupId);
+  el.style.display = th ? 'block' : 'none';
+  if (th) el.innerHTML = `<header>${th.label}<button data-close>✕</button></header><div class="cu">${CLOSEUPS[th.id](state)}</div>`;
+}
+function openCloseup(id) { closeupId = id; if (document.pointerLockElement) document.exitPointerLock(); drawCloseup(); syncUi(); }
+
+/* ============================================================
+   THE 3D SCENE
+   ============================================================ */
+let renderer, scene, camera, pick = [], buttons = [], groups = {}, ups = [], tileMeshes = [], torch;
+const P = { x: 0, z: 0, yaw: 0, pitch: -0.12, focus: null, fthing: null, blend: 0 };
+const IN = { keys: new Set(), stick: null, ptr: null };
+const tex = {};
+const mkTex = (key, w, h, draw) => { if (tex[key]) return tex[key]; const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return (tex[key] = t); };
+const glyphTex = (g, bg, border = '#292524') => mkTex('g' + g + bg + border, 128, 128, (x, w, h) => { x.fillStyle = border; x.fillRect(0, 0, w, h); x.fillStyle = bg; x.fillRect(5, 5, w - 10, h - 10); x.fillStyle = '#fafaf9'; x.font = '84px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(g, w / 2, h / 2 + 4); });
+const labelTex = (t, w = 160, h = 100) => mkTex('l' + t + w, w, h, (x, W, H) => { x.fillStyle = '#44403c'; x.fillRect(0, 0, W, H); x.fillStyle = '#fafaf9'; x.font = '700 ' + Math.floor(H * 0.5) + 'px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, W / 2, H / 2 + 3); });
+function dyn(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'), t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return { tex: t, draw: s => { draw(x, w, h, s); t.needsUpdate = true; } }; }
+
+function buildScene() {
+  const R = ROOMS[deck];
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0a09); scene.add(camera);
+  pick = []; buttons = []; groups = {}; ups = []; tileMeshes = [];
+  const lam = c => new THREE.MeshLambertMaterial({ color: c });
+  const put = (m, x, y, z) => { m.position.set(x, y, z); scene.add(m); return m; };
+  const block = m => { m.userData.block = true; pick.push(m); return m; };
+  const floor = put(new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), lam(R.floor)), 0, 0, 0); floor.rotation.x = -Math.PI / 2; floor.userData.floor = true; pick.push(floor);
+  put(new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), lam(R.ceil)), 0, R.h, 0).rotation.x = Math.PI / 2;
+  const wall = (w, x, z, ry) => { const m = put(new THREE.Mesh(new THREE.PlaneGeometry(w, R.h), lam(R.wall)), x, R.h / 2, z); m.rotation.y = ry; block(m); };
+  wall(R.w, 0, -R.d / 2, 0); wall(R.w, 0, R.d / 2, Math.PI); wall(R.d, -R.w / 2, 0, Math.PI / 2); wall(R.d, R.w / 2, 0, -Math.PI / 2);
+  for (let k = -3; k <= 3; k++) { put(new THREE.Mesh(new THREE.BoxGeometry(0.06, R.h, 0.04), lam(0x57493c)), k * 1.15, R.h / 2, R.d / 2 - 0.03); }   // rivet strips, so motion reads
+  for (const o of R.solids) block(put(new THREE.Mesh(new THREE.BoxGeometry(o.sx, 0.9, o.sz), lam(deck === 1 ? 0x7c5a3a : 0x57534e)), o.x, 0.45, o.z));
+  if (deck === 1) { const door = block(put(new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.1, 0.08), lam(0x5b3a1e)), 1.8, 1.05, -R.d / 2 + 0.04)); ups.push(s => door.material.color.set(s.stage === 4 ? 0x16a34a : 0x5b3a1e)); }
+  R.things.forEach(th => buildThing(th, R));
+  if (R.tiles) buildFloor(R, put, lam);
+
+  scene.add(new THREE.AmbientLight(0xffffff, R.tiles ? 0.4 : 0.55));
+  const lamp = new THREE.PointLight(R.lamp, R.tiles ? 7 : 14, 0, 1.6); lamp.position.set(0, R.h - 0.2, R.tiles ? 2.2 : 0.5); scene.add(lamp);
+  if (R.tiles) { const far = new THREE.PointLight(R.lamp, 4, 0, 1.6); far.position.set(0, R.h - 0.2, -3); scene.add(far); }
+  torch = new THREE.PointLight(0xfff1c8, 0, 3.5, 1.5); camera.add(torch);
+  ups.push(s => (torch.intensity = deck === 2 && s.stage === 2 ? 3 : 0));
+}
+
+function buildFloor(R, put, lam) {
+  const hidden = lam(0x0a0908);                      // unlit tiles are one flat dark: no gaps, no outlines to count rows by
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const t = put(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), hidden), tileXZ(i, j).x, 0.012, tileXZ(i, j).z);
+    t.rotation.x = -Math.PI / 2; t.userData.tile = [i, j]; pick.push(t); tileMeshes.push(t);
+  }
+  const mats = {};
+  ups.push(s => tileMeshes.forEach((t, k) => {
+    const i = k % N, j = Math.floor(k / N), w = s.walker, lit = s.stage === 2 && Math.max(Math.abs(i - w.x), Math.abs(j - w.y)) <= 1, ex = i === s.exit[0] && j === s.exit[1];
+    t.userData.lit = lit; t.material = lit ? (mats[s.glyph[j][i] + ex] ??= new THREE.MeshLambertMaterial({ map: glyphTex(s.glyph[j][i], ex ? '#166534' : '#57534e', '#1c1917') })) : hidden;
+  }));
+  const rope = put(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, R.w - 0.6, 6), lam(0xd4a373)), 0, 0.95, 2.1); rope.rotation.z = Math.PI / 2;
+  const sign = put(new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.26), new THREE.MeshBasicMaterial({ map: mkTex('dnc', 256, 74, (x, w, h) => { x.fillStyle = '#fef3c7'; x.fillRect(0, 0, w, h); x.fillStyle = '#7f1d1d'; x.font = '700 34px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('DO NOT CROSS', w / 2, h / 2 + 2); }) })), 0, 1.25, 2.1);
+  ups.push(s => (rope.visible = sign.visible = s.stage === 1));
+}
+
+function buildThing(th, R) {
+  const pose = wallPose(R, th), g = new THREE.Group();
+  g.position.set(pose.x, th.y, pose.z); g.rotation.y = pose.yaw; scene.add(g); groups[th.id] = g;
+  const lam = c => new THREE.MeshLambertMaterial({ color: c });
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(th.w, th.h, 0.08), lam(0x3a3631)); plate.position.z = 0.04; g.add(plate);
+  const plane = (t, w, h, x, y, z = 0.09) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t })); m.position.set(x, y, z); g.add(m); return m; };
+  const btn = (x, y, w, h, t, a, lab) => {
+    const face = new THREE.MeshLambertMaterial({ map: t }), side = lam(0x57534e);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), [side, side, side, side, face, side]); m.position.set(x, y, 0.105);
+    m.userData = { thing: th.id, press: a, bw: w, bh: h, face, lab, z0: 0.105 }; g.add(m); buttons.push(m); return m;
+  };
+  const stab = dyn(512, 64, (x, w, h, s) => { x.fillStyle = '#111827'; x.fillRect(0, 0, w, h); x.fillStyle = s.stage === 4 ? '#86efac' : '#e5e7eb'; x.font = '600 38px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Stability ' + s.hold + '/' + s.need + ' s' + (s.stage === 4 ? '  LOCKED' : ''), w / 2, h / 2 + 2); });
+
+  if (th.id === 'keypad') {
+    const d = dyn(256, 72, (x, w, h, s) => { x.fillStyle = '#0b1d12'; x.fillRect(0, 0, w, h); x.fillStyle = '#86efac'; x.font = '46px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(s.stage === 1 ? (s.entered.join(' ') || '· · ·') : '— — —', w / 2, h / 2 + 2); });
+    plane(d.tex, 0.5, 0.14, 0, 0.3); ups.push(s => d.draw(s));
+    SYMBOLS.forEach((sy, i) => btn(-0.19 + (i % 3) * 0.19, 0.08 - Math.floor(i / 3) * 0.2, 0.16, 0.16, glyphTex(sy, '#44403c'), { p: 1, t: 'sym', v: sy }, sy));
+    btn(0, -0.33, 0.5, 0.12, labelTex('CLEAR', 400, 96), { p: 1, t: 'clear', v: null }, 'CLEAR');
+  }
+  if (th.id === 'cabinet') {
+    const d = dyn(512, 512, (x, w, h, s) => {
+      x.fillStyle = '#e7d8b5'; x.fillRect(0, 0, w, h); x.textAlign = 'center'; x.textBaseline = 'middle';
+      if (s.stage === 1) { x.fillStyle = '#44403c'; x.font = '700 54px sans-serif'; x.fillText('LOCKED', w / 2, h / 2 - 20); x.font = '30px sans-serif'; x.fillText('Opened from the keypad', w / 2, h / 2 + 34); return; }
+      const c = 96, o = 16;
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const trap = isTrap(s, i, j), ex = i === s.exit[0] && j === s.exit[1], st = i === START[0] && j === START[1];
+        x.fillStyle = trap ? '#fecaca' : ex ? '#bbf7d0' : st ? '#bfdbfe' : '#f5f5f4'; x.fillRect(o + i * c + 2, o + j * c + 2, c - 4, c - 4);
+        x.fillStyle = '#1c1917'; x.font = '54px sans-serif'; x.fillText((trap ? '☠' : '') + s.glyph[j][i], o + i * c + c / 2, o + j * c + c / 2 + 4);
+        x.font = '600 16px sans-serif'; x.fillStyle = '#57534e'; if (ex) x.fillText('EXIT', o + i * c + c / 2, o + j * c + 14); if (st) x.fillText('START', o + i * c + c / 2, o + j * c + 14);
+      }
+    });
+    plane(d.tex, 0.9, 0.9, 0, 0); ups.push(s => d.draw(s));
+  }
+  if (th.id === 'mural') {
+    const d = dyn(512, 340, (x, w, h, s) => { x.fillStyle = '#e7d8b5'; x.fillRect(0, 0, w, h); x.fillStyle = '#7c2d12'; x.font = '130px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; s.code.forEach((gl, i) => x.fillText(gl, w * (i + 0.5) / 3, h / 2 + 6)); });
+    plane(d.tex, 1.4, 0.93, 0, 0); ups.push(s => d.draw(s));
+  }
+  if (th.id === 'valves') {
+    const wheels = [];
+    for (let k = 0; k < 3; k++) {
+      const x = (k - 1) * 0.7, wh = new THREE.Group(); wh.position.set(x, 0.2, 0.16);
+      wh.add(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.04, 8, 20), lam(0xb91c1c)));
+      for (let a = 0; a < 3; a++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.03), lam(0xb91c1c)); sp.rotation.z = a * Math.PI / 3; wh.add(sp); }
+      g.add(wh); wheels.push(wh);
+      const hub = dyn(64, 64, (c, w, h, s) => { c.fillStyle = '#fef3c7'; c.fillRect(0, 0, w, h); c.fillStyle = '#1c1917'; c.font = '700 44px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s.valves[k], w / 2, h / 2 + 3); });
+      plane(hub.tex, 0.14, 0.14, x, 0.2, 0.2); ups.push(s => hub.draw(s));
+      btn(x - 0.17, -0.2, 0.26, 0.2, labelTex('−', 130, 100), { p: 1, t: 'valve', v: { i: k, d: -1 } }, 'V' + (k + 1) + '−');
+      btn(x + 0.17, -0.2, 0.26, 0.2, labelTex('+', 130, 100), { p: 1, t: 'valve', v: { i: k, d: 1 } }, 'V' + (k + 1) + '+');
+    }
+    const lampM = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), new THREE.MeshBasicMaterial({ color: 0xdc2626 })); lampM.position.set(0.93, 0.43, 0.14); g.add(lampM);
+    plane(stab.tex, 1.2, 0.15, 0, -0.45); ups.push(s => { stab.draw(s); lampM.material.color.set(inBand(s) ? 0x16a34a : 0xdc2626); wheels.forEach((w, k) => (w.rotation.z = -s.valves[k] * 0.45)); });
+  }
+  if (th.id === 'gauges') {
+    for (let k = 0; k < 3; k++) {
+      const x = (k - 1) * 0.8;
+      const d = dyn(256, 256, (c, w, h, s) => {
+        const val = gauges(s)[k], t = s.targets[k], cx = 128, cy = 196, r = 100, ang = v => Math.PI * (1 - clamp(v, 0, 13) / 13);
+        c.fillStyle = '#1f2937'; c.fillRect(0, 0, w, h); c.lineCap = 'round';
+        c.strokeStyle = '#4b5563'; c.lineWidth = 6; c.beginPath(); c.arc(cx, cy, r, Math.PI, 2 * Math.PI); c.stroke();
+        c.strokeStyle = '#4ade80'; c.lineWidth = 16; c.beginPath(); c.arc(cx, cy, r, -ang(t - 1), -ang(t + 1)); c.stroke();
+        c.strokeStyle = '#f9fafb'; c.lineWidth = 7; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + (r - 10) * Math.cos(ang(val)), cy - (r - 10) * Math.sin(ang(val))); c.stroke();
+        c.fillStyle = '#f9fafb'; c.font = '700 28px sans-serif'; c.textAlign = 'center'; c.fillText('Gauge ' + (k + 1), cx, 36); c.font = '600 30px sans-serif'; c.fillText('reads ' + val + ' · trim ' + s.trims[k], cx, 244);
+      });
+      plane(d.tex, 0.7, 0.7, x, 0.25); ups.push(s => d.draw(s));
+      btn(x - 0.19, -0.3, 0.3, 0.22, labelTex('−', 130, 100), { p: 2, t: 'trim', v: { i: k, d: -1 } }, 'T' + (k + 1) + '−');
+      btn(x + 0.19, -0.3, 0.3, 0.22, labelTex('+', 130, 100), { p: 2, t: 'trim', v: { i: k, d: 1 } }, 'T' + (k + 1) + '+');
+    }
+    plane(stab.tex, 1.2, 0.15, 0, -0.54); ups.push(s => stab.draw(s));
+  }
+  g.traverse(o => { if (o.isMesh) { o.userData.thing ??= th.id; if (!pick.includes(o)) pick.push(o); } });
+}
+
+/* ============================================================
+   WALKING: solids, the rope, and (in the Wheelhouse) the dark floor's own rules
+   ============================================================ */
+function walkable(x, z) {
+  const R = ROOMS[deck], RAD = 0.3;
+  if (Math.abs(x) > R.w / 2 - RAD || Math.abs(z) > R.d / 2 - RAD) return false;
+  for (const o of R.solids) if (Math.abs(x - o.x) < o.sx / 2 + RAD && Math.abs(z - o.z) < o.sz / 2 + RAD) return false;
+  if (deck === 2) {
+    const s = state;
+    if (s.stage === 1) return z >= 2.3;                                       // the rope
+    if (s.stage === 2) { const [i, j] = tileAt(x, z); return i >= 0 && j >= 0 && i < N && j < N && Math.abs(i - s.walker.x) + Math.abs(j - s.walker.y) <= 1; }   // one tile beside you
+    return z <= -2.0;                                                        // the north strip, by the instrument wall
+  }
+  return true;
+}
+function tryMove(dx, dz) {
+  if (walkable(P.x + dx, P.z + dz)) { P.x += dx; P.z += dz; }
+  else if (walkable(P.x + dx, P.z)) P.x += dx;
+  else if (walkable(P.x, P.z + dz)) P.z += dz;
+}
+function spawn() {
+  const R = ROOMS[deck], s = state; let p = R.start; P.pitch = -0.12;
+  if (deck === 2 && s.stage === 2) { p = { ...tileXZ(s.walker.x, s.walker.y), yaw: 0 }; P.pitch = -0.5; }
+  else if (deck === 2 && s.stage >= 3) p = { ...tileXZ(s.exit[0], 0), yaw: 0 };
+  P.x = p.x; P.z = p.z; P.yaw = p.yaw;
+}
+
+/* ============================================================
+   FRAMING (variant A, and D on wide screens): the camera pose that fits a Puzzle's plate to the view
+   ============================================================ */
+function focusPose(th) {
+  const g = groups[th.id], vf = camera.fov * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+  const d = Math.max((th.h / 2) / Math.tan(vf / 2), (th.w / 2) / Math.tan(hf / 2)) * 1.1 + 0.1, yaw = g.rotation.y;
+  return { x: g.position.x + Math.sin(yaw) * d, y: g.position.y, z: g.position.z + Math.cos(yaw) * d, yaw };
+}
+function focus(id) { P.focus = P.fthing = ROOMS[deck].things.find(t => t.id === id); if (document.pointerLockElement) document.exitPointerLock(); IN.stick = null; syncUi(); }
+function unfocus() { P.focus = null; syncUi(); }
+$('#back').addEventListener('click', () => { unfocus(); if (cfg.lock) { try { renderer.domElement.requestPointerLock()?.catch?.(() => {}); } catch {} } });
+
+/* ============================================================
+   PICKING: exact ray hits, plus the on-screen size of every control
+   ============================================================ */
+const ray = THREE && new THREE.Raycaster(), V3 = THREE && new THREE.Vector3(), V3b = THREE && new THREE.Vector3(), V2 = THREE && new THREE.Vector2();
+const rectOf = () => renderer.domElement.getBoundingClientRect();
+function pickAt(cx, cy) {
+  const r = rectOf(); ray.setFromCamera(V2.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+  for (const h of ray.intersectObjects(pick, false)) {
+    const o = h.object, u = o.userData; if (!o.visible) continue;
+    if (u.press) return { press: u.press, mesh: o, thing: u.thing, dist: h.distance };
+    if (u.thing) return { thing: u.thing, dist: h.distance };
+    if (u.tile) return { tile: u.tile, lit: u.lit, dist: h.distance };
+    return u.floor ? { floor: true, dist: h.distance } : { block: true };
+  }
+  return {};
+}
+function pxOf(b) {                                           // the control's smaller side, in CSS pixels on screen
+  const r = rectOf(), u = b.userData, horiz = u.bw <= u.bh, half = Math.min(u.bw, u.bh) / 2;
+  b.getWorldPosition(V3); V3b.set(horiz ? half : 0, horiz ? 0 : half, 0).applyMatrix4(b.matrixWorld);
+  const a = V3.clone().project(camera), c = V3b.clone().project(camera);
+  return 2 * Math.hypot((c.x - a.x) * r.width / 2, (c.y - a.y) * r.height / 2);
+}
+function slopPick(cx, cy) {                                  // variant B: the nearest control within max(22 px, its own radius)
+  const r = rectOf(); let best = null, bd = 1e9; const nrm = new THREE.Vector3();
+  for (const b of buttons) {
+    b.getWorldPosition(V3); if (camera.position.distanceTo(V3) > REACH) continue;
+    nrm.set(0, 0, 1).transformDirection(b.parent.matrixWorld); if (nrm.dot(V3b.copy(camera.position).sub(V3)) <= 0) continue;
+    const p = V3.clone().project(camera); if (p.z > 1) continue;
+    const d = Math.hypot(r.left + (p.x * .5 + .5) * r.width - cx, r.top + (-p.y * .5 + .5) * r.height - cy);
+    if (d <= Math.max(SLOP, pxOf(b) / 2) && d < bd) { best = b; bd = d; }
+  }
+  return best;
+}
+function probe(html) { const el = $('#probe'); if (!html) { el.style.display = 'none'; return; } if (el.innerHTML !== html) el.innerHTML = html; el.style.display = ''; }
+const probeBtn = (b, extra = '') => { const px = pxOf(b); return `${ROOMS[deck].things.find(t => t.id === b.userData.thing).label} · <b>${b.userData.lab}</b> · <span class="${px >= MIN_TARGET ? 'ok' : 'bad'}">${px.toFixed(0)} px</span> on screen (min ${MIN_TARGET})${extra}`; };
+let pressFx = [];
+function press(b) {
+  const a = b.userData.press; if (a.p !== deck) return;
+  probe(probeBtn(b, ' · pressed')); b.position.z = b.userData.z0 - 0.025; pressFx.push([b, performance.now() + 140]);
+  dispatch({ p: a.p, t: a.t, v: a.v });
+}
+function tapAt(cx, cy) {
+  const hit = pickAt(cx, cy), m = mode(), R = ROOMS[deck];
+  if (P.focus) { if (hit.press) press(hit.mesh); return; }
+  if (deck === 2 && state.stage === 2 && cfg.cross === 'tiles') { if (hit.tile?.lit || hit.tile) { dispatch({ p: 2, t: 'step', v: { x: hit.tile[0], y: hit.tile[1] } }); return; } }
+  if (m === 'place') {
+    const b = slopPick(cx, cy);
+    if (b) press(b); else if (hit.press) probe(probeBtn(hit.mesh, ' · out of reach, nothing happens'));
+    return;
+  }
+  if (hit.thing) {
+    if (hit.dist > REACH) { probe(`${R.things.find(t => t.id === hit.thing).label} · ${hit.dist.toFixed(1)} m away: out of reach, nothing happens`); return; }
+    probe(''); if (m === 'frame') focus(hit.thing); else openCloseup(hit.thing);
+  }
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+const lookBy = (dx, dy) => { P.yaw += dx * 0.006; P.pitch = clamp(P.pitch + dy * 0.006, -1.2, 1.0); };
+function bindCanvas() {
+  const el = renderer.domElement, locked = () => document.pointerLockElement === el, busy = () => P.focus || closeupId;
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  el.addEventListener('pointerdown', e => {
+    if (IN.ptr) return;
+    if (cfg.lock && !busy()) {                                  // mouse look: a click captures the mouse, then a click uses what the crosshair is on
+      if (!locked()) { try { el.requestPointerLock()?.catch?.(() => {}); } catch {} return; }
+      const r = rectOf(); tapAt(r.left + r.width / 2, r.top + r.height / 2); return;
+    }
+    IN.ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false }; el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e => {
+    if (cfg.lock && locked()) { P.yaw -= e.movementX * 0.0025; P.pitch = clamp(P.pitch - e.movementY * 0.0025, -1.2, 1.0); return; }
+    const p = IN.ptr; if (!p || p.id !== e.pointerId) return;
+    const dx = e.clientX - p.lx, dy = e.clientY - p.ly; p.lx = e.clientX; p.ly = e.clientY;
+    if (!p.drag && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) p.drag = true;
+    if (p.drag && !busy()) lookBy(dx, dy);                      // while framed the drag is free: nothing looks around
+  });
+  const up = e => { const p = IN.ptr; if (!p || p.id !== e.pointerId) return; IN.ptr = null; if (e.type === 'pointerup' && !p.drag) tapAt(e.clientX, e.clientY); };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  document.addEventListener('pointerlockchange', syncUi);
+}
+const MOVE = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
+addEventListener('keydown', e => {
+  if (e.target.closest?.('input,textarea')) return;
+  const k = e.key.toLowerCase();
+  if (k === '[' || k === ']') return cycle(k === ']' ? 1 : -1);
+  if (k === 'escape') { if (closeupId) { closeupId = null; drawCloseup(); syncUi(); } else if (P.focus) unfocus(); return; }
+  if (MOVE[k]) { e.preventDefault(); IN.keys.add(MOVE[k]); }
+});
+addEventListener('keyup', e => IN.keys.delete(MOVE[e.key.toLowerCase()]));
+addEventListener('blur', () => IN.keys.clear());
+const stick = $('#stick'), knob = stick.querySelector('.knob');
+stick.addEventListener('pointerdown', e => { stick.setPointerCapture(e.pointerId); IN.stick = { id: e.pointerId, x: 0, y: 0 }; moveStick(e); });
+stick.addEventListener('pointermove', e => { if (IN.stick?.id === e.pointerId) moveStick(e); });
+const stickUp = () => { IN.stick = null; knob.style.transform = ''; };
+stick.addEventListener('pointerup', stickUp); stick.addEventListener('pointercancel', stickUp);
+function moveStick(e) {
+  const r = stick.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const m = Math.hypot(dx, dy), max = 46; if (m > max) { dx *= max / m; dy *= max / m; }
+  knob.style.transform = `translate(${dx}px, ${dy}px)`; const dead = v => Math.abs(v) < 0.18 ? 0 : v;
+  IN.stick.x = dead(dx / max); IN.stick.y = dead(dy / max);
+}
+
+/* ============================================================
+   FRAME LOOP
+   ============================================================ */
+let last = performance.now(), lastProbe = '';
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  const free = !P.focus && !closeupId, crossTiles = deck === 2 && state.stage === 2 && cfg.cross === 'tiles';
+  let fwd = 0, side = 0, turn = 0;
+  if (free) {
+    fwd = (IN.keys.has('f') ? 1 : 0) - (IN.keys.has('b') ? 1 : 0); side = (IN.keys.has('r') ? 1 : 0) - (IN.keys.has('l') ? 1 : 0);
+    if (cfg.stick && IN.stick) { fwd = -IN.stick.y; turn = -IN.stick.x; }
+  }
+  if (crossTiles) fwd = side = 0;
+  P.yaw += turn * dt * 1.9;
+  if (fwd || side) { const len = Math.max(1, Math.hypot(fwd, side)), v = 2.2 * dt / len, sy = Math.sin(P.yaw), cy = Math.cos(P.yaw); tryMove((-sy * fwd + cy * side) * v, (-cy * fwd - sy * side) * v); }
+  if (crossTiles) { const tt = tileXZ(state.walker.x, state.walker.y), k = 1 - Math.exp(-dt * 7); P.x += (tt.x - P.x) * k; P.z += (tt.z - P.z) * k; }
+  if (deck === 2 && state.stage === 2 && cfg.cross === 'free') {   // walking: each tile you cross into is one step event
+    const [i, j] = tileAt(P.x, P.z), w = state.walker;
+    if ((i !== w.x || j !== w.y) && i >= 0 && j >= 0 && i < N && j < N) dispatch({ p: 2, t: 'step', v: { x: i, y: j } });
+  }
+  P.blend += clamp((P.focus ? 1 : 0) - P.blend, -dt / 0.5, dt / 0.5);
+  let cx = P.x, cy = 1.6, cz = P.z, yaw = P.yaw, pitch = P.pitch;
+  if (P.blend > 0 && P.fthing) {
+    const f = focusPose(P.fthing), e = P.blend * P.blend * (3 - 2 * P.blend);
+    cx += (f.x - cx) * e; cy += (f.y - cy) * e; cz += (f.z - cz) * e; yaw += Math.atan2(Math.sin(f.yaw - yaw), Math.cos(f.yaw - yaw)) * e; pitch *= 1 - e;
+  }
+  camera.position.set(cx, cy, cz); camera.rotation.set(pitch, yaw, 0);
+  pressFx = pressFx.filter(([b, until]) => { if (performance.now() >= until) { b.position.z = b.userData.z0; return false; } return true; });
+  if (cfg.lock && document.pointerLockElement === renderer.domElement && free) {   // aiming with the crosshair: show what it is on
+    const r = rectOf(), h = pickAt(r.left + r.width / 2, r.top + r.height / 2);
+    const html = h.press ? probeBtn(h.mesh, ` · ${h.dist.toFixed(1)} m${h.dist > REACH ? ' (out of reach)' : ''}`) : '';
+    if (html !== lastProbe) { lastProbe = html; probe(html); }
+  }
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+function syncUi() {
+  const locked = renderer && document.pointerLockElement === renderer.domElement, busy = P.focus || closeupId;
+  $('#crosshair').style.display = cfg.lock && locked && !busy ? 'block' : 'none';
+  $('#lockhint').style.display = cfg.lock && !locked && !busy ? 'block' : 'none';
+  $('#stick').style.display = cfg.stick && !busy ? 'block' : 'none';
+  $('#back').style.display = P.focus ? 'block' : 'none';
+  $('#closeup').style.display = closeupId ? 'block' : 'none';
+}
+function hud(prev) {
+  const s = state, R = ROOMS[deck];
+  $('#hint').innerHTML = `<b>${R.deck} · ${R.name}</b> · ${HINT[deck][s.stage]} <span class="lbl" style="color:#d6d3d1">(strikes ${s.strikes})</span>`;
+  const said = $('#said'), show = s.msgTo === 0 || s.msgTo === deck; said.style.display = show ? '' : 'none'; said.textContent = s.msg;
+  if (prev && s.strikes > prev.strikes) { const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+  $('#help').innerHTML = `<b>${cfg.variant} · ${VARIANTS[cfg.variant].name}</b> (now: ${({ frame: 'framing', place: 'in place', closeup: '2D close-up' })[mode()]})<br>${VARIANTS[cfg.variant].help}`;
+  $('#bar').innerHTML = `<button data-ui="deck">Deck: ${R.deck} ⇄</button><button data-ui="cross">Crossing: ${cfg.cross === 'free' ? 'walk' : 'tile by tile'} ⇄</button><button data-ui="new">New draw</button><button data-ui="pop">Other Deck in a new window</button>`;
+  $('#vlabel').textContent = cfg.variant + ' · ' + VARIANTS[cfg.variant].name;
+  const u = new URL(location); u.searchParams.set('variant', cfg.variant); u.searchParams.set('deck', deck); u.searchParams.set('cross', cfg.cross); try { history.replaceState(null, '', u); } catch {}
+}
+function onState(prev) {
+  if (prev && (prev.seed !== state.seed || (deck === 2 && (prev.stage !== state.stage || (state.stage === 2 && state.strikes > prev.strikes))))) spawn();
+  ups.forEach(f => f(state)); hud(prev);
+  if (closeupId) drawCloseup();
+}
+const order = Object.keys(VARIANTS);
+function cycle(d) { cfg.variant = order[(order.indexOf(cfg.variant) + d + order.length) % order.length]; closeupId = null; if (P.focus) P.focus = null; drawCloseup(); syncUi(); hud(); }
+$('#prev').onclick = () => cycle(-1); $('#next').onclick = () => cycle(1);
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-t]'); if (a) { dispatch({ p: +a.dataset.p, t: a.dataset.t, v: JSON.parse(a.dataset.v) }); return; }
+  if (e.target.closest('[data-close]')) { closeupId = null; drawCloseup(); syncUi(); return; }
+  const u = e.target.closest('[data-ui]'); if (!u) return;
+  const k = u.dataset.ui;
+  if (k === 'deck') { deck = 3 - deck; closeupId = null; P.focus = P.fthing = null; P.blend = 0; buildScene(); spawn(); onState(null); syncUi(); }
+  else if (k === 'cross') { cfg.cross = cfg.cross === 'free' ? 'tiles' : 'free'; hud(); }
+  else if (k === 'new') { const prev = state; state = init(Math.floor(Math.random() * 9000) + 1); save(); onState(prev); }
+  else if (k === 'pop') open(location.pathname + '?' + new URLSearchParams({ variant: cfg.variant, deck: 3 - deck, cross: cfg.cross }), 'deck' + (3 - deck), 'width=420,height=900');
+});
+// one clock across every open window: whoever holds a fresh lease ticks
+setInterval(() => {
+  if (state.stage !== 3 || state.paused) return;
+  let lease = null; try { lease = JSON.parse(localStorage.getItem(KEY + '-clock')); } catch {}
+  if (lease && lease.id !== WIN && Date.now() - lease.at < 2500) return;
+  try { localStorage.setItem(KEY + '-clock', JSON.stringify({ id: WIN, at: Date.now() })); } catch {}
+  dispatch({ p: 0, t: 'tick' });
+}, 1000);
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+if (!THREE) document.body.insertAdjacentHTML('afterbegin', '<div class="nogl">three.js did not load (offline?). This prototype needs jsdelivr.</div>');
+else {
+  try { renderer = new THREE.WebGLRenderer({ antialias: true }); } catch (e) { document.body.insertAdjacentHTML('afterbegin', '<div class="nogl">WebGL is unavailable here. A real build would fall back to the 2D view.</div>'); throw e; }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); $('#view').append(renderer.domElement);
+  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 40); camera.rotation.order = 'YXZ';
+  const fit = () => {
+    const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h;
+    camera.fov = w < h ? Math.min(105, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) / (w / h)) * 180 / Math.PI) : 70;   // portrait holds the horizontal view at about 75° (the 3D-form ticket)
+    camera.updateProjectionMatrix(); hud();
+  };
+  addEventListener('resize', fit);
+  buildScene(); fit(); spawn(); bindCanvas(); onState(null); syncUi(); requestAnimationFrame(frame);
+  window.__proto = { get state() { return state; }, dispatch, P, cfg, get deck() { return deck; }, buttons: () => buttons.map(b => ({ thing: b.userData.thing, lab: b.userData.lab })),
+    screenOf: (thing, lab) => { const b = buttons.find(b => b.userData.thing === thing && b.userData.lab === lab); b.getWorldPosition(V3); const p = V3.clone().project(camera), r = rectOf(); return { x: r.left + (p.x * .5 + .5) * r.width, y: r.top + (-p.y * .5 + .5) * r.height, px: pxOf(b), front: p.z < 1 }; },
+    warp: (x, z, yaw = 0, pitch = -0.1) => Object.assign(P, { x, z, yaw, pitch }), focus, unfocus, mode, tapAt };
+}
+</script>
+</body>
+</html>
