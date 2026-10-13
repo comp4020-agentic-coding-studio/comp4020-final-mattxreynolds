@@ -1,0 +1,12 @@
+import zlib from 'node:zlib'; import fs from 'node:fs';
+const f = process.argv[2]; const b = fs.readFileSync(f);
+const t=(name,fn,n=20)=>{ fn(); const s=process.hrtime.bigint(); let out; for(let i=0;i<n;i++) out=fn(); const ms=Number(process.hrtime.bigint()-s)/1e6/n; console.log(name.padEnd(22), (out.length/1024).toFixed(0).padStart(5),'KiB', ms.toFixed(2).padStart(8),'ms/op'); };
+console.log('raw', (b.length/1024).toFixed(0),'KiB');
+t('gzip level 1', ()=>zlib.gzipSync(b,{level:1}));
+t('gzip level 6 (default)', ()=>zlib.gzipSync(b,{level:6}));
+t('gzip level 9', ()=>zlib.gzipSync(b,{level:9}),5);
+t('brotli q4', ()=>zlib.brotliCompressSync(b,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:4}}));
+t('brotli q5', ()=>zlib.brotliCompressSync(b,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:5}}),10);
+t('brotli q11', ()=>zlib.brotliCompressSync(b,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:11}}),2);
+const pre = zlib.brotliCompressSync(b,{params:{[zlib.constants.BROTLI_PARAM_QUALITY]:11}}); fs.writeFileSync('/tmp/pre.br',pre);
+t('read precompressed .br', ()=>fs.readFileSync('/tmp/pre.br'),200);

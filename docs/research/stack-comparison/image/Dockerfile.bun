@@ -1,0 +1,5 @@
+FROM oven/bun:1-slim
+WORKDIR /app
+COPY server.mjs ./
+COPY site ./site
+CMD ["bun","server.mjs"]

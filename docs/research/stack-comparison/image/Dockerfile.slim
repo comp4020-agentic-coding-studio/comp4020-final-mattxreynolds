@@ -1,0 +1,5 @@
+FROM node:24.21.0-slim
+WORKDIR /app
+COPY server.mjs ./
+COPY site ./site
+CMD ["node","server.mjs"]

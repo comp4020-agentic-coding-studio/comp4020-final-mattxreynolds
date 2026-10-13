@@ -1,0 +1,5 @@
+FROM gcr.io/distroless/nodejs24-debian13
+WORKDIR /app
+COPY server.mjs ./
+COPY site ./site
+CMD ["server.mjs"]
