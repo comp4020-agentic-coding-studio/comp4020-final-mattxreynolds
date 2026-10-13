@@ -4,12 +4,28 @@ A two-player cooperative browser puzzle game in which each Player is shut in a s
 
 ## People
 
+**Person**:
+Someone the game recognises across attempts: either a Guest or an Account.
+_Avoid_: User, visitor, profile
+
+**Guest**:
+A Person known only by their browser, given a generated pseudonym; can become an Account without losing their history.
+_Avoid_: Anonymous, temp user
+
+**Account**:
+A Person known by a username and password they chose, recognised in any browser.
+_Avoid_: Login, profile, member
+
+**Display name**:
+What other Players see of a Person: the pseudonym for a Guest, the username for an Account.
+_Avoid_: Nickname, handle
+
 **Player**:
-One of the two people in a Team, each in their own Room.
+A Person's role in one Team, holding one Room in an attempt.
 _Avoid_: User, client, participant
 
 **Team**:
-Exactly two Players attempting the game together.
+Exactly two Players attempting the game together; the same two Persons are the same Team whichever Rooms they take.
 _Avoid_: Crew, pair, party, group
 
 **Room**:
