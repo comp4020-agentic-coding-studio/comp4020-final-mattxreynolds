@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE – world form (throwaway)</title>
+<!--
+  PROTOTYPE · THROWAWAY · never merged.
+  Question (wayfinder ticket "Does the world take 3D form, and for which Player?"):
+  three variants of the separated-rooms game, switchable via ?variant=A|B|C and the floating bottom bar.
+    A = both Players in 3D   B = hybrid (one Player in 3D, the other at a 2D console)   C = flat 2D for both
+  The puzzle logic and the room data are shared; only the renderer per Player changes.
+  three.js 0.170 loads from jsdelivr, so the 3D variants need a network connection.
+-->
+<style>
+  :root { --ink:#1c1917; --mute:#78716c; --line:#e7e5e4; --bg:#fafaf9; --card:#fff; --accent:#c2410c; --ok:#15803d; --bad:#b91c1c; --dark:#16130f; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; color:var(--ink); background:var(--bg); padding-bottom:80px; }
+  header { padding:16px 24px 4px; max-width:1800px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:20px; }
+  .banner { display:inline-block; background:var(--accent); color:#fff; font-size:11px; letter-spacing:.08em; padding:2px 8px; border-radius:3px; margin-bottom:6px; }
+  .q { color:var(--mute); max-width:1100px; margin:0; font-size:14px; }
+  nav, .bar { max-width:1800px; margin:0 auto; padding:0 24px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  nav { margin-top:10px; border-bottom:1px solid var(--line); }
+  nav button { border:0; background:none; padding:9px 14px; font:inherit; cursor:pointer; color:var(--mute); border-bottom:3px solid transparent; }
+  nav button.on { color:var(--ink); border-color:var(--accent); font-weight:600; }
+  .bar { margin-top:10px; }
+  main { max-width:1800px; margin:0 auto; padding:12px 24px 40px; }
+  button.b { font:inherit; padding:6px 11px; border:1px solid var(--ink); background:var(--card); color:var(--ink); border-radius:6px; cursor:pointer; touch-action:manipulation; }
+  button.b:hover { background:#f5f5f4; }
+  button.b.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.b.big { padding:12px 16px; font-size:20px; min-width:52px; }
+  .lbl { color:var(--mute); font-size:13px; }
+
+  /* players + layouts */
+  .players { display:flex; gap:16px; align-items:flex-start; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; }
+  .panel h3 { margin:0; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; height:36px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .panel h3 small { color:var(--mute); font-weight:400; }
+  .players.side .panel { flex:1 1 0; height:min(640px, 72vh); min-width:0; }
+  .panel.phone { flex:0 0 390px; width:390px; height:844px; }
+  .panel.desk { flex:1 1 0; height:844px; min-width:0; }
+  .view { position:relative; flex:1; min-height:0; background:var(--dark); color:#e7e5e4; overflow:hidden; }
+  .view canvas { display:block; width:100%; height:100%; touch-action:none; cursor:grab; }
+  .view.flash::after { content:''; position:absolute; inset:0; background:rgba(220,38,38,.45); pointer-events:none; animation:fade .7s forwards; }
+  @keyframes fade { to { opacity:0; } }
+  .hud { position:absolute; left:8px; right:8px; top:8px; pointer-events:none; font-size:13px; }
+  .hud .hint { background:rgba(0,0,0,.55); color:#f5f5f4; padding:6px 9px; border-radius:6px; display:inline-block; max-width:100%; }
+  .hud .said { margin-top:6px; background:rgba(194,65,12,.85); color:#fff; padding:5px 9px; border-radius:6px; display:inline-block; max-width:100%; }
+  .nogl { padding:20px; color:#fecaca; }
+  .vpbar { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); display:flex; gap:6px; align-items:center; background:rgba(0,0,0,.6); padding:5px; border-radius:999px; }
+  .vpbar span { color:#fff; font-size:13px; min-width:110px; text-align:center; }
+  .vpbar button { font-size:18px; width:44px; height:44px; border-radius:50%; border:0; background:#f5f5f4; cursor:pointer; touch-action:manipulation; }
+  .tip3d { position:absolute; right:8px; bottom:8px; font-size:11px; color:#a8a29e; pointer-events:none; text-align:right; }
+
+  /* close-ups: shared by every renderer */
+  .closeup { position:absolute; left:50%; transform:translateX(-50%); bottom:8px; width:min(440px, calc(100% - 16px)); max-height:78%; overflow:auto; background:#fffdf8; color:var(--ink); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5); }
+  .closeup header, .card header { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); font-weight:600; max-width:none; margin:0; }
+  .closeup header button { border:0; background:none; font-size:20px; cursor:pointer; width:40px; height:36px; }
+  .cu { padding:10px 12px 12px; }
+  .cu .hint { color:var(--mute); font-size:13px; margin:2px 0 8px; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0; align-items:center; }
+  .glyphs { font-size:30px; letter-spacing:.3em; }
+  .grid { display:grid; gap:3px; }
+  .cell { aspect-ratio:1; display:grid; place-items:center; background:#f5f5f4; border-radius:4px; font-size:20px; position:relative; min-width:30px; }
+  .cell.off { background:#292524; } .cell.me { outline:3px solid var(--accent); }
+  .cell.trap { background:#fecaca; } .cell.exit { background:#bbf7d0; } .cell.start { background:#dbeafe; }
+  .tag { position:absolute; top:1px; left:3px; font-size:9px; color:var(--mute); }
+  .lamp { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:middle; }
+  .gbar { position:relative; height:20px; background:#f5f5f4; border-radius:4px; margin:3px 0 6px; }
+  .gbar .band { position:absolute; top:0; bottom:0; background:#bbf7d0; }
+  .gbar .fill { position:absolute; top:6px; bottom:6px; left:0; background:var(--ink); border-radius:3px; }
+  .stab { margin-top:8px; font-weight:600; }
+
+  /* C: flat plan renderer */
+  .view.flat { display:flex; flex-direction:column; }
+  .view.flat .hudwrap { padding:8px 8px 0; }
+  .view.flat .hud { position:static; }
+  .view.flat .cuwrap { order:9; }
+  .plan { padding:10px; flex:1; min-height:0; overflow:auto; }
+  .room { position:relative; width:100%; aspect-ratio:8/7; max-height:calc(100% - 4px); margin:0 auto; background:#3b3027; border:6px solid #6b5a48; border-radius:4px; }
+  .room.attic { background:#26231f; border-color:#555a63; }
+  .pobj { position:absolute; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#d6d3d1; color:var(--ink); border-radius:6px; font-size:20px; line-height:1; cursor:pointer; border:2px solid transparent; touch-action:manipulation; }
+  .pobj span { font-size:10px; margin-top:2px; }
+  .pobj.live { border-color:#fbbf24; box-shadow:0 0 12px #fbbf24; }
+  .pobj.far { opacity:.35; cursor:not-allowed; }
+  .pobj.decor { background:#78716c; cursor:default; opacity:.7; }
+  .ptile { position:absolute; display:grid; place-items:center; background:#0c0a09; border-radius:3px; font-size:18px; color:#fafaf9; }
+  .ptile.lit { background:#57534e; } .ptile.go { cursor:pointer; outline:2px dashed #fbbf24; }
+  .ptile.exit.lit { background:#166534; }
+  .token { position:absolute; font-size:22px; transform:translate(-50%,-60%); pointer-events:none; transition:left .3s, top .3s; }
+  .rope { position:absolute; height:3px; background:#d4a373; }
+
+  /* B: console renderer */
+  .console { padding:10px; flex:1; min-height:0; overflow:auto; background:#1c1917; }
+  .card { background:#fffdf8; color:var(--ink); border-radius:10px; margin-bottom:10px; }
+  .card.live { box-shadow:0 0 0 3px #fbbf24; }
+  .card.far { opacity:.5; }
+
+  /* referee + scorecard */
+  .ref { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px) { .ref { grid-template-columns:1fr; } }
+  .ref section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+  .ref h3 { margin:0 0 8px; font-size:14px; }
+  dl { margin:0; display:grid; grid-template-columns:max-content 1fr; gap:3px 14px; font-size:13px; }
+  dt { color:var(--mute); } dd { margin:0; font-family:ui-monospace, monospace; }
+  ol.log { margin:0; padding-left:20px; font-size:13px; color:var(--mute); }
+  table { border-collapse:collapse; width:100%; background:var(--card); }
+  th, td { border:1px solid var(--line); padding:8px 10px; vertical-align:top; text-align:left; font-size:13px; }
+  th { background:#f5f5f4; }
+  .good { color:var(--ok); font-weight:600; } .warn { color:var(--bad); font-weight:600; }
+
+  /* floating variant switcher (prototype chrome, not part of the design) */
+  #switcher { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:4px; background:#0f172a; color:#fff; padding:5px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.35); font-size:13px; }
+  #switcher button { border:0; background:#334155; color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:16px; }
+  #switcher span { padding:0 10px; white-space:nowrap; }
+
+  /* solo (pop-out) mode: one Player fills the window, for DevTools device emulation */
+  body.solo { padding:0; }
+  body.solo > header, body.solo nav, body.solo .bar, body.solo .ref, body.solo #switcher { display:none; }
+  body.solo main { padding:0; max-width:none; }
+  body.solo .panel { width:100vw !important; height:100vh !important; border:0; border-radius:0; flex:none !important; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+</head>
+<body>
+<header>
+  <div class="banner">PROTOTYPE · THROWAWAY · WIPE ME</div>
+  <h1>Does the world take 3D form, and for which Player?</h1>
+  <p class="q">The same separated-rooms attempt (a keypad code, a blind crossing of a dark floor, a real-time valve stage) drawn three ways. Flip variants with the bar at the bottom (or ← →). Play both Players. In 3D: <b>drag to look, tap to walk or use</b> (WASD on desktop), or switch to <b>viewpoints</b>. <b>Pop out</b> a Player to try it in its own window with DevTools' iPhone touch emulation; pop-outs share state through localStorage (key <code>PROTOTYPE-world-form-wipe-me</code>).</p>
+</header>
+<nav id="tabs"></nav>
+<div class="bar" id="bar"></div>
+<main id="main"></main>
+<div id="switcher"><button id="prev" title="Previous variant (←)">◀</button><span id="vlabel"></span><button id="next" title="Next variant (→)">▶</button></div>
+
+<script type="module">
+let THREE = null;
+try { THREE = await import('three'); } catch (e) { console.warn('three.js failed to load', e); }
+
+/* ============================================================
+   PURE LOGIC: no DOM. init(seed) + act(state, action) -> new state.
+   msgTo: 0 = both Players hear it, 1 or 2 = only that Player (secrecy).
+   ============================================================ */
+const rng = seed => { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; };
+const shuffle = (r, arr) => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const SYMBOLS = ['▲', '●', '■', '★', '◆', '✚'];
+const N = 5, START = [2, 4];
+
+function init(seed) {
+  const r = rng(seed);
+  const code = shuffle(r, SYMBOLS).slice(0, 3);
+  const glyph = Array.from({ length: N }, () => Array.from({ length: N }, () => SYMBOLS[Math.floor(r() * SYMBOLS.length)]));
+  const ex = Math.floor(r() * N);
+  let x = START[0], y = START[1]; const path = [[x, y]];
+  for (let row = START[1]; row >= 0; row--) {
+    const target = row === 0 ? ex : Math.floor(r() * N);
+    while (x !== target) { x += Math.sign(target - x); path.push([x, y]); }
+    if (row > 0) { y--; path.push([x, y]); }
+  }
+  const onPath = new Set(path.map(p => p.join()));
+  const free = []; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (!onPath.has(i + ',' + j)) free.push(i + ',' + j);
+  const pick = () => Math.floor(r() * 10);
+  return { seed, stage: 1, code, entered: [], glyph, exit: [ex, 0], traps: shuffle(r, free).slice(0, 8), walker: null, steps: 0,
+    valves: [pick(), pick(), pick()], trims: [0, 0, 0], wobble: [0, 0, 0], targets: [0, 0, 0].map(() => 2 + Math.floor(r() * 6)),
+    hold: 0, need: 5, ticks: 0, paused: false, strikes: 0, log: [],
+    msg: 'New attempt. Player 1 wakes in the Cellar, Player 2 in the Attic.', msgTo: 0 };
+}
+const gauges = s => s.valves.map((v, i) => v + s.trims[i] + s.wobble[i]);
+const inBand = s => gauges(s).every((g, i) => Math.abs(g - s.targets[i]) <= 1);
+const isTrap = (s, i, j) => s.traps.includes(i + ',' + j);
+
+function act(s0, a) {
+  const s = structuredClone(s0);
+  const say = (m, to = 0) => { s.msg = m; s.msgTo = to; return s; };
+  const no = m => say('(ignored) ' + m, a.p);
+  switch (a.t) {
+    case 'sym':
+      if (s.stage !== 1 || a.p !== 1) return no('The keypad only answers in stage 1.');
+      s.entered.push(a.v);
+      if (s.entered.length < 3) return say('Pressed ' + a.v + '.', 1);
+      if (s.entered.join() === s.code.join()) { s.stage = 2; s.entered = []; s.walker = { x: START[0], y: START[1] }; return say('Click. The Cellar cabinet swings open, and upstairs the rope across the rotten floor drops.'); }
+      s.entered = []; s.strikes++; return say('Buzz. Wrong code; the keypad resets. (+1 strike)');
+    case 'clear':
+      if (s.stage !== 1 || a.p !== 1) return no('Nothing to clear.');
+      s.entered = []; return say('Keypad cleared.', 1);
+    case 'stepdir': {
+      if (!s.walker) return no('You are not on the floor.');
+      const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[a.v];
+      return act(s0, { p: a.p, t: 'step', v: { x: s.walker.x + d[0], y: s.walker.y + d[1] } });
+    }
+    case 'step': {
+      if (s.stage !== 2 || a.p !== 2) return no('Only Player 2 walks the Attic floor, and only in stage 2.');
+      const { x, y } = a.v, w = s.walker;
+      if (x < 0 || y < 0 || x >= N || y >= N) return no('That way is a wall.');
+      if (Math.abs(x - w.x) + Math.abs(y - w.y) !== 1) return no('One step at a time, onto a tile beside you.');
+      s.steps++;
+      if (isTrap(s, x, y)) { s.walker = { x: START[0], y: START[1] }; s.strikes++; return say('Crack! The boards give way and Player 2 scrambles back to the start. (+1 strike)'); }
+      s.walker = { x, y };
+      if (x === s.exit[0] && y === s.exit[1]) { s.stage = 3; return say('Player 2 reaches the instrument wall. Down in the Cellar, the valves unseize. The pressure is climbing.'); }
+      return say('Stepped onto a ' + s.glyph[y][x] + '.', 2);
+    }
+    case 'valve':
+      if (s.stage !== 3 || a.p !== 1) return no('The valves only turn in stage 3.');
+      s.valves[a.v.i] = clamp(s.valves[a.v.i] + a.v.d, 0, 9); return say('Turned valve ' + (a.v.i + 1) + '.', 1);
+    case 'trim':
+      if (s.stage !== 3 || a.p !== 2) return no('The trims only work in stage 3.');
+      s.trims[a.v.i] = clamp(s.trims[a.v.i] + a.v.d, -2, 2); return say('Trimmed gauge ' + (a.v.i + 1) + '.', 2);
+    case 'tick': {
+      if (s.stage !== 3 || s.paused) return s;
+      s.ticks++;
+      if (s.ticks % 4 === 0) { const r = rng(s.seed * 1000 + s.ticks), i = Math.floor(r() * 3); s.wobble[i] = clamp(s.wobble[i] + (r() < .5 ? -1 : 1), -2, 2); say('Gauge ' + (i + 1) + ' drifts.', 2); }
+      s.hold = inBand(s) ? s.hold + 1 : 0;
+      if (s.hold >= s.need) { s.stage = 4; say('Stable for ' + s.need + ' seconds. The Cellar door unbolts. Escaped!'); }
+      return s;
+    }
+    case 'pause': s.paused = !s.paused; return say(s.paused ? 'Clock paused (prototype only).' : 'Clock running.');
+  }
+  return no('Unknown action.');
+}
+
+/* ============================================================
+   ROOM DATA: one description per Player's room, read by every renderer.
+   Units are metres; x runs west→east, z runs north→south, the player looks north at yaw 0.
+   ============================================================ */
+const ROOMS = {
+  1: { name: 'the Cellar', w: 8, d: 7, h: 2.6, floor: 0x4a4038, wall: 0x7a6a58, ceil: 0x2a2420, lamp: 0xffcf8a,
+    start: { x: 0, z: 2.4, yaw: 0 },
+    objects: [
+      { id: 'keypad', label: 'Keypad', icon: '🔢', x: -1.5, y: 1.4, z: -3.45, sx: 0.5, sy: 0.7, sz: 0.1, colour: 0x9ca3af, ap: { x: -1.5, z: -2.2, yaw: 0 } },
+      { id: 'door', label: 'Door', icon: '🚪', x: 1.6, y: 1.05, z: -3.45, sx: 1.0, sy: 2.1, sz: 0.1, colour: 0x5b3a1e, ap: { x: 1.6, z: -2.0, yaw: 0 } },
+      { id: 'cabinet', label: 'Cabinet', icon: '🗄️', x: 3.55, y: 0.9, z: 0, sx: 0.8, sy: 1.8, sz: 1.2, colour: 0x8b6b43, ap: { x: 2.1, z: 0, yaw: -Math.PI / 2 } },
+      { id: 'valves', label: 'Valves', icon: '⚙️', x: -3.85, y: 1.2, z: 0, sx: 0.2, sy: 1.0, sz: 2.0, colour: 0x4b5563, ap: { x: -2.3, z: 0, yaw: Math.PI / 2 }, wheels: true },
+      { id: 'crates', label: 'Crates', icon: '📦', x: -3.2, y: 0.4, z: 2.8, sx: 1.0, sy: 0.8, sz: 0.9, colour: 0x92400e, decor: true },
+    ] },
+  2: { name: 'the Attic', w: 8, d: 7, h: 2.4, floor: 0x2b2622, wall: 0x6b6f7a, ceil: 0x1f2023, lamp: 0xbfd4ff, tiles: true,
+    start: { x: 0, z: 3.0, yaw: 0 },
+    objects: [
+      { id: 'mural', label: 'Mural', icon: '🖼️', x: 3.95, y: 1.4, z: 2.6, sx: 0.06, sy: 0.9, sz: 1.6, colour: 0xe7d8b5, ap: { x: 2.6, z: 2.6, yaw: -Math.PI / 2 }, zone: 'south', mural: true },
+      { id: 'rope', label: 'Rope', icon: '🪢', x: 0, y: 0.95, z: 2.1, sx: 0.9, sy: 0.25, sz: 0.04, colour: 0xfef3c7, ap: { x: 0, z: 3.0, yaw: 0 }, zone: 'south', rope: true },
+      { id: 'gauges', label: 'Instrument wall', icon: '📟', x: 0, y: 1.4, z: -3.45, sx: 2.6, sy: 1.0, sz: 0.1, colour: 0x374151, ap: s => ({ x: s.exit[0] - 2, z: -2.5, yaw: 0 }), zone: 'north' },
+      { id: 'boxes', label: 'Boxes', icon: '📦', x: -3.2, y: 0.35, z: 2.9, sx: 1.0, sy: 0.7, sz: 0.8, colour: 0x57534e, decor: true },
+    ] },
+};
+const tileXZ = (i, j) => ({ x: i - 2, z: -2.5 + j });
+const approach = (o, s) => typeof o.ap === 'function' ? o.ap(s) : o.ap;
+// can this Player get to the object right now? (the Attic floor splits the Attic in two)
+const reachable = (p, o, s) => p === 1 || (o.zone === 'south' ? s.stage === 1 : s.stage >= 3);
+const LIVE = { 1: { keypad: s => s.stage === 1, cabinet: s => s.stage >= 2 && s.stage < 4, valves: s => s.stage === 3, door: s => s.stage === 4 },
+               2: { mural: s => s.stage === 1, rope: s => s.stage === 2, gauges: s => s.stage === 3 } };
+const live = (p, id, s) => !!LIVE[p][id]?.(s);
+const HINT = {
+  1: ['', 'A keypad by the door. A locked cabinet. Valve wheels rusted solid.', 'The cabinet is open: a plan of some floor that isn\'t this one.', 'The valves turn now, but there are no gauges down here.', 'The door is open. Escaped!'],
+  2: ['', 'A faded mural. A rope across a dark, rotten floor.', 'You\'re on the dark floor. Only the tiles beside you are lit. Tap one to step.', 'The instrument wall: keep every gauge in its band.', 'Something below unbolts. Escaped!'],
+};
+
+/* ============================================================
+   CLOSE-UPS: each puzzle's interactive face, shared by all three renderers.
+   Every one reads only what its Player may see.
+   ============================================================ */
+const btn = (p, t, v, label, cls = '') => `<button class="b ${cls}" data-p="${p}" data-t="${t}" data-v='${JSON.stringify(v ?? null)}'>${label}</button>`;
+const stability = s => `<div class="stab">Stability: ${s.hold}/${s.need} s ${s.stage === 4 ? '<span class="good">LOCKED</span>' : ''}</div>`;
+function floorPlan(s) {
+  const cells = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const trap = isTrap(s, i, j), ex = i === s.exit[0] && j === s.exit[1], st = i === START[0] && j === START[1];
+    cells.push(`<div class="cell ${trap ? 'trap' : ex ? 'exit' : st ? 'start' : ''}">${trap ? '☠' : ''}${s.glyph[j][i]}${ex ? '<span class="tag">EXIT</span>' : st ? '<span class="tag">START</span>' : ''}</div>`);
+  }
+  return `<div class="grid" style="grid-template-columns:repeat(${N},1fr);max-width:300px">${cells.join('')}</div>`;
+}
+function walkerCard(s) {
+  const c = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = s.walker.x + dx, y = s.walker.y + dy, out = x < 0 || y < 0 || x >= N || y >= N;
+    c.push(`<div class="cell ${out ? 'off' : ''} ${!dx && !dy ? 'me' : ''}">${out ? '' : s.glyph[y][x]}</div>`);
+  }
+  return `<div class="grid" style="grid-template-columns:repeat(3,1fr);max-width:180px">${c.join('')}</div>
+    <div class="row" style="max-width:180px;justify-content:center">${btn(2, 'stepdir', 'up', '↑', 'big')}</div>
+    <div class="row" style="max-width:180px;justify-content:center">${btn(2, 'stepdir', 'left', '←', 'big')}${btn(2, 'stepdir', 'down', '↓', 'big')}${btn(2, 'stepdir', 'right', '→', 'big')}</div>`;
+}
+const CLOSEUPS = {
+  1: {
+    keypad: s => s.stage === 1
+      ? `<p class="hint">A plaque: "Three symbols, in order."</p><div class="glyphs">${s.entered.join(' ') || '·&nbsp;·&nbsp;·'}</div>
+         <div class="row">${SYMBOLS.map(g => btn(1, 'sym', g, g, 'big')).join('')}</div><div class="row">${btn(1, 'clear', null, 'Clear')}</div>`
+      : '<p class="hint">Dark now. It did its job.</p>',
+    cabinet: s => s.stage === 1 ? '<p class="hint">Locked. A brass plate: "Opened from the keypad."</p>'
+      : `<p class="hint">Pinned inside: a plan of a rotten floor. ☠ marks the boards that won't hold. Someone upstairs could use this.</p>${floorPlan(s)}`,
+    valves: s => s.stage < 3 ? '<p class="hint">Three valve wheels, rusted solid.</p>'
+      : `<p class="hint">Three valves. No gauges, only a lamp.</p>${s.valves.map((v, i) => `<div class="row"><b>Valve ${i + 1}</b>${btn(1, 'valve', { i, d: -1 }, '−', 'big')}<span style="font-size:20px;min-width:22px;text-align:center">${v}</span>${btn(1, 'valve', { i, d: 1 }, '+', 'big')}</div>`).join('')}
+         <p>Lamp: <span class="lamp" style="background:${inBand(s) ? '#16a34a' : '#dc2626'}"></span> ${inBand(s) ? 'all fine' : 'something is out of range'}</p>${stability(s)}`,
+    door: s => s.stage === 4 ? '<p class="good">The door swings open. Escaped!</p>' : '<p class="hint">Bolted from the other side.</p>',
+  },
+  2: {
+    mural: s => `<p class="hint">A faded mural: three symbols in a row.</p><div class="glyphs" style="font-size:40px">${s.code.join(' ')}</div>`,
+    rope: s => s.stage === 1 ? '<p class="hint">A rope across a dark, rotten floor. A sign: "DO NOT CROSS." Something has to drop it.</p>'
+      : s.stage === 2 ? `<p class="hint">The rope has dropped. Step carefully: only the tiles beside you are lit.</p>${walkerCard(s)}` : '<p class="hint">You made it across.</p>',
+    gauges: s => s.stage < 3 ? '<p class="hint">An instrument wall across the floor, too far to read.</p>'
+      : `<p class="hint">Keep every gauge in its green band. The valves are somewhere else.</p>${gauges(s).map((g, i) => `<div><b>Gauge ${i + 1}</b> <span class="lbl">reads ${g}, target ${s.targets[i]}±1</span>
+         <div class="gbar"><div class="band" style="left:${(s.targets[i] - 1) / 13 * 100}%;width:${3 / 13 * 100}%"></div><div class="fill" style="width:${clamp(g, 0, 13) / 13 * 100}%"></div></div>
+         <div class="row" style="margin-top:-4px">${btn(2, 'trim', { i, d: -1 }, '−trim')}${btn(2, 'trim', { i, d: 1 }, '+trim')}<span class="lbl">trim ${s.trims[i]}</span></div></div>`).join('')}${stability(s)}`,
+  },
+};
+const hud = (p, s) => `<div class="hud"><div class="hint">${HINT[p][s.stage]}</div>${s.msgTo === 0 || s.msgTo === p ? `<br><div class="said">${s.msg}</div>` : ''}</div>`;
+
+/* ============================================================
+   RENDERER 1 · 3D (three.js greybox)
+   Free look: drag to look, tap the floor to walk, tap a thing to walk up and use it, WASD on desktop.
+   Viewpoints: fixed spots, ◀ ▶ to move between them, drag to look around.
+   ============================================================ */
+const texCache = {};
+function textTexture(key, w, h, draw) {
+  if (texCache[key]) return texCache[key];
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return (texCache[key] = t);
+}
+const glyphTex = (g, bg) => textTexture('g' + g + bg, 128, 128, (x, w, h) => { x.fillStyle = bg; x.fillRect(0, 0, w, h); x.fillStyle = '#fafaf9'; x.font = '84px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(g, w / 2, h / 2 + 4); });
+const labelTex = t => textTexture('l' + t, 256, 64, (x, w, h) => { x.fillStyle = 'rgba(0,0,0,.55)'; x.beginPath(); x.roundRect(0, 8, w, 48, 24); x.fill(); x.fillStyle = '#fff'; x.font = '600 30px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, w / 2, h / 2); });
+
+class View3D {
+  constructor(host, p, controls, ctx) {
+    Object.assign(this, { host, p, controls, ctx, R: ROOMS[p], down: null, keys: new Set(), pending: null, prev: null });
+    if (!THREE) { host.insertAdjacentHTML('afterbegin', '<div class="nogl">three.js did not load (offline?). The 3D renderer needs jsdelivr.</div>'); this.dead = true; return; }
+    try { this.renderer = new THREE.WebGLRenderer({ antialias: true }); }
+    catch (e) { host.insertAdjacentHTML('afterbegin', '<div class="nogl">WebGL is unavailable on this machine. A real build would say so here.</div>'); this.dead = true; return; }
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    host.prepend(this.renderer.domElement);
+    const R = this.R, st = R.start;
+    this.pos = { x: st.x, z: st.z }; this.target = { ...this.pos }; this.yaw = st.yaw; this.tYaw = null; this.pitch = this.R.tiles ? -0.35 : -0.12; this.vp = 0;
+    this.scene = new THREE.Scene(); this.scene.background = new THREE.Color(0x0b0a09);
+    this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 40); this.camera.rotation.order = 'YXZ';
+    this.scene.add(this.camera);
+    this.buildRoom();
+    const el = this.renderer.domElement;
+    el.addEventListener('pointerdown', e => { this.down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove', e => {
+      const d = this.down; if (!d) return;
+      const dx = e.clientX - d.lx, dy = e.clientY - d.ly; d.lx = e.clientX; d.ly = e.clientY;
+      if (!d.drag && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) d.drag = true;
+      if (d.drag) { this.yaw += dx * 0.006; this.pitch = clamp(this.pitch + dy * 0.006, -1.2, 1.0); this.tYaw = null; }
+    });
+    el.addEventListener('pointerup', e => { const d = this.down; this.down = null; if (d && !d.drag) this.tap(e); });
+    el.addEventListener('pointerenter', () => (this.hover = true)); el.addEventListener('pointerleave', () => (this.hover = false));
+    this.onKey = e => { if (!this.hover || this.controls !== 'free') return; const k = e.key.toLowerCase(); if (!'wasd'.includes(k) || k.length !== 1) return; e.type === 'keydown' ? this.keys.add(k) : this.keys.delete(k); };
+    addEventListener('keydown', this.onKey); addEventListener('keyup', this.onKey);
+    if (controls === 'vp') {
+      host.insertAdjacentHTML('beforeend', '<div class="vpbar"><button data-vpstep="-1">◀</button><span></span><button data-vpstep="1">▶</button></div>');
+      this.vpbar = host.querySelector('.vpbar');
+      this.vpbar.addEventListener('click', e => { const b = e.target.closest('[data-vpstep]'); if (b) this.gotoVp(this.vp + +b.dataset.vpstep); });
+    } else host.insertAdjacentHTML('beforeend', '<div class="tip3d">drag to look · tap to walk/use<br>WASD on desktop</div>');
+    this.ro = new ResizeObserver(() => { const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.fov = w < h ? Math.min(105, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) / (w / h)) * 180 / Math.PI) : 70; this.camera.updateProjectionMatrix(); });
+    this.ro.observe(host);
+    let last = performance.now();
+    const loop = t => { this.raf = requestAnimationFrame(loop); const dt = Math.min(0.05, (t - last) / 1000); last = t; this.frame(dt, t / 1000); };
+    this.raf = requestAnimationFrame(loop);
+  }
+  buildRoom() {
+    const R = this.R, S = this.scene, lam = c => new THREE.MeshLambertMaterial({ color: c });
+    this.pickables = [];
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), lam(R.floor)); floor.rotation.x = -Math.PI / 2; floor.userData.pick = { floor: true };
+    S.add(floor); this.pickables.push(floor);
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), lam(R.ceil)); ceil.rotation.x = Math.PI / 2; ceil.position.y = R.h; S.add(ceil);
+    const wall = (w, x, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, R.h), lam(R.wall)); m.position.set(x, R.h / 2, z); m.rotation.y = ry; S.add(m); };
+    wall(R.w, 0, -R.d / 2, 0); wall(R.w, 0, R.d / 2, Math.PI); wall(R.d, -R.w / 2, 0, Math.PI / 2); wall(R.d, R.w / 2, 0, -Math.PI / 2);
+    this.meshes = {};
+    for (const o of R.objects) {
+      const mat = o.mural ? new THREE.MeshLambertMaterial({ map: null, color: 0xffffff }) : new THREE.MeshLambertMaterial({ color: o.colour });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(o.sx, o.sy, o.sz), mat); m.position.set(o.x, o.y, o.z);
+      if (o.wheels) for (let k = -1; k <= 1; k++) { const wh = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.05, 8, 20), lam(0xb91c1c)); wh.position.set(0.15, 0, k * 0.6); wh.rotation.y = Math.PI / 2; m.add(wh); }
+      if (o.rope) { const rp = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 6, 6), lam(0xd4a373)); rp.rotation.z = Math.PI / 2; rp.position.y = 0.2; m.add(rp); this.ropeLine = rp; }
+      S.add(m);
+      if (!o.decor) {
+        m.userData.pick = { obj: o.id }; this.pickables.push(m); this.meshes[o.id] = m;
+        if (o.rope) { m.material.map = labelTex('DO NOT CROSS'); m.material.color.set(0xffffff); continue; }
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(o.label), transparent: true, sizeAttenuation: false })); sp.scale.set(0.16, 0.04, 1);
+        sp.position.set(o.x, o.y + o.sy / 2 + 0.2, o.z); if (o.x > 3) sp.position.x -= 0.3; if (o.x < -3) sp.position.x += 0.3; if (o.z < -3) sp.position.z += 0.3; S.add(sp);
+      }
+    }
+    this.tiles = [];
+    if (R.tiles) {
+      this.hidden = lam(0x0a0908);
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const t = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.92), this.hidden); const p = tileXZ(i, j);
+        t.rotation.x = -Math.PI / 2; t.position.set(p.x, 0.02, p.z); t.userData.pick = { tile: [i, j] };
+        S.add(t); this.pickables.push(t); this.tiles.push(t);
+      }
+    }
+    S.add(new THREE.AmbientLight(0xffffff, R.tiles ? 0.35 : 0.55));
+    const lamp = new THREE.PointLight(R.lamp, R.tiles ? 6 : 14, 0, 1.6); lamp.position.set(0, R.h - 0.2, R.tiles ? 2.6 : 0.5); S.add(lamp);
+    if (R.tiles) { const far = new THREE.PointLight(R.lamp, 4, 0, 1.6); far.position.set(0, R.h - 0.2, -3); S.add(far); }
+    this.torch = new THREE.PointLight(0xfff1c8, 0, 3.5, 1.5); this.camera.add(this.torch);
+  }
+  update(s) {
+    if (this.dead) return;
+    const prev = this.prev; this.prev = s; this.s = s;
+    for (const [id, m] of Object.entries(this.meshes)) m.userData.live = live(this.p, id, s);
+    if (this.meshes.mural) { const mm = this.meshes.mural.material; mm.map = textTextureMural(s.code); mm.needsUpdate = true; }
+    if (this.meshes.cabinet) this.meshes.cabinet.material.color.set(s.stage >= 2 ? 0xc29a62 : 0x8b6b43);
+    if (this.meshes.door) this.meshes.door.material.color.set(s.stage === 4 ? 0x16a34a : 0x5b3a1e);
+    if (this.ropeLine) { this.ropeLine.visible = s.stage === 1; this.meshes.rope.visible = s.stage === 1; }
+    if (this.R.tiles) {
+      this.tiles.forEach((t, k) => {
+        const i = k % N, j = Math.floor(k / N), w = s.walker;
+        const lit = s.stage === 2 && Math.max(Math.abs(i - w.x), Math.abs(j - w.y)) <= 1;
+        const ex = i === s.exit[0] && j === s.exit[1];
+        const key = s.glyph[j][i] + ex; this.mats ??= {}; t.material = lit ? (this.mats[key] ??= new THREE.MeshLambertMaterial({ map: glyphTex(s.glyph[j][i], ex ? '#166534' : '#57534e') })) : this.hidden;
+      });
+      this.torch.intensity = s.stage === 2 ? 3 : 0;
+      const stageChanged = !prev || prev.stage !== s.stage || prev.seed !== s.seed;
+      if (s.stage === 2) {
+        const t = tileXZ(s.walker.x, s.walker.y); this.target = { ...t };
+        if (stageChanged) { this.pitch = -0.55; this.tYaw = 0; }
+      } else if (stageChanged) {
+        const sp = s.stage === 1 ? this.R.start : { ...tileXZ(s.exit[0], s.exit[1]), yaw: 0 };
+        this.target = { x: sp.x, z: sp.z }; this.tYaw = sp.yaw; this.pitch = -0.1;
+      }
+    }
+    if (this.vpbar) { const v = this.viewpoints(); this.vpbar.style.display = v.length ? '' : 'none'; if (v.length) { this.vp = clamp(this.vp, 0, v.length - 1); this.vpbar.querySelector('span').textContent = v[this.vp].name; } }
+  }
+  viewpoints() {
+    const s = this.s; if (!s || (this.R.tiles && s.stage === 2)) return [];
+    const list = this.R.tiles && s.stage >= 3 ? [] : [{ name: 'Look around', ...this.R.start }];
+    for (const o of this.R.objects) if (!o.decor && reachable(this.p, o, s)) list.push({ name: o.label, id: o.id, ...approach(o, s) });
+    return list;
+  }
+  gotoVp(k) { const v = this.viewpoints(); if (!v.length) return; this.vp = (k + v.length) % v.length; const p = v[this.vp]; this.target = { x: p.x, z: p.z }; this.tYaw = p.yaw; this.pitch = -0.1; this.update(this.s); }
+  zone(x, z) {
+    const R = this.R, s = this.s; x = clamp(x, -R.w / 2 + 0.4, R.w / 2 - 0.4); z = clamp(z, -R.d / 2 + 0.4, R.d / 2 - 0.4);
+    if (R.tiles) { if (s.stage === 1) z = Math.max(z, 2.3); else if (s.stage >= 3) z = Math.min(z, -2.1); }
+    return { x, z };
+  }
+  canWalk() { return this.controls === 'free' && !(this.R.tiles && this.s.stage === 2); }
+  tap(e) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, this.camera);
+    for (const h of ray.intersectObjects(this.pickables, true)) {
+      let o = h.object; while (o && !o.userData.pick) o = o.parent; if (!o || !o.visible) continue;
+      const k = o.userData.pick;
+      if (k.obj) return this.use(k.obj);
+      if (k.tile && this.s.stage === 2 && this.p === 2) return this.ctx.dispatch({ p: 2, t: 'step', v: { x: k.tile[0], y: k.tile[1] } });
+      if (this.canWalk()) { this.target = this.zone(h.point.x, h.point.z); this.pending = null; }
+      return;
+    }
+  }
+  use(id) {
+    const o = this.R.objects.find(o => o.id === id);
+    if (!reachable(this.p, o, this.s)) { this.ctx.open(this.p, id); return; }
+    const a = approach(o, this.s);
+    if (this.controls === 'vp') { const v = this.viewpoints(), k = v.findIndex(x => x.id === id); if (k >= 0) this.gotoVp(k); this.ctx.open(this.p, id); }
+    else if (this.canWalk()) { this.target = this.zone(a.x, a.z); this.tYaw = a.yaw; this.pending = id; }
+    else this.ctx.open(this.p, id);
+  }
+  frame(dt, t) {
+    if (!this.s) return;
+    if (this.keys.size && this.canWalk()) {
+      const f = (this.keys.has('w') ? 1 : 0) - (this.keys.has('s') ? 1 : 0), sd = (this.keys.has('d') ? 1 : 0) - (this.keys.has('a') ? 1 : 0);
+      const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), v = 2.2 * dt;
+      this.target = this.zone(this.pos.x + (-sy * f + cy * sd) * v * 4, this.pos.z + (-cy * f - sy * sd) * v * 4); this.pending = null;
+    }
+    const k = 1 - Math.exp(-dt * 6);
+    this.pos.x += (this.target.x - this.pos.x) * k; this.pos.z += (this.target.z - this.pos.z) * k;
+    if (this.tYaw != null) { let d = this.tYaw - this.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); this.yaw += d * k; if (Math.abs(d) < 0.01) this.tYaw = null; }
+    if (this.pending && Math.hypot(this.target.x - this.pos.x, this.target.z - this.pos.z) < 0.15) { this.ctx.open(this.p, this.pending); this.pending = null; }
+    this.camera.position.set(this.pos.x, 1.6, this.pos.z); this.camera.rotation.set(this.pitch, this.yaw, 0);
+    const glow = 0.25 + 0.25 * Math.sin(t * 4);
+    for (const m of Object.values(this.meshes)) m.material.emissive?.setRGB(m.userData.live ? glow : 0, m.userData.live ? glow * 0.7 : 0, 0);
+    this.renderer.render(this.scene, this.camera);
+  }
+  destroy() {
+    if (this.dead) return;
+    cancelAnimationFrame(this.raf); this.ro.disconnect();
+    removeEventListener('keydown', this.onKey); removeEventListener('keyup', this.onKey);
+    this.renderer.dispose(); this.renderer.forceContextLoss();
+  }
+}
+const textTextureMural = code => textTexture('m' + code.join(''), 256, 160, (x, w, h) => {
+  x.fillStyle = '#e7d8b5'; x.fillRect(0, 0, w, h); x.fillStyle = '#7c2d12'; x.font = '64px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  code.forEach((g, i) => x.fillText(g, w * (i + 0.5) / 3, h / 2));
+});
+
+/* ============================================================
+   RENDERER 2 · flat plan (top-down, tap a thing to walk to it and open it)
+   ============================================================ */
+class ViewPlan {
+  constructor(host, p, controls, ctx) { Object.assign(this, { host, p, ctx, at: null }); this.el = document.createElement('div'); this.el.className = 'plan'; host.classList.add('flat'); host.append(this.el);
+    this.el.addEventListener('click', e => {
+      const o = e.target.closest('[data-obj]'); if (o && !o.classList.contains('far')) { this.at = o.dataset.obj; this.ctx.open(p, this.at); this.update(this.s); return; }
+      const t = e.target.closest('[data-tile]'); if (t) { const [x, y] = t.dataset.tile.split(',').map(Number); ctx.dispatch({ p: 2, t: 'step', v: { x, y } }); }
+    }); }
+  update(s) {
+    this.s = s; const R = ROOMS[this.p], L = x => (x + R.w / 2) / R.w * 100, T = z => (z + R.d / 2) / R.d * 100;
+    const parts = [];
+    if (R.tiles) {
+      const w = s.walker;
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const c = tileXZ(i, j), lit = s.stage === 2 && Math.max(Math.abs(i - w.x), Math.abs(j - w.y)) <= 1;
+        const go = s.stage === 2 && Math.abs(i - w.x) + Math.abs(j - w.y) === 1, ex = i === s.exit[0] && j === s.exit[1];
+        parts.push(`<div class="ptile ${lit ? 'lit' : ''} ${go ? 'go' : ''} ${ex ? 'exit' : ''}" ${go ? `data-tile="${i},${j}"` : ''} style="left:${L(c.x - .46)}%;top:${T(c.z - .46)}%;width:${.92 / R.w * 100}%;height:${.92 / R.d * 100}%">${lit ? s.glyph[j][i] : ''}</div>`);
+      }
+      if (s.stage === 1) parts.push(`<div class="rope" style="left:${L(-2.6)}%;width:${5.2 / R.w * 100}%;top:${T(2.1)}%"></div>`);
+    }
+    for (const o of R.objects) {
+      if (o.rope && s.stage !== 1) continue;
+      const wv = Math.max(o.sx / R.w * 100, 15), hv = Math.max(o.sz / R.d * 100, 9);
+      const l = clamp(L(o.x) - wv / 2, 0, 100 - wv), t = clamp(T(o.z) - hv / 2, 0, 100 - hv);
+      const cls = o.decor ? 'decor' : `${live(this.p, o.id, s) ? 'live' : ''} ${reachable(this.p, o, s) ? '' : 'far'}`;
+      parts.push(`<div class="pobj ${cls}" ${o.decor ? '' : `data-obj="${o.id}"`} style="left:${l}%;top:${t}%;width:${wv}%;height:${hv}%">${o.icon}<span>${o.label}</span></div>`);
+    }
+    let me;
+    if (R.tiles) me = s.stage === 2 ? tileXZ(s.walker.x, s.walker.y) : s.stage >= 3 ? tileXZ(s.exit[0], s.exit[1]) : R.start;
+    else { const o = R.objects.find(o => o.id === this.at); me = o ? approach(o, s) : R.start; }
+    parts.push(`<div class="token" style="left:${L(me.x)}%;top:${T(me.z)}%">🧍</div>`);
+    this.el.innerHTML = `<div class="room ${R.tiles ? 'attic' : ''}">${parts.join('')}</div>`;
+  }
+  destroy() {}
+}
+
+/* ============================================================
+   RENDERER 3 · console (no space at all: the room as a stack of cards)
+   ============================================================ */
+class ViewConsole {
+  constructor(host, p, controls, ctx) { Object.assign(this, { host, p }); this.el = document.createElement('div'); this.el.className = 'console'; host.classList.add('flat'); host.append(this.el); }
+  update(s) {
+    const R = ROOMS[this.p];
+    const cards = R.objects.filter(o => !o.decor).sort((a, b) => live(this.p, b.id, s) - live(this.p, a.id, s))
+      .map(o => `<div class="card ${live(this.p, o.id, s) ? 'live' : ''} ${reachable(this.p, o, s) ? '' : 'far'}"><header>${o.icon} ${o.label}</header><div class="cu">${CLOSEUPS[this.p][o.id](s)}</div></div>`);
+    this.el.innerHTML = cards.join('');
+  }
+  destroy() {}
+}
+const RENDERERS = { '3d': View3D, plan: ViewPlan, console: ViewConsole };
+
+/* ============================================================
+   THROWAWAY PAGE SHELL: variants, layouts, pop-outs, shared state
+   ============================================================ */
+const KEY = 'PROTOTYPE-world-form-wipe-me', WIN = Math.random().toString(36).slice(2);
+const q = new URLSearchParams(location.search);
+const cfg = { variant: q.get('variant') || 'A', in3d: +(q.get('in3d') || 2), controls: q.get('controls') || 'free', layout: q.get('layout') || 'side', solo: +(q.get('solo') || 0), tab: 'play' };
+const VARIANTS = { A: 'Both Players in 3D', B: 'Hybrid: one in 3D, one at a 2D console', C: 'Flat 2D for both' };
+const LAYOUTS = { side: 'side by side', m2: 'marker: P1 desktop, P2 phone', m1: 'marker: P1 phone, P2 desktop', phones: 'two 390×844 phones' };
+const kindFor = p => cfg.variant === 'A' ? '3d' : cfg.variant === 'C' ? 'plan' : p === cfg.in3d ? '3d' : 'console';
+const KIND_NAME = { '3d': '3D', plan: 'flat plan', console: '2D console' };
+let state, views = {}, closeup = { 1: null, 2: null };
+
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY))?.s; } catch { return null; } };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ s: state, from: WIN })); } catch {} };
+state = load() || init(7); save();
+addEventListener('storage', e => { if (e.key === KEY && e.newValue) { const prev = state; state = JSON.parse(e.newValue).s; onState(prev); } });
+
+function dispatch(a) {
+  const prev = state; state = act(state, a);
+  if (a.t !== 'tick' || state.msg !== prev.msg) state.log = [...(state.log || []), (a.t === 'tick' ? 'clock' : 'Player ' + a.p) + ': ' + state.msg + (state.msgTo ? `  [only P${state.msgTo} sees this]` : '')].slice(-10);
+  save(); onState(prev);
+}
+const ctx = { dispatch, open: (p, id) => { closeup[p] = id; drawCloseups(); } };
+
+function setURL() { const u = new URLSearchParams({ variant: cfg.variant, in3d: cfg.in3d, controls: cfg.controls, layout: cfg.layout }); if (cfg.solo) u.set('solo', cfg.solo); try { history.replaceState(null, '', '?' + u); } catch {} }
+function panelClass(p) { const L = cfg.layout; return L === 'phones' || (L === 'm2' && p === 2) || (L === 'm1' && p === 1) ? 'phone' : L === 'side' ? '' : 'desk'; }
+
+function renderShell() {
+  document.body.classList.toggle('solo', !!cfg.solo);
+  document.getElementById('tabs').innerHTML = [['play', 'Play'], ['score', 'Scorecard']].map(([k, l]) => `<button class="${cfg.tab === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+  const any3d = [1, 2].some(p => kindFor(p) === '3d');
+  document.getElementById('bar').innerHTML = `
+    <button class="b" data-ui="new">New random attempt</button>
+    <button class="b" data-ui="layout">Layout: ${LAYOUTS[cfg.layout]}</button>
+    ${any3d ? `<button class="b" data-ui="controls">3D controls: ${cfg.controls === 'free' ? 'free look' : 'viewpoints'}</button>` : ''}
+    ${cfg.variant === 'B' ? `<button class="b" data-ui="swap">Swap: Player ${cfg.in3d} is in 3D</button>` : ''}
+    <button class="b" data-ui="pop1">Pop out P1</button><button class="b" data-ui="pop2">Pop out P2</button>
+    <button class="b" data-ui="pause">${state.paused ? 'Resume clock' : 'Pause clock'}</button>
+    <span class="lbl">seed ${state.seed} · stage ${state.stage}/4 · strikes ${state.strikes}</span>`;
+  document.getElementById('vlabel').textContent = cfg.variant + ' · ' + VARIANTS[cfg.variant];
+  setURL();
+}
+function renderMain() {
+  Object.values(views).forEach(v => v.destroy()); views = {};
+  const m = document.getElementById('main');
+  if (cfg.tab === 'score' && !cfg.solo) { m.innerHTML = SCORE; return; }
+  const ps = cfg.solo ? [cfg.solo] : [1, 2];
+  m.innerHTML = `<div class="players ${cfg.layout === 'side' ? 'side' : ''}">${ps.map(p => `<section class="panel ${panelClass(p)}"><h3>Player ${p} · ${ROOMS[p].name} <small>· ${KIND_NAME[kindFor(p)]}</small></h3><div class="view" id="view${p}"><div class="hudwrap"></div><div class="cuwrap"></div></div></section>`).join('')}</div>
+    ${cfg.solo ? '' : '<div class="ref"><section><h3>Referee view · everything the server knows</h3><dl id="refdl"></dl></section><section><h3>What just happened</h3><ol class="log" id="log"></ol></section></div>'}`;
+  for (const p of ps) { views[p] = new RENDERERS[kindFor(p)](document.getElementById('view' + p), p, cfg.controls, ctx); }
+  onState(null);
+}
+function drawCloseups() {
+  for (const p of Object.keys(views).map(Number)) {
+    const w = document.querySelector(`#view${p} .cuwrap`); if (!w) continue;
+    const id = kindFor(p) === 'console' ? null : closeup[p], o = id && ROOMS[p].objects.find(o => o.id === id);
+    w.innerHTML = o ? `<div class="closeup"><header>${o.icon} ${o.label}<button data-close="${p}">✕</button></header><div class="cu">${CLOSEUPS[p][id](state)}</div></div>` : '';
+  }
+}
+function onState(prev) {
+  if (prev && prev.seed !== state.seed) closeup = { 1: null, 2: null };
+  for (const [p, v] of Object.entries(views)) {
+    v.update(state);
+    const el = document.getElementById('view' + p);
+    el.querySelector('.hudwrap').innerHTML = hud(+p, state);
+    if (prev && state.strikes > prev.strikes) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  }
+  drawCloseups();
+  if (!cfg.solo && cfg.tab === 'play') {
+    const s = state, rows = [['Stage', s.stage + ' / 4'], ['Mural code (P2 sees)', s.code.join(' ')], ['Keypad entered (P1 sees)', s.entered.join(' ') || '—'],
+      ['Walker on tile (nobody sees the number)', s.walker ? `(${s.walker.x},${s.walker.y})` : '—'], ['Trapdoors (P1\'s plan shows them)', s.traps.length],
+      ['Valves (P1) / trims (P2)', s.valves.join(',') + ' / ' + s.trims.join(',')], ['Gauges (P2) / targets', gauges(s).join(',') + ' / ' + s.targets.join(',')],
+      ['Hidden drift', s.wobble.join(',')], ['Stable seconds', s.hold + '/' + s.need], ['Strikes', s.strikes]];
+    const dl = document.getElementById('refdl'); if (dl) dl.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+    const lg = document.getElementById('log'); if (lg) lg.innerHTML = (s.log || []).slice().reverse().map(l => `<li>${l}</li>`).join('');
+  }
+  if (!prev || prev.paused !== state.paused || prev.stage !== state.stage || prev.strikes !== state.strikes || prev.seed !== state.seed) renderShell();
+}
+
+const order = Object.keys(VARIANTS);
+const cycle = d => { cfg.variant = order[(order.indexOf(cfg.variant) + d + order.length) % order.length]; closeup = { 1: null, 2: null }; renderShell(); renderMain(); };
+document.getElementById('prev').onclick = () => cycle(-1);
+document.getElementById('next').onclick = () => cycle(1);
+addEventListener('keydown', e => { if (e.target.closest('input,textarea,[contenteditable]')) return; if (e.key === 'ArrowLeft') cycle(-1); if (e.key === 'ArrowRight') cycle(1); });
+document.addEventListener('click', e => {
+  const tab = e.target.closest('[data-tab]'); if (tab) { cfg.tab = tab.dataset.tab; renderShell(); renderMain(); return; }
+  const c = e.target.closest('[data-close]'); if (c) { closeup[c.dataset.close] = null; drawCloseups(); return; }
+  const a = e.target.closest('[data-t]'); if (a) { dispatch({ p: +a.dataset.p, t: a.dataset.t, v: JSON.parse(a.dataset.v) }); return; }
+  const u = e.target.closest('[data-ui]'); if (!u) return;
+  const k = u.dataset.ui;
+  if (k === 'new') { const prev = state; state = init(Math.floor(Math.random() * 9000) + 1); save(); onState(prev); }
+  else if (k === 'layout') { const L = Object.keys(LAYOUTS); cfg.layout = L[(L.indexOf(cfg.layout) + 1) % L.length]; renderShell(); renderMain(); }
+  else if (k === 'controls') { cfg.controls = cfg.controls === 'free' ? 'vp' : 'free'; renderShell(); renderMain(); }
+  else if (k === 'swap') { cfg.in3d = 3 - cfg.in3d; renderShell(); renderMain(); }
+  else if (k === 'pause') dispatch({ p: 0, t: 'pause' });
+  else if (k.startsWith('pop')) { const p = +k.slice(3), u2 = new URLSearchParams({ variant: cfg.variant, in3d: cfg.in3d, controls: cfg.controls, solo: p }); open(location.pathname + '?' + u2, 'player' + p, 'width=420,height=900'); }
+});
+// one clock across every open window: whoever holds a fresh lease ticks
+setInterval(() => {
+  if (state.stage !== 3 || state.paused) return;
+  let lease = null; try { lease = JSON.parse(localStorage.getItem(KEY + '-clock')); } catch {}
+  if (lease && lease.id !== WIN && Date.now() - lease.at < 2500) return;
+  try { localStorage.setItem(KEY + '-clock', JSON.stringify({ id: WIN, at: Date.now() })); } catch {}
+  dispatch({ p: 0, t: 'tick' });
+}, 1000);
+
+const SCORE = `<p class="lbl" style="max-width:1000px">My notes, measured where I could and labelled <i>judgement</i> where I couldn't. They're claims to react to, not the verdict. Line counts are from this file; the 3D was checked in headless Chromium (SwiftShader) at 1600×1000 and 390×844 at DPR 3, not on a real GPU or by a human thumb.</p>
+<table>
+<tr><th></th><th>A · Both Players in 3D</th><th>B · Hybrid (one in 3D, one at a console)</th><th>C · Flat 2D for both</th></tr>
+<tr><th>What it costs to build</th><td class="warn">3D renderer ≈175 lines here, plus a greybox scene, walkable zones and viewpoints for <i>each</i> room. Two rooms to dress and tune.</td><td>Same ≈175-line 3D renderer, but only one room to dress. The console is ≈15 lines.</td><td class="good">Plan renderer ≈36 lines. No three.js, no WebGL failure path.</td></tr>
+<tr><th>Where the puzzles live</th><td colspan="3">In all three variants every puzzle is the <b>same 2D close-up</b> (≈48 lines shared). 3D changes how you reach a puzzle and how the room feels, not the puzzle itself, so a new puzzle type costs the same in every variant. Puzzle faces stay testable as plain HTML.</td></tr>
+<tr><th>390×844, one pointer</th><td>Drag-to-look plus tap-to-walk works with one pointer. <b>Portrait broke the default camera:</b> at a 70° vertical field of view the walker saw one tile ahead and none to the sides. Holding the horizontal view at 75° (about 105° vertical) fixed it. 3D objects are small taps at a distance, which is why everything opens a close-up.</td><td>Same as A for the 3D Player. The console is the most phone-native screen of the lot: one scrolling column.</td><td class="good">Easiest. The whole room fits at 390 wide with room for a close-up below.</td></tr>
+<tr><th>The blind navigator</th><td colspan="2" class="good">Torchlight on a dark floor makes the puzzle literal: you only see the tiles beside you, and you have to describe them. This is the one puzzle where 3D earns its keep. (Caveat: the dark tiles' outlines still show, so a careful Player could count rows. A build would hide them.)</td><td class="warn">Works, but the plan shows the room and where your token stands in it, so the Walker can say "I'm bottom-middle" and the puzzle shrinks. The console's 3×3 card (variant B, Attic at the console) hides position best of all.</td></tr>
+<tr><th>Lock-and-clue and split instrument</th><td colspan="3">No variant changes these: the keypad, mural, valves and gauges are close-ups everywhere. 3D adds only the walk to them, plus the mural being readable on the wall (its texture shows the code).</td></tr>
+<tr><th>Real-time and transport</th><td colspan="3" class="good">Separated rooms means <b>no Player ever sees the other's avatar</b>, so no position syncs at 10–20 Hz in any variant. Only puzzle actions cross the wire (the Walker's steps are tile events). The 3D research leaned towards WebSockets because of position sync, and that lean doesn't apply here: SSE plus POST holds.</td></tr>
+<tr><th>Checks in <code>spec/</code></th><td>Rules stay HTTP-checked. Add Playwright, a CI browser install, and a 3D smoke test per room.</td><td>As A, but one room.</td><td class="good">Fits the current vitest + jsdom setup. No browser in CI.</td></tr>
+<tr><th>The marker's two windows</th><td>Two WebGL contexts side by side, one of them at DPR 3 (capped to 2 here). Fill rate is the cost (research).</td><td>One WebGL context.</td><td>None.</td></tr>
+<tr><th>Feel <i>(judgement)</i></th><td>Strongest <i>We Were Here</i>: both Players have a place to be. But the Cellar's three puzzles are all close-ups, so its 3D is mostly scenery.</td><td>Closest to <i>Keep Talking</i>: an explorer and a reader. Which Player is in 3D matters. The Attic (the Walker) is the natural fit. With the Cellar in 3D you're exploring a room whose puzzles are reading. Risk: the console Player has no "place" and may feel like support.</td><td>Least world. Everything is one tap away, which suits a 15–30 min attempt and the showcase, but it's closer to a puzzle app than a place.</td></tr>
+</table>
+<h3 style="margin-top:18px">My read (not the decision)</h3>
+<ul class="lbl" style="max-width:1000px;color:var(--ink)">
+<li>If 3D goes in at all, <b>B with the Attic Player in 3D</b> gets most of the atmosphere for half the scene work, and puts 3D on the puzzle it actually improves.</li>
+<li><b>A</b> doubles the scene work for a Cellar whose puzzles are close-ups anyway.</li>
+<li><b>C</b> is the safe floor for five build days. Because the renderers sit over shared room data and shared close-ups, a game that ships C at C10 could grow B's 3D room before the final, so the choice is less one-way than it looks, <i>provided</i> the spec keeps puzzles as close-ups over room data.</li>
+<li>Open either way: free look or viewpoints for the 3D Player (both are in here; try them with a thumb in DevTools).</li>
+</ul>`;
+
+renderShell(); renderMain();
+window.__proto = { get state() { return state; }, dispatch, cfg, views };
+</script>
+</body>
+</html>
