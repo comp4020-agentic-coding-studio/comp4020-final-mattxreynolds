@@ -4,6 +4,18 @@ A two-player cooperative browser puzzle game set aboard a sinking steamship, in 
 
 ## People
 
+**Person**:
+Someone the game recognises across Voyages, either a Guest or an Account, who plays as a Player on one Deck per Voyage; the same two Persons are always the same Team, whichever Decks they take.
+_Avoid_: User, visitor, profile
+
+**Guest**:
+A Person recognised only by the browser they first played in, until they become an Account without losing their history.
+_Avoid_: Anonymous, temp user
+
+**Account**:
+A Person who signs in with credentials they chose and is recognised in any browser.
+_Avoid_: Login, profile, member
+
 **Player**:
 One of the two people in a Team, each on their own Deck and known only by it, never by a character name.
 _Avoid_: User, client, participant, character, Mate, Stoker
