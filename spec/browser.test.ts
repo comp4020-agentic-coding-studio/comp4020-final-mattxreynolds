@@ -144,3 +144,28 @@ it("refuses racing UI commands and ignores an HTTP response delayed behind newer
     expect(errors).toEqual([]);
   } finally { await browser.close(); }
 }, 20_000);
+
+it("releases controls after a lost acknowledgement without automatically replaying the action", async () => {
+  const browser = await chromium.launch();
+  let deliver: (() => void) | undefined;
+  try {
+    const context = await browser.newContext(), page = await context.newPage();
+    await page.goto(url("/"));
+    await page.getByRole("button", { name: "Open a new room" }).click();
+    await page.waitForURL("**/room/*"); await live(page);
+    const code = page.url().split("/").pop()!;
+    const gate = new Promise<void>(resolve => { deliver = resolve; });
+    await page.route("**/actions?*", async route => {
+      const response = await route.fetch(); // server applies and streams, acknowledgement is lost
+      await gate; await route.fulfill({ response }).catch(() => {});
+    });
+    await page.getByRole("switch").first().click();
+    await expect.poll(async () => (await look(code, "operator")).revision).toBe(1);
+    await expect.poll(() => page.getByRole("switch").first().isEnabled(), { timeout: 7000 }).toBe(true);
+    expect(await page.getByRole("alert").innerText()).toContain("outcome uncertain");
+    expect((await look(code, "operator")).revision).toBe(1);
+    deliver!(); await page.unroute("**/actions?*");
+    await page.getByRole("switch").first().click();
+    await expect.poll(async () => (await look(code, "operator")).revision).toBe(2);
+  } finally { deliver?.(); await browser.close(); }
+}, 15_000);

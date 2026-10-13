@@ -57,10 +57,11 @@ export function useRoom(code: string, role: Role, me: Me | null) {
         // back a newer event (including a new mission or final result).
         await api<RoomView>(`/api/rooms/${code}/actions?role=${role}`, me, {
           method: "POST",
+          signal: AbortSignal.timeout(5000),
           body: JSON.stringify({ ...action, missionNo: view.missionNo, revision: view.revision }),
         });
       } catch (e) {
-        setError(e instanceof TypeError
+        setError(e instanceof TypeError || (e instanceof Error && ["TimeoutError", "AbortError"].includes(e.name))
           ? "Request outcome uncertain. Check the recovered device before acting again."
           : (e as Error).message);
       } finally {

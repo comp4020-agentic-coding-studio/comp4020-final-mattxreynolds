@@ -101,9 +101,18 @@ production server retained its old index. Restarting after build corrected
 the setup; the clean browser run passed. This operational lesson also went
 into CLAUDE.md.
 
+A final lost-acknowledgement probe then failed: the server had applied and
+streamed an action, but its hanging HTTP response left controls disabled.
+Bounding the wait to five seconds reports uncertainty and releases pending
+controls without replaying the command. Its browser check first failed, then
+passed after the correction; the harness now requires bounded waits.
+Independent specification review caught body-read timeouts being swallowed by
+the API helper. A real HTTP response with a stalled body reproduced it; the
+helper now preserves the abort and that regression check passes.
+
 ## Backpressure and limits
 
-The full `pnpm check` passed 43 checks, including the original game rules,
+The final `pnpm check` passed 45 checks, including the original game rules,
 2000 generated-device checks and privacy checks. New HTTP/SSE specs cover
 same-snapshot races, duplicate keypad input, old missions, filtered conflicts,
 room isolation, every listener, presence and live station logs. Browser tests

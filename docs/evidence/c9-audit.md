@@ -94,3 +94,32 @@ station log. The tests assert <1000 ms; timings describe this local run only.
 400–600 words, PROCESS within 900–1100, reflection within 150–300 with both
 standing prompts. Production deployment is intentionally left to the existing
 `main` merge workflow; these results do not claim the branch is deployed.
+
+## Final acknowledgement correction and independent review
+
+After the 43-check milestone, a held HTTP acknowledgement showed that pending
+controls never recovered. The browser probe failed after seven seconds despite
+revision 1 already being streamed. `AbortSignal.timeout(5000)` now releases the
+pending state and reports uncertainty; no automatic retry occurs. The probe
+passed, with revision still 1 until the player's explicit next action.
+
+Independent specification review found a body-read variant: `api` swallowed
+an abort after 200 headers and returned `{}`. `spec/api.test.ts` uses a real
+HTTP server with a partial, unfinished JSON response: first failed (resolved
+`{}`), then passed after preserving abort/timeout errors. The reviewer checked
+the correction and reported no remaining findings. The standards review
+reported no documented-standard violations or actionable smells.
+
+Final commands, after rebuilding and restarting the production server:
+
+- `PLAYWRIGHT_BROWSERS_PATH=/tmp/c9-browsers EVIDENCE_DIR=/tmp/c9-ui pnpm check`:
+  typecheck and all **45 tests in 9 files passed**; browser timings 19 ms/6 ms.
+- `pnpm build`, `pnpm check:evidence`, `git diff --check`: passed.
+- Word counts: README 596, PROCESS 1043, reflection 264 (including headings).
+
+The Docker CLI is not connected to a daemon in this WSL environment, so local
+verification used the actual production Node/Vite app rather than an image.
+The existing PR CI builds/runs the Docker image and repeats the checks. GitHub
+reports a public, non-template repo with `FLY_API_TOKEN` configured; merge to
+`main` triggers the unchanged Fly deployment job. Already-open C8 tabs must
+refresh once after deployment to load the new command contract.

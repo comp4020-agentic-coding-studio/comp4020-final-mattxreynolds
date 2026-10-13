@@ -27,7 +27,9 @@ intent, increments the revision once for an accepted command or timeout, and
 persists before broadcasting. A conflict returns 409 with the current
 role-filtered view. Even a duplicate request cannot act twice; there is no
 automatic retry or offline command queue. This is rejection-based duplicate
-protection, not a promise of replaying a cached success response.
+protection, not a promise of replaying a cached success response. An
+acknowledgement wait is bounded to five seconds; timeout reports uncertainty
+and releases pending controls once the stream is live.
 
 Presence changes do not invalidate instructions. SSE is the client's source
 of room views; HTTP acknowledgements cannot roll it back. On a broken link,

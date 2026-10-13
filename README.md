@@ -38,7 +38,7 @@ server-sent events. The server judges actions and owns the deadline.
 When two actions use the same observed state, the first valid arrival wins.
 The other is refused **without a strike**: read back the updated device and
 choose again. Duplicates cannot flip twice or press unseen keypad stages. This favours
-communication over parallel clicking, including on different modules. The [decision record](docs/adr/0001-observed-state-actions.md)
+communication over parallel clicking, including on different modules. The [decision record](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/main/docs/adr/0001-observed-state-actions.md)
 explains the alternatives and costs.
 
 A lost link pauses controls until a fresh snapshot arrives. The clock keeps

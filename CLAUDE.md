@@ -16,7 +16,8 @@
   deadline; the clock runs while disconnected and across server restarts.
 - SSE snapshots own client room state. HTTP acknowledgements cannot overwrite
   newer stream state. Hide the previous seat's projection immediately on a
-  role change; pause controls until connected to a fresh snapshot.
+  role change; pause controls until connected to a fresh snapshot. Bound
+  acknowledgement waits and report uncertain outcomes without replaying intents.
 - Keep broadcasts scoped to their room; only station-log updates are global.
   Clean up stream listeners/heartbeats and bound queued writes for slow clients.
 - When changing multiplayer, run the existing HTTP, browser and persistence
