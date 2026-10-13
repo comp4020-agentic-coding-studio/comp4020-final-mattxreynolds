@@ -28,10 +28,9 @@ export function Lobby({ me, rename }: { me: Me | null; rename: (c: string) => Pr
 
   useEffect(() => {
     if (!me) return;
-    const load = () => api<StationLog>(`/api/log?limit=${RUNS_SHOWN}`, me).then(setLog, () => {});
-    load();
-    const t = setInterval(load, 10_000);
-    return () => clearInterval(t);
+    const es = new EventSource(`/api/log/stream?limit=${RUNS_SHOWN}&player=${encodeURIComponent(me.id)}`);
+    es.onmessage = (e) => setLog(JSON.parse(e.data));
+    return () => es.close();
   }, [me]);
 
   const openRoom = async () => {

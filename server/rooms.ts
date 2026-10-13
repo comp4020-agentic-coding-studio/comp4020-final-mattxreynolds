@@ -3,6 +3,7 @@ import { Router } from "express";
 import * as G from "../shared/game.ts";
 import type {
   Action,
+  Command,
   CrewMember,
   LogEntry,
   LogRow,
@@ -39,6 +40,7 @@ interface Mission {
 interface Room {
   code: string;
   createdAt: number;
+  revision: number;
   mission: Mission;
   log: LogEntry[];
 }
@@ -55,6 +57,7 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const rooms = new Map<string, Room>();
 const timers = new Map<string, NodeJS.Timeout>();
 const clients = new Map<string, Set<Client>>();
+const logClients = new Set<{ res: Response; player: Player; limit: number }>();
 
 function newMission(no: number): Mission {
   const device = G.generateDevice();
@@ -80,15 +83,16 @@ function newMission(no: number): Mission {
 
 function load(code: string): Room | null {
   const cached = rooms.get(code);
-  if (cached) return cached;
+  if (cached) return expire(cached);
   const row = db.prepare("SELECT state FROM rooms WHERE code = ?").get(code) as
     | { state: string }
     | undefined;
   if (!row) return null;
   const room = JSON.parse(row.state) as Room;
+  room.revision ??= 0; // persisted C8 rooms have no command revision yet
   rooms.set(code, room);
   arm(room);
-  return room;
+  return expire(room);
 }
 
 function save(room: Room): void {
@@ -106,7 +110,7 @@ function createRoom(): Room {
       CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)],
     ).join("");
   } while (load(code));
-  const room: Room = { code, createdAt: Date.now(), mission: newMission(1), log: [] };
+  const room: Room = { code, createdAt: Date.now(), revision: 0, mission: newMission(1), log: [] };
   note(room, `Room ${code} opened. Mission 001 loaded.`);
   rooms.set(code, room);
   save(room);
@@ -120,25 +124,47 @@ function note(room: Room, text: string, tone: LogEntry["tone"] = "info"): void {
   if (room.log.length > LOG_KEEP) room.log.splice(0, room.log.length - LOG_KEEP);
 }
 
+/** One synchronous transaction on the single server: state and end-log commit together. */
+function change(room: Room, mutate: (next: Room) => string | null): string | null {
+  const next = structuredClone(room);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const error = mutate(next);
+    if (error) {
+      db.exec("ROLLBACK");
+      return error;
+    }
+    next.revision++;
+    save(next);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  rooms.set(next.code, next);
+  arm(next);
+  broadcast(next);
+  if (next.mission.status === "over" && room.mission.status !== "over") broadcastLog();
+  return null;
+}
+
+function expire(room: Room): Room {
+  if (room.mission.status === "live" && (room.mission.endsAt ?? 0) <= Date.now()) {
+    change(room, (next) => { finish(next, "timeout"); return null; });
+    return rooms.get(room.code)!;
+  }
+  return room;
+}
+
 function arm(room: Room): void {
   clearTimeout(timers.get(room.code));
+  timers.delete(room.code);
   const m = room.mission;
   if (m.status !== "live" || m.endsAt === null) return;
-  const wait = m.endsAt - Date.now();
-  if (wait <= 0) {
-    finish(room, "timeout");
-    save(room);
-    return;
-  }
-  timers.set(
-    room.code,
-    setTimeout(() => {
-      if (room.mission.status !== "live") return;
-      finish(room, "timeout");
-      save(room);
-      broadcast(room);
-    }, wait),
-  );
+  timers.set(room.code, setTimeout(() => {
+    // Use the committed room, not the snapshot captured when this timer armed.
+    expire(rooms.get(room.code)!);
+  }, Math.max(0, m.endsAt - Date.now())));
 }
 
 function enlist(room: Room, player: Player): void {
@@ -155,7 +181,6 @@ function start(room: Room, player: Player): void {
   for (const c of clients.get(room.code) ?? []) enlist(room, c.player);
   enlist(room, player);
   note(room, `${player.callsign} started the clock.`);
-  arm(room);
 }
 
 function finish(room: Room, outcome: Outcome): void {
@@ -163,8 +188,6 @@ function finish(room: Room, outcome: Outcome): void {
   m.status = "over";
   m.outcome = outcome;
   m.msLeftAtEnd = outcome === "timeout" ? 0 : Math.max(0, (m.endsAt ?? 0) - Date.now());
-  clearTimeout(timers.get(room.code));
-  timers.delete(room.code);
   note(
     room,
     outcome === "defused"
@@ -218,12 +241,16 @@ const FIELD: Record<Action["type"], string | null> = {
 };
 
 /** Checks an action's shape before it can touch the room (or start the clock). */
-function isAction(body: unknown): body is Action {
+function isAction(body: unknown, room: Room): body is Command {
   if (typeof body !== "object" || body === null) return false;
   const { type } = body as { type?: unknown };
   if (typeof type !== "string" || !Object.hasOwn(FIELD, type)) return false;
+  const command = body as Record<string, unknown>;
+  if (!Number.isSafeInteger(command.missionNo) || (command.missionNo as number) < 1 ||
+      !Number.isSafeInteger(command.revision) || (command.revision as number) < 0) return false;
   const field = FIELD[type as Action["type"]];
-  return field === null || Number.isInteger((body as Record<string, unknown>)[field]);
+  const length = type === "cut" ? room.mission.device.wires.length : type === "flip" ? 5 : 4;
+  return field === null || inRange(command[field], length);
 }
 
 /** Applies one action; returns an error message if it was refused. */
@@ -350,6 +377,7 @@ function view(room: Room, role: Role): RoomView {
     code: room.code,
     role,
     missionNo: m.no,
+    revision: room.revision,
     status: m.status,
     outcome: m.outcome,
     serverNow: now,
@@ -382,8 +410,30 @@ function view(room: Room, role: Role): RoomView {
   return v;
 }
 
+function writeEvent(res: Response, data: unknown): void {
+  if (res.destroyed || res.writableEnded) return;
+  // Bound queued writes: a slow receiver reconnects to a full snapshot.
+  if (res.writableLength > 64 * 1024) { res.destroy(); return; }
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function openStream(res: Response, close: () => void): void {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+  const heartbeat = setInterval(() => {
+    if (res.writableLength > 64 * 1024) res.destroy();
+    else res.write(": keep-alive\n\n");
+  }, 25_000);
+  res.on("close", () => { clearInterval(heartbeat); close(); });
+}
+
 function send(c: Client, room: Room): void {
-  c.res.write(`data: ${JSON.stringify(view(room, c.role))}\n\n`);
+  writeEvent(c.res, view(room, c.role));
 }
 
 function broadcast(room: Room): void {
@@ -423,28 +473,17 @@ roomRoutes.get("/:code/stream", (req, res) => {
   if (!room) return void res.status(404).json({ error: "no such room" });
   if (!player) return void res.status(401).json({ error: "unknown player" });
 
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  res.flushHeaders();
-
   const client: Client = { res, player, role: roleOf(req.query.role) };
   const set = clients.get(room.code) ?? new Set();
   clients.set(room.code, set);
-  set.add(client);
-  if (room.mission.status === "live") enlist(room, player);
-  broadcast(room);
-
-  // a comment line every 25s keeps idle proxies from closing the stream
-  const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 25_000);
-  req.on("close", () => {
-    clearInterval(heartbeat);
+  openStream(res, () => {
     set.delete(client);
-    broadcast(room);
+    if (set.size === 0) clients.delete(room.code);
+    broadcast(rooms.get(room.code)!);
   });
+  set.add(client);
+  if (room.mission.status === "live") { enlist(room, player); save(room); }
+  broadcast(room);
 });
 
 roomRoutes.post("/:code/actions", (req, res) => {
@@ -452,21 +491,27 @@ roomRoutes.post("/:code/actions", (req, res) => {
   const player = playerFrom(req);
   if (!room) return void res.status(404).json({ error: "no such room" });
   if (!player) return void res.status(401).json({ error: "unknown player" });
-  if (!isAction(req.body)) return void res.status(400).json({ error: "malformed action" });
-  const error = apply(room, player, req.body);
-  if (error) return void res.status(409).json({ error });
-  save(room);
-  broadcast(room);
-  res.json(view(room, roleOf(req.query.role)));
+  if (!isAction(req.body, room)) return void res.status(400).json({ error: "malformed action" });
+  const role = roleOf(req.query.role);
+  if (req.body.missionNo !== room.mission.no || req.body.revision !== room.revision) {
+    return void res.status(409).json({
+      error: "Room changed. Read back the updated device before acting again.",
+      view: view(room, role),
+    });
+  }
+  const error = change(room, (next) => apply(next, player, req.body));
+  const current = rooms.get(room.code)!;
+  if (error) return void res.status(409).json({ error, view: view(current, role) });
+  res.json(view(current, role));
 });
 
 // ---- Station log -----------------------------------------------------------
 
 export const logRoutes = Router();
 
-logRoutes.get("/", (req, res) => {
-  const player = playerFrom(req);
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+const logLimit = (raw: unknown): number => Math.min(100, Math.max(1, Math.floor(Number(raw)) || 25));
+
+function stationView(player: Player | null, limit: number): StationLog {
   const rows = db
     .prepare(
       `SELECT id, room_code, mission_no, outcome, modules_cleared, strikes, ms_left, crew, ended_at
@@ -504,5 +549,24 @@ logRoutes.get("/", (req, res) => {
       : null,
     runs,
   };
-  res.json(log);
+  return log;
+}
+
+function broadcastLog(): void {
+  for (const c of logClients) {
+    writeEvent(c.res, stationView(c.player, c.limit));
+  }
+}
+
+logRoutes.get("/", (req, res) => {
+  res.json(stationView(playerFrom(req), logLimit(req.query.limit)));
+});
+
+logRoutes.get("/stream", (req, res) => {
+  const player = getPlayer(req.query.player);
+  if (!player) return void res.status(401).json({ error: "unknown player" });
+  const client = { res, player, limit: logLimit(req.query.limit) };
+  openStream(res, () => logClients.delete(client));
+  logClients.add(client);
+  writeEvent(res, stationView(player, client.limit));
 });

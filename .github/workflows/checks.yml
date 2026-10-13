@@ -36,6 +36,8 @@ jobs:
         run: |
           docker build -t app .
           docker run -d --init --name app -p 8080:8080 -e PORT=8080 --tmpfs /data app
+      - name: Install browser for independent-session checks
+        run: pnpm exec playwright install --with-deps chromium
       - name: Run the spec
         run: pnpm check
         env:

@@ -19,8 +19,9 @@ function initialRole(): Role {
 
 export function Room({ code, me }: { code: string; me: Me | null }) {
   const [role, setRole] = useState<Role>(initialRole);
-  const { view, missing, error, act, offset } = useRoom(code, role, me);
+  const { view, missing, error, act, offset, connection, pending } = useRoom(code, role, me);
   const clock = useClock(view, offset);
+  const blocked = connection !== "live" || pending || !view;
   const [copied, setCopied] = useState(false);
   const [struck, setStruck] = useState(false);
   const strikes = useRef(0);
@@ -130,6 +131,11 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
             <span>DEVICE // {view?.device?.serial ? `DA-${view.device.serial.slice(-3)}` : "NOT IN VIEW"}</span>
             <span>{condition}</span>
           </div>
+          {connection === "reconnecting" ? (
+            <div className="link-warning" role="status">
+              Link lost. Controls paused; the clock keeps running. Reconnecting to the current mission…
+            </div>
+          ) : null}
           <div className="status">
             <div>
               <span className="label">TIME REMAINING</span>
@@ -166,7 +172,7 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
                   station
                 </span>
               </div>
-              <button className="primary small" onClick={() => act({ type: "newMission" })}>
+              <button className="primary small" disabled={blocked} onClick={() => act({ type: "newMission" })}>
                 New mission
               </button>
             </div>
@@ -175,7 +181,7 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
           {!view ? (
             <div className="loading">Establishing link to room {code}…</div>
           ) : role === "operator" && view.device ? (
-            <Device view={view} clock={clock.text} act={act} />
+            <Device view={view} clock={clock.text} act={act} disabled={blocked} />
           ) : (
             <Manual />
           )}
@@ -183,7 +189,7 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
           <div className="console-bottom">
             <span>POWER: STABLE</span>
             <span>COMMUNICATION IS YOUR BEST TOOL</span>
-            <span>LINK: {view ? "LIVE" : "…"}</span>
+            <span role="status">LINK: {connection.toUpperCase()}</span>
           </div>
         </section>
 
@@ -229,17 +235,18 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
                 </li>
               ))}
           </ol>
+          {pending ? <p className="hint" role="status">Waiting for the station…</p> : null}
           {error ? (
             <p className="error" role="alert">
               {error}
             </p>
           ) : null}
           {status === "over" ? (
-            <button className="primary" onClick={() => act({ type: "newMission" })}>
+            <button className="primary" disabled={blocked} onClick={() => act({ type: "newMission" })}>
               New mission
             </button>
           ) : (
-            <button className="primary" disabled={status === "live" || !view} onClick={() => act({ type: "start" })}>
+            <button className="primary" disabled={status === "live" || blocked} onClick={() => act({ type: "start" })}>
               {status === "live" ? "Mission in progress" : "Begin mission"}
             </button>
           )}

@@ -38,6 +38,7 @@ export interface RoomView {
   code: string;
   role: Role;
   missionNo: number;
+  revision: number;
   status: Status;
   outcome: Outcome | null;
   serverNow: number;
@@ -59,6 +60,9 @@ export type Action =
   | { type: "engage" }
   | { type: "override" }
   | { type: "newMission" };
+
+/** A command is tied to the snapshot the player read, never just an intent. */
+export type Command = Action & { missionNo: number; revision: number };
 
 export interface LogRow {
   id: number;

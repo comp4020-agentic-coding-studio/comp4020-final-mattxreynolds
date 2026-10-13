@@ -14,59 +14,63 @@ questions, reading things back, and slowing down when the clock says hurry up.
 Specifically:
 
 1. **Talking is the game.** Each seat holds half of what's needed. Devices are
-   randomised and the manual is written as general rules, so the Expert can't
-   memorise answers and has to ask what's in front of the Operator.
-2. **A stranger is playing within a minute.** There's no account and no setup.
-   You open a room, and either play both seats yourself or send the code to
-   whoever is next to you.
-3. **It's fair.** Every device can be solved from the manual alone, so a strike
-   is a misunderstanding between two people, not the game cheating.
-4. **The station remembers.** A run leaves a trace with the crew's callsigns,
-   how far they got and how it ended. Coming back shows you your own runs
-   among everyone else's.
+   randomised and the manual gives general rules, so the Expert has to ask
+   what's in front of the Operator.
+2. **A stranger is playing within a minute.** There's no account or setup.
+   Open a room, play both seats yourself or share its code with a teammate.
+3. **It's fair.** Every device can be solved from the manual alone. A strike
+   should be a misunderstanding between people, not an invisible network race.
+4. **The station remembers.** Runs record the crew's callsigns, progress and
+   outcome. Returning players see their own runs among everyone else's.
 
 ## Who it's for
 
-Pairs of people in the same room: two classmates at a crit, or a room full of
-pairs at the showcase all playing at once. Every visitor gets their own room,
-so a dozen pairs can play side by side without stepping on each other's
-devices.
+Pairs in the same room: classmates at a crit, or a showcase full of pairs.
+Each pair opens its own room, so they don't disturb each other's devices.
+Seats can be switched for solo play; they are information views, not exclusive
+ownership or security against someone deliberately switching roles.
+
+## Playing together
+
+Mission changes and finished runs reach open seats and station logs through
+server-sent events. The server judges actions and owns the deadline.
+
+When two actions use the same observed state, the first valid arrival wins.
+The other is refused **without a strike**: read back the updated device and
+choose again. Duplicates cannot flip twice or press unseen keypad stages. This favours
+communication over parallel clicking, including on different modules. The [decision record](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/main/docs/adr/0001-observed-state-actions.md)
+explains the alternatives and costs.
+
+A lost link pauses controls until a fresh snapshot arrives. The clock keeps
+running; rejoin restores the mission or final result. Lost acknowledgements
+are not retried: check the recovered device before acting again.
 
 ## What I looked at
 
-- *Keep Talking and Nobody Explodes* (Steel Crate Games): the split between
-  device and manual, and modules whose rules depend on details only one person
-  can see.
-- *Spaceteam* (Sleeping Beast Games): co-op that's played out loud, where the
-  chaos of the talking is the point.
-- *Hanabi*: a co-op game built entirely on limited information, where
-  communication is the scarce resource.
+- *Keep Talking and Nobody Explodes* (Steel Crate Games): split information
+  and rules depending on details only the Operator sees.
+- *Spaceteam* (Sleeping Beast Games): spoken co-operation under pressure.
+- *Hanabi*: limited information makes communication scarce.
 - Robin Sloan, "An app can be a home-cooked meal", and Clay Shirky,
-  "Situated Software": small software made for particular people and a
-  particular moment, which is what a crit or showcase game is.
+  "Situated Software": software for particular people and moments.
 
 ## What I chose not to build
 
-- **Accounts.** A callsign and an anonymous id kept in the browser are enough
-  to leave a trace, and a login would cost the first minute.
-- **Voice or text chat.** Players are meant to be in the same room. Talking out
-  loud is the game, so I'm not rebuilding it.
-- **A ranked leaderboard.** The log is a record of crews, not a race. Fastest
-  times would reward memorising the manual over talking.
-- **More modules.** Five is enough for a five-minute run, and each new one has
-  to be described out loud by a stranger.
+Accounts would cost the first minute. Voice/text chat would replace the
+out-loud conversation. A ranked leaderboard would reward memorising answers;
+the log records crews instead. Five modules are enough for a five-minute run.
 
 ## Which claims are enforced and which are judged
 
 | Claim | How it's held |
 | --- | --- |
-| Every finished run is logged with its crew and visible to everyone | `spec/game.test.ts` |
-| Rooms are isolated from each other | `spec/game.test.ts` |
-| The Expert's seat never receives device data | `spec/game.test.ts` |
-| One player's action reaches another open session within a second | `spec/game.test.ts` |
-| The manual alone is enough to defuse any device | `spec/game.test.ts`, `spec/rules.test.ts` |
-| Talking is the game | Judged: watching pods play at the crit |
-| A stranger is playing within a minute | Judged: timing first-time players at the crit |
+| Finished runs persist with their crew | `spec/game.test.ts`, `spec/persistence.test.ts` |
+| Rooms stay isolated; Expert projections omit device data | `spec/game.test.ts`, `spec/realtime.test.ts` |
+| Relevant open seats and station logs update within a second | `spec/realtime.test.ts`, `spec/browser.test.ts` |
+| Stale/duplicate commands cannot act twice; reconnect restores state | `spec/multiplayer.test.ts`, `spec/browser.test.ts` |
+| The manual solves every device | `spec/game.test.ts`, `spec/rules.test.ts` |
+| Talking is the game; strangers start within a minute | Judged by watching first-time pairs |
 
-The checks run against the live app with `pnpm check`. The judged claims are
-what I'll be watching for at the crit, and the notes go into `PROCESS.md`.
+`pnpm check` runs against a running app, including independent browser contexts.
+Local timings are evidence, not a guarantee on every network. Human pod
+judgement remains to be recorded in `PROCESS.md`.

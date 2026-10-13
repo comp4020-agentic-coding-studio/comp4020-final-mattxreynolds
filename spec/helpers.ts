@@ -30,21 +30,38 @@ export const openRoom = async (p: TestPlayer): Promise<string> =>
 export const look = (code: string, role: Role): Promise<RoomView> =>
   call(`/api/rooms/${code}?role=${role}`, null);
 
-export const act = (p: TestPlayer, code: string, action: Action): Promise<RoomView> =>
-  call(`/api/rooms/${code}/actions?role=operator`, p, { method: "POST", body: JSON.stringify(action) });
+export const act = async (p: TestPlayer, code: string, action: Action): Promise<RoomView> => {
+  const seen = await look(code, "operator");
+  return call(`/api/rooms/${code}/actions?role=operator`, p, {
+    method: "POST", body: JSON.stringify({ ...action, missionNo: seen.missionNo, revision: seen.revision }),
+  });
+};
+
+/** Supply the actual observed view when testing races; never silently fetch a newer one. */
+export const command = (p: TestPlayer, seen: RoomView, action: Action, role: Role = "operator") =>
+  fetch(url(`/api/rooms/${seen.code}/actions?role=${role}`), {
+    method: "POST", headers: { "content-type": "application/json", "x-player": p.id },
+    body: JSON.stringify({ ...action, missionNo: seen.missionNo, revision: seen.revision }),
+  });
 
 export const stationLog = (p: TestPlayer | null): Promise<StationLog> => call("/api/log?limit=100", p);
 
 /** Opens a room's event stream; `next` resolves with each view as it arrives. */
-export async function stream(code: string, role: Role, p: TestPlayer) {
+export const stream = (code: string, role: Role, p: TestPlayer) =>
+  eventStream<RoomView>(`/api/rooms/${code}/stream?role=${role}&player=${p.id}`);
+
+export const logStream = (p: TestPlayer) => eventStream<StationLog>(`/api/log/stream?player=${p.id}`);
+
+async function eventStream<T>(path: string) {
   const controller = new AbortController();
-  const res = await fetch(url(`/api/rooms/${code}/stream?role=${role}&player=${p.id}`), {
+  const res = await fetch(url(path), {
     signal: controller.signal,
   });
   const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+  if (!res.ok) throw new Error(`stream: ${res.status}`);
   let buffer = "";
   return {
-    async next(): Promise<RoomView> {
+    async next(): Promise<T> {
       for (;;) {
         const end = buffer.indexOf("\n\n");
         if (end !== -1) {
@@ -61,4 +78,15 @@ export async function stream(code: string, role: Role, p: TestPlayer) {
     },
     close: () => controller.abort(),
   };
+}
+
+/** Bound a live-update assertion; always close the stream in the caller's finally. */
+export async function until<T>(s: { next(): Promise<T> }, predicate: (v: T) => boolean, ms = 1000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      (async () => { for (;;) { const v = await s.next(); if (predicate(v)) return v; } })(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`no relevant event within ${ms}ms`)), ms); }),
+    ]);
+  } finally { clearTimeout(timer!); }
 }

@@ -40,7 +40,11 @@ export async function api<T>(path: string, me: Me | null, init: RequestInit = {}
       ...init.headers,
     },
   });
-  const body = await res.json().catch(() => ({}));
+  const body = await res.json().catch((error: unknown) => {
+    // An incomplete acknowledgement is uncertain even after successful headers.
+    if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)) throw error;
+    return {};
+  });
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
   return body as T;
 }
