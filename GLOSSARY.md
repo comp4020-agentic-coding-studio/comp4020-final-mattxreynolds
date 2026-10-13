@@ -12,6 +12,10 @@ _Avoid_: User, client, participant, character, Mate, Stoker
 Exactly two Players sailing Voyages together.
 _Avoid_: Crew, pair, party, group
 
+**Player name**:
+The name the person playing goes by outside the ship, shown beside their partner's on the Leaderboard. Never a character name.
+_Avoid_: Username, handle, display name, nickname
+
 ## Ship
 
 **Voyage**:
