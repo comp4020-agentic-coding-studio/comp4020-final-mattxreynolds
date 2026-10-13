@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PROTOTYPE – Wheelhouse and Engine Room look and sound (throwaway)</title>
+<!--
+  PROTOTYPE · THROWAWAY · never merged.
+  Question (wayfinder ticket "What do the Wheelhouse and the Engine Room look and sound like?"):
+  palette, lighting and mood for each Room; how dressed they need to be; what sound each Deck has, the
+  feedback sounds, and whether the Voice Pipe has a sound; the drawn ship name and the end cards.
+
+  Four looks of the same two Rooms, switchable with ?variant=A|B|C|D, the bottom bar, or [ and ]:
+    A  Fire below, storm above   hot furnace light under a cold storm: maximum temperature contrast between Decks
+    B  Brass and teak            both Decks candle-warm; told apart by material and scale (soot iron / polished teak)
+    C  Verdigris deep            teal gaslight, portholes onto green water, a muffled submerged mix
+    D  Greybox                   the C10 floor: same layout, neutral grey, even light, no textures
+  "g" (or the Greybox button) flips any look to greybox. Everything is built from three.js primitives and canvas
+  textures: nothing here is a CC0 asset. The Tools panel fires the feedback sounds and the end cards.
+
+  The Rooms keep the layout the earlier prototypes settled: in the Wheelhouse the middle 5x5 of the floor stays clear
+  for the rotten-floor Puzzle, so its dressing sits round the rim. Movement is WASD + mouse look (pointer lock) or a
+  joystick on a coarse pointer; click or tap a keypad key, valve wheel, telegraph handle or helm within 2.2 m to hear it.
+  ?deck=1|2  Engine Room | Wheelhouse   ?ship=Name   ?lock=0   ?stick=1   ?card=launched|sunk|paused   ?tools=1
+  Sound is procedural Web Audio (no files) and starts on the first click, tap or key.
+  three.js 0.170 loads from jsdelivr, so this needs a network connection.
+-->
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#0b0a09; color:#f5f5f4; font:14px/1.35 system-ui, sans-serif; }
+  #view { position:fixed; inset:0; }
+  #view canvas { display:block; width:100%; height:100%; touch-action:none; }
+  .nogl { position:fixed; inset:0; display:grid; place-items:center; padding:24px; text-align:center; }
+  .hud { position:fixed; left:8px; right:8px; top:8px; pointer-events:none; display:flex; flex-direction:column; gap:5px; align-items:flex-start; z-index:5; }
+  .chip { background:rgba(0,0,0,.62); padding:5px 9px; border-radius:6px; max-width:calc(100% - 18px); }
+  .chip b { color:#fbbf24; } .chip.small { font-size:12px; }
+  #snd { background:rgba(194,65,12,.9); }
+  #flash { position:fixed; inset:0; background:rgba(220,38,38,.45); pointer-events:none; opacity:0; z-index:8; }
+  #flash.go { animation:fade .8s forwards; } @keyframes fade { from { opacity:1; } to { opacity:0; } }
+  #crosshair { position:fixed; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; pointer-events:none; display:none; z-index:4; }
+  #crosshair::before, #crosshair::after { content:''; position:absolute; background:#fff; mix-blend-mode:difference; }
+  #crosshair::before { left:6px; top:0; width:2px; height:14px; } #crosshair::after { top:6px; left:0; height:2px; width:14px; }
+  #lockhint { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.7); padding:10px 14px; border-radius:8px; pointer-events:none; display:none; z-index:4; text-align:center; }
+  #stick { position:fixed; left:24px; bottom:84px; width:132px; height:132px; border-radius:50%; background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.35); touch-action:none; display:none; z-index:6; }
+  #stick .knob { position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(245,245,244,.85); pointer-events:none; }
+
+  #tools { position:fixed; left:8px; right:8px; bottom:62px; z-index:40; display:none; background:rgba(15,23,42,.94); border-radius:12px; padding:8px; max-height:52%; overflow:auto; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+  #tools.open { display:block; }
+  #tools h4 { margin:6px 2px 4px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; font-weight:600; }
+  #tools .g { display:flex; flex-wrap:wrap; gap:5px; }
+  #tools button { font:inherit; font-size:13px; min-height:40px; padding:4px 11px; border-radius:8px; border:0; background:#e2e8f0; color:#0f172a; cursor:pointer; touch-action:manipulation; }
+  #tools button.on { background:#fbbf24; }
+  #tools label { display:flex; align-items:center; gap:6px; font-size:12px; color:#cbd5e1; } #tools input[type=range] { width:110px; }
+  #switcher { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:4px; background:#0f172a; color:#fff; padding:5px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:13px; white-space:nowrap; max-width:calc(100% - 12px); }
+  #switcher button { border:0; background:#334155; color:#fff; min-width:34px; height:34px; border-radius:17px; cursor:pointer; font-size:15px; touch-action:manipulation; flex:none; padding:0 10px; }
+  #switcher span { padding:0 6px; overflow:hidden; text-overflow:ellipsis; }
+
+  /* end cards: three treatments, one per look */
+  #card { position:fixed; inset:0; z-index:30; display:none; place-items:center; padding:12px; background:rgba(5,5,8,.55); }
+  .cardbox { width:min(520px, 100%); box-sizing:border-box; padding:22px 22px 18px; text-align:center; position:relative; }
+  .cardbox .kick { font-size:13px; letter-spacing:.32em; text-transform:uppercase; }
+  .cardbox .ship { font-size:34px; margin:6px 0 2px; }
+  .cardbox svg { width:100%; max-width:380px; height:auto; margin:6px auto; display:block; }
+  .cardbox .line { font-size:15px; margin:6px 0; } .cardbox .stats { font-size:13px; margin:8px 0 14px; opacity:.85; }
+  .cardbox button { font:inherit; padding:10px 22px; min-height:44px; border-radius:6px; cursor:pointer; }
+  .brass .cardbox { background:linear-gradient(160deg,#2a211a,#15100c); color:#f1d9a0; border:3px solid #b8863b; box-shadow:inset 0 0 0 5px #15100c, inset 0 0 0 7px #8a6428, 0 20px 50px #000; font-family:Georgia,'Palatino Linotype',serif; }
+  .brass .cardbox .kick { color:#d9a94a; } .brass .cardbox .ship { font-variant:small-caps; letter-spacing:.06em; text-shadow:0 1px 0 #000; }
+  .brass .cardbox button { background:#b8863b; color:#1a120a; border:0; font-weight:700; letter-spacing:.1em; }
+  .log .cardbox { background:#e8d9b4 repeating-linear-gradient(0deg,transparent 0 27px,rgba(80,60,30,.18) 27px 28px); color:#2c2012; border:1px solid #8c7648; box-shadow:0 18px 40px #000, inset 0 0 40px rgba(120,80,20,.25); font-family:Georgia,serif; transform:rotate(-.6deg); }
+  .log .cardbox .kick { color:#7a1f12; font-weight:700; } .log .cardbox .ship { font-style:italic; }
+  .log .cardbox button { background:#3b2a14; color:#f0e2bd; border:0; }
+  .blueprint .cardbox { background:#0c2438 linear-gradient(rgba(120,200,255,.12) 1px,transparent 1px) 0 0/24px 24px, linear-gradient(90deg,rgba(120,200,255,.12) 1px,transparent 1px) 0 0/24px 24px; color:#bfe6ff; border:2px solid #5fb4e8; box-shadow:0 20px 50px #000; font-family:ui-monospace,Menlo,monospace; }
+  .blueprint .cardbox .kick { color:#7fd0ff; } .blueprint .cardbox .ship { text-transform:uppercase; letter-spacing:.14em; font-size:28px; }
+  .blueprint .cardbox button { background:transparent; color:#bfe6ff; border:2px solid #5fb4e8; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+</head>
+<body>
+<div id="view"></div>
+<div class="hud">
+  <div class="chip small" id="help"></div>
+  <div class="chip" id="hint"></div>
+  <div class="chip" id="snd">Sound is off: click, tap or press a key to start it</div>
+</div>
+<div id="flash"></div>
+<div id="crosshair"></div>
+<div id="lockhint">Click to look around · Esc releases the mouse<br>Click again to use a key, wheel or handle</div>
+<div id="stick"><div class="knob"></div></div>
+<div id="card"></div>
+<div id="tools"></div>
+<div id="switcher"><button id="prev" title="previous look ([)">‹</button><span id="vlabel"></span><button id="next" title="next look (])">›</button><button id="toolbtn">Tools</button></div>
+
+<script type="module">
+import * as THREE from 'three';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const q = new URLSearchParams(location.search);
+const coarse = matchMedia('(pointer:coarse)').matches;
+const SHIPS = ['Aurelia', 'Marguerite', 'Nautilus Rose', 'Corvina', 'Halcyon', 'Brigid'];
+const cfg = { variant: (q.get('variant') || 'A').toUpperCase(), deck: +(q.get('deck') || 1), grey: q.get('grey') === '1', ship: q.get('ship') || SHIPS[0],
+  stick: coarse || q.get('stick') === '1', lock: !coarse && q.get('lock') !== '0' };
+const REACH = 2.2;
+
+/* ============================================================
+   THE LOOKS. One table per look; the builders below read it. Colours are hex, lights are [colour, intensity].
+   e = Engine Room (Lower Deck), w = Wheelhouse (Upper Deck).
+   ============================================================ */
+const THEMES = {
+  A: { name: 'Fire below, storm above', view: 'storm', windows: 'panes', filt: 16000, card: 'brass', mix: { rain: 1, wind: 1, sub: 1, creak: 1 },
+    e: { wall: 0x6a4a36, floor: 0x2a2622, ceil: 0x17120f, trim: 0xb8863b, amb: [0x5a3320, 0.55], fog: [0x0d0705, 0.065], furnace: 1, lamp: [0xffb35a, 9] },
+    w: { wall: 0x7c879a, wood: 0x6b4a2f, floor: 0x3d2e22, ceil: 0x1c2330, trim: 0xcaa24a, amb: [0x8da6d4, 0.6], fog: [0x0a0e18, 0.03], lamp: [0xffd9a0, 5] } },
+  B: { name: 'Brass and teak', view: 'dusk', windows: 'panes', filt: 9000, card: 'log', mix: { rain: 0.15, wind: 0.5, sub: 0.8, creak: 1.7 },
+    e: { wall: 0x4a4540, floor: 0x2b2723, ceil: 0x1a1614, trim: 0xd0a040, amb: [0x7a5a38, 0.55], fog: [0x15100c, 0.04], furnace: 0.6, lamp: [0xffc070, 12] },
+    w: { wall: 0x9a6c40, wood: 0x6e4527, floor: 0x4a3320, ceil: 0x2a1c12, trim: 0xd8aa48, amb: [0xb89066, 0.6], fog: [0x1a120a, 0.028], lamp: [0xffc874, 10] } },
+  C: { name: 'Verdigris deep', view: 'sea', windows: 'portholes', filt: 1800, card: 'blueprint', mix: { rain: 0, wind: 0.15, sub: 1.5, creak: 1.2 },
+    e: { wall: 0x3c5e58, floor: 0x1c2a29, ceil: 0x0e1817, trim: 0xa9b98a, amb: [0x2c5a52, 0.6], fog: [0x041211, 0.07], furnace: 0.5, lamp: [0xb8ffd8, 10] },
+    w: { wall: 0x3f6760, wood: 0x5b4a36, floor: 0x2d3b36, ceil: 0x142320, trim: 0xb8c590, amb: [0x4a8a80, 0.65], fog: [0x04100f, 0.045], lamp: [0xc8fff0, 6] } },
+};
+THEMES.D = { ...THEMES.A, name: 'Greybox (the C10 floor)', grey: true, card: 'brass' };
+const ORDER = Object.keys(THEMES);
+let T, grey, deck, C;
+
+/* ============================================================
+   MATERIALS AND TEXTURES: all procedural, so the prototype needs no files
+   ============================================================ */
+const lum = c => { const k = new THREE.Color(c); return 0.2126 * k.r + 0.7152 * k.g + 0.0722 * k.b; };
+const M = (c, o = {}) => new THREE.MeshLambertMaterial(grey ? { color: new THREE.Color().setScalar(0.25 + 0.7 * Math.sqrt(lum(c))) } : { color: c, ...o });
+const MT = (map, o = {}) => new THREE.MeshLambertMaterial(grey ? { color: 0x9a9a9a } : { map, ...o });
+const EM = c => new THREE.MeshBasicMaterial({ color: c, fog: false });
+const canvasTex = (w, h, draw, rep) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep[0], rep[1]); } return t; };
+const dyn = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'), t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return { tex: t, draw: (...a) => { draw(x, w, h, ...a); t.needsUpdate = true; } }; };
+const hex = c => '#' + new THREE.Color(c).getHexString();
+const shade = (c, k) => '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
+const rivetTex = (base, rep) => canvasTex(256, 256, (x, w, h) => {
+  x.fillStyle = hex(base); x.fillRect(0, 0, w, h);
+  for (let i = 0; i < 700; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.1})`; x.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 6, 1 + Math.random() * 2); }
+  x.strokeStyle = shade(base, 0.55); x.lineWidth = 3; x.strokeRect(1, 1, w - 2, h - 2); x.beginPath(); x.moveTo(0, h / 2); x.lineTo(w, h / 2); x.stroke();
+  for (let k = 0; k < 8; k++) for (const y of [10, h / 2 - 10, h / 2 + 10, h - 10]) { const px = 16 + k * 32; x.fillStyle = shade(base, 0.5); x.beginPath(); x.arc(px + 1, y + 1.5, 4, 0, 7); x.fill(); x.fillStyle = shade(base, 1.45); x.beginPath(); x.arc(px, y, 3.4, 0, 7); x.fill(); }
+}, rep);
+const plankTex = (base, rep, vertical) => canvasTex(256, 256, (x, w, h) => {
+  for (let i = 0; i < 8; i++) { x.fillStyle = shade(base, 0.8 + Math.random() * 0.4); vertical ? x.fillRect(i * 32, 0, 32, h) : x.fillRect(0, i * 32, w, 32); }
+  for (let i = 0; i < 90; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`; vertical ? x.fillRect(Math.random() * w, Math.random() * h, 1, 10 + Math.random() * 40) : x.fillRect(Math.random() * w, Math.random() * h, 10 + Math.random() * 40, 1); }
+  x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 8; i++) vertical ? x.fillRect(i * 32, 0, 2, h) : x.fillRect(0, i * 32, w, 2);
+}, rep);
+const gratingTex = (rep) => canvasTex(128, 128, (x, w, h) => {
+  x.fillStyle = '#0e0c0a'; x.fillRect(0, 0, w, h); x.strokeStyle = '#6a6056'; x.lineWidth = 5;
+  for (let i = 0; i <= 4; i++) { x.beginPath(); x.moveTo(i * 32, 0); x.lineTo(i * 32, h); x.stroke(); x.beginPath(); x.moveTo(0, i * 32); x.lineTo(w, i * 32); x.stroke(); }
+}, rep);
+const textTex = (txt, w, h, bg, fg, font, border) => canvasTex(w, h, (x) => { x.fillStyle = bg; x.fillRect(0, 0, w, h); if (border) { x.strokeStyle = border; x.lineWidth = 6; x.strokeRect(5, 5, w - 10, h - 10); } x.fillStyle = fg; x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(txt, w / 2, h / 2 + 3); });
+const glowTex = canvasTex(64, 64, (x) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); });
+const puffTex = canvasTex(64, 64, (x) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); });
+
+/* ============================================================
+   THE VIEW OUT OF THE WINDOWS: one animated canvas, three kinds
+   ============================================================ */
+const L = { flash: 0, next: 6, jolt: 0, dim: 0 };      // lightning, a Strike's shake, and the lamps guttering
+function drawView(x, w, h, t, kind) {
+  const roll = Math.sin(t * 0.45) * 16, hor = h * 0.58;
+  if (kind === 'sea') {
+    const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#0f3a37'); g.addColorStop(1, '#03100f'); x.fillStyle = g; x.fillRect(0, 0, w, h);
+    for (let i = 0; i < 5; i++) { const px = ((i * 230 + t * 12) % (w + 200)) - 100; x.fillStyle = 'rgba(160,255,220,.05)'; x.beginPath(); x.moveTo(px, 0); x.lineTo(px + 90, 0); x.lineTo(px + 10, h); x.lineTo(px - 80, h); x.fill(); }
+    for (let i = 0; i < 40; i++) { const px = (i * 97 + 31) % w, py = h - ((t * (14 + (i % 5) * 6) + i * 53) % (h + 20)); x.strokeStyle = 'rgba(190,255,235,.45)'; x.lineWidth = 1.5; x.beginPath(); x.arc(px, py, 2 + (i % 4), 0, 7); x.stroke(); }
+    return;
+  }
+  const storm = kind === 'storm', g = x.createLinearGradient(0, 0, 0, hor);
+  if (storm) { g.addColorStop(0, '#080b12'); g.addColorStop(1, '#3d4a5e'); } else { g.addColorStop(0, '#3a3a40'); g.addColorStop(0.7, '#9a7a56'); g.addColorStop(1, '#d9a76a'); }
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  for (let i = 0; i < 9; i++) { const px = ((i * 170 + t * (storm ? 38 : 14)) % (w + 300)) - 150, py = 30 + (i % 4) * 36; x.fillStyle = storm ? 'rgba(10,14,22,.5)' : 'rgba(70,60,60,.35)'; x.beginPath(); x.ellipse(px, py, 120, 26, 0, 0, 7); x.fill(); }
+  const s = x.createLinearGradient(0, hor, 0, h); s.addColorStop(0, storm ? '#1c2736' : '#4b3b30'); s.addColorStop(1, storm ? '#04070c' : '#1a130e'); x.fillStyle = s;
+  x.beginPath(); x.moveTo(0, h); for (let i = 0; i <= 32; i++) x.lineTo(i * w / 32, hor + (i / 32 - 0.5) * roll + Math.sin(i * 1.3 + t * (storm ? 2.4 : 1.2)) * (storm ? 9 : 4)); x.lineTo(w, h); x.fill();
+  x.strokeStyle = storm ? 'rgba(210,225,240,.35)' : 'rgba(255,230,190,.3)'; x.lineWidth = 2;
+  for (let i = 0; i < 26; i++) { const px = (i * 61 + t * 55) % w, py = hor + 14 + (i * 37) % (h - hor - 16); x.beginPath(); x.moveTo(px, py); x.lineTo(px + 26, py + Math.sin(i + t * 2)); x.stroke(); }
+  if (storm) { x.strokeStyle = 'rgba(200,215,235,.45)'; x.lineWidth = 1.2; for (let i = 0; i < 90; i++) { const px = (i * 53 + t * 260) % (w + 40) - 20, py = (i * 91 + t * 700) % h; x.beginPath(); x.moveTo(px, py); x.lineTo(px - 7, py + 24); x.stroke(); } }
+  if (L.flash > 0) { x.fillStyle = `rgba(235,242,255,${Math.min(0.85, L.flash * 0.9)})`; x.fillRect(0, 0, w, h); }
+}
+
+/* ============================================================
+   SOUND: procedural Web Audio. Nothing here is a file, and nothing speaks: sound sits under talking, never in place of it.
+   ============================================================ */
+const A = { ctx: null, on: false, amb: 0.5, fx: 0.9, pipeBed: false, duck: false, nodes: [], timers: [] };
+const SND = {};
+function audioStart() {
+  if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+  try { A.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+  const c = A.ctx; A.on = true;
+  A.filt = c.createBiquadFilter(); A.filt.type = 'lowpass'; A.filt.Q.value = 0.5; A.filt.connect(c.destination);
+  A.master = c.createGain(); A.master.gain.value = 0.9; A.master.connect(A.filt);
+  A.ambG = c.createGain(); A.ambG.connect(A.master); A.duckG = c.createGain(); A.duckG.connect(A.ambG);
+  A.fxG = c.createGain(); A.fxG.connect(A.master);
+  A.an = c.createAnalyser(); A.an.fftSize = 2048; A.master.connect(A.an);
+  const mk = (kind) => { const n = c.sampleRate * 3, b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0); let last = 0;
+    for (let i = 0; i < n; i++) { const wn = Math.random() * 2 - 1; if (kind === 'brown') { last = (last + 0.02 * wn) / 1.02; d[i] = last * 3.5; } else d[i] = wn; } return b; };
+  A.white = mk('white'); A.brown = mk('brown');
+  $('#snd').style.display = 'none'; applyMix(); setAmbience();
+}
+function applyMix() { if (!A.ctx) return; const t = A.ctx.currentTime; A.ambG.gain.setTargetAtTime(A.amb, t, 0.1); A.fxG.gain.setTargetAtTime(A.fx, t, 0.1); A.duckG.gain.setTargetAtTime(A.duck ? 0.3 : 1, t, 0.12); A.filt.frequency.setTargetAtTime(T.filt, t, 0.3); }
+const nz = (kind, loop = true) => { const s = A.ctx.createBufferSource(); s.buffer = kind === 'brown' ? A.brown : A.white; s.loop = loop; s.start(0, Math.random() * 2); return s; };
+const chain = (src, ...nodes) => { let n = src; for (const x of nodes) { n.connect(x); n = x; } return n; };
+const bq = (type, f, Q = 1) => { const b = A.ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = Q; return b; };
+const gn = v => { const g = A.ctx.createGain(); g.gain.value = v; return g; };
+function lfo(rate, depth, param, ctxTarget) { const o = A.ctx.createOscillator(); o.frequency.value = rate; const g = gn(depth); o.connect(g); g.connect(param); o.start(); ctxTarget.push(o); }
+function env(g, t0, a, peak, d) { g.gain.cancelScheduledValues(t0); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(peak, t0 + a); g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d); }
+function setAmbience() {
+  if (!A.ctx) return; const c = A.ctx, now = c.currentTime;
+  A.timers.forEach(clearTimeout); A.timers = [];
+  const old = A.nodes; A.nodes = [];
+  if (A.bus) { const b = A.bus; b.gain.setTargetAtTime(0, now, 0.25); setTimeout(() => { old.forEach(n => { try { n.stop(); } catch {} }); b.disconnect(); }, 1500); }
+  const bus = A.bus = gn(0); bus.gain.setTargetAtTime(1, now + 0.2, 0.4); bus.connect(A.duckG);
+  const keep = [], mix = T.mix;
+  const add = (n) => { keep.push(n); return n; };
+  if (deck === 1) {                                    // Engine Room: a low heart-beat of machinery, steam, metal
+    chain(add(nz('brown')), bq('lowpass', 150), gn(0.8)).connect(bus);
+    const o1 = c.createOscillator(), o2 = c.createOscillator(); o1.frequency.value = 41; o2.type = 'sawtooth'; o2.frequency.value = 82; add(o1); add(o2); o1.start(); o2.start();
+    const dg = gn(0.06); chain(o1, dg); const dg2 = gn(0.02); chain(o2, bq('lowpass', 220), dg2); dg.connect(bus); dg2.connect(bus);
+    lfo(1.7, 0.05, dg.gain, keep); lfo(1.7, 0.016, dg2.gain, keep);
+    const hiss = gn(0); chain(add(nz('white')), bq('highpass', 3200), hiss).connect(bus);
+    const loopHiss = () => { const t = c.currentTime; hiss.gain.setValueAtTime(0.0001, t); hiss.gain.linearRampToValueAtTime(0.05 * mix.sub, t + 0.15); hiss.gain.exponentialRampToValueAtTime(0.0001, t + 1.6 + Math.random()); A.timers.push(setTimeout(loopHiss, 3500 + Math.random() * 6000)); };
+    A.timers.push(setTimeout(loopHiss, 1500));
+  } else {                                             // Wheelhouse: weather and sea against the glass
+    const wind = c.createGain(); wind.gain.value = 0.22 * mix.wind; const wbp = bq('bandpass', 520, 0.7); chain(add(nz('white')), wbp, wind).connect(bus);
+    lfo(0.11, 280, wbp.frequency, keep); lfo(0.17, 0.09 * mix.wind, wind.gain, keep);
+    chain(add(nz('white')), bq('highpass', 1600), bq('lowpass', 7500), gn(0.05 * mix.rain)).connect(bus);
+    const wv = gn(0.28 * mix.sub); chain(add(nz('brown')), bq('lowpass', 320), wv).connect(bus); lfo(0.13, 0.14 * mix.sub, wv.gain, keep);
+  }
+  const creak = () => { const t = c.currentTime, o = c.createOscillator(), g = gn(0), f = bq('bandpass', deck === 1 ? 380 : 260, 9); o.type = 'sawtooth';
+    const base = deck === 1 ? 90 : 170; o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.45, t + 0.5); o.frequency.linearRampToValueAtTime(base * 0.8, t + 1.1);
+    env(g, t, 0.25, 0.13 * mix.creak, 1.0); chain(o, f, g).connect(bus); o.start(t); o.stop(t + 1.4); A.timers.push(setTimeout(creak, 5000 + Math.random() * 7000)); };
+  A.timers.push(setTimeout(creak, 2500));
+  A.nodes = keep; applyMix(); pipeBed();
+}
+function pipeBed() {                                    // the Voice Pipe's own sound: faint air in a brass tube, there only while the partner is connected
+  if (!A.ctx) return; if (A.pipe) { const p = A.pipe; p.g.gain.setTargetAtTime(0, A.ctx.currentTime, 0.2); setTimeout(() => { try { p.s.stop(); } catch {} }, 900); A.pipe = null; }
+  if (!A.pipeBed) return;
+  const s = nz('white'), g = gn(0), f = bq('bandpass', deck === 1 ? 210 : 260, 22); chain(s, f, g).connect(A.fxG); g.gain.setTargetAtTime(0.35, A.ctx.currentTime, 0.4); A.pipe = { s, g };
+}
+const tone = (f, t, dur, vol, type = 'sine', dest, f2) => { const o = A.ctx.createOscillator(), g = gn(0); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur); env(g, t, 0.004, vol, dur); o.connect(g); g.connect(dest || A.fxG); o.start(t); o.stop(t + dur + 0.1); };
+const burst = (t, dur, vol, f, type = 'bandpass', Q = 1) => { const s = nz('white'), g = gn(0); env(g, t, 0.002, vol, dur); chain(s, bq(type, f, Q), g).connect(A.fxG); s.stop(t + dur + 0.1); };
+const bellAt = (t, f, vol) => { for (const [r, v, d] of [[1, 1, 2.2], [2.01, 0.55, 1.4], [2.76, 0.35, 1.0], [4.07, 0.2, 0.6]]) tone(f * r, t, d, vol * v, 'sine'); };
+Object.assign(SND, {
+  key: () => { const t = A.ctx.currentTime; burst(t, 0.03, 0.5, 2600, 'bandpass', 2); tone(1700, t, 0.05, 0.12, 'sine', 0, 800); tone(190, t, 0.09, 0.35, 'sine', 0, 110); },
+  valve: () => { const t = A.ctx.currentTime, o = A.ctx.createOscillator(), g = gn(0), f = bq('bandpass', 900, 5); o.type = 'sawtooth'; o.frequency.setValueAtTime(260, t); o.frequency.linearRampToValueAtTime(380, t + 0.4); env(g, t, 0.05, 0.16, 0.45); chain(o, f, g).connect(A.fxG); o.start(t); o.stop(t + 0.6); tone(80, t, 0.2, 0.3); },
+  helm: () => { const t = A.ctx.currentTime; for (let i = 0; i < 6; i++) burst(t + i * 0.07, 0.03, 0.22, 700 + i * 40, 'bandpass', 3); tone(130, t, 0.5, 0.12, 'sawtooth', 0, 160); },
+  telegraph: () => { const t = A.ctx.currentTime; for (let i = 0; i < 3; i++) tone(1450, t + i * 0.09, 0.5, 0.2, 'sine'); for (let i = 0; i < 5; i++) burst(t + i * 0.04, 0.02, 0.2, 3000, 'bandpass', 4); },
+  strike: () => { const t = A.ctx.currentTime; for (const [f, v] of [[310, 1], [497, 0.8], [733, 0.6], [1130, 0.4], [1517, 0.25]]) tone(f, t, 1.5, 0.18 * v, 'sine'); burst(t, 0.12, 0.7, 250, 'lowpass'); tone(68, t, 0.7, 0.55, 'sine', 0, 38); L.jolt = 1; L.dim = 1; flashRed(); },
+  solve: () => { const t = A.ctx.currentTime; bellAt(t, 523, 0.22); bellAt(t + 0.18, 784, 0.22); },
+  warn5: () => { const t = A.ctx.currentTime; for (let i = 0; i < 5; i++) bellAt(t + i * 0.55, 660, 0.22); },
+  partner: (join = true) => { const t = A.ctx.currentTime; tone(join ? 520 : 760, t, 0.55, 0.22, 'sine', 0, join ? 780 : 480); burst(t, 0.2, 0.18, 400, 'lowpass'); tone(70, t, 0.15, 0.3); },
+  launch: () => { const t = A.ctx.currentTime; for (let i = 0; i < 14; i++) burst(t + i * 0.06, 0.04, 0.3, 1800 + (i % 3) * 300, 'bandpass', 5); [523, 659, 784, 1047].forEach((f, i) => bellAt(t + 0.9 + i * 0.22, f, 0.18)); burst(t + 0.7, 1.4, 0.35, 900, 'lowpass'); },
+  sink: () => { const t = A.ctx.currentTime, o = A.ctx.createOscillator(), g = gn(0), f = bq('lowpass', 500); o.type = 'sawtooth'; o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(34, t + 3.5); env(g, t, 0.6, 0.4, 3.2); chain(o, f, g).connect(A.fxG); o.start(t); o.stop(t + 4); burst(t, 3.5, 0.3, 160, 'lowpass'); for (let i = 0; i < 4; i++) tone(1100 - i * 160, t + 0.4 + i * 0.7, 0.9, 0.07, 'sine'); },
+  thunder: () => { const t = A.ctx.currentTime; burst(t, 2.8, 0.7 * T.mix.rain, 90, 'lowpass'); burst(t + 0.05, 1.2, 0.3 * T.mix.rain, 200, 'lowpass'); },
+});
+const play = (k, ...a) => { if (!A.ctx) audioStart(); if (A.ctx && SND[k]) SND[k](...a); };
+
+/* ============================================================
+   THE SCENE
+   ============================================================ */
+let renderer, scene, camera, anims = [], clickables = [], torch, nameTexA = null;
+const P = { x: 0, z: 0, yaw: 0, pitch: -0.1 };
+const IN = { keys: new Set(), stick: null, ptr: null };
+const box = (w, h, d, mat, x, y, z, parent = scene) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); parent.add(m); return m; };
+const cyl = (rt, rb, h, mat, x, y, z, parent = scene, seg = 18) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat); m.position.set(x, y, z); parent.add(m); return m; };
+const torus = (r, tube, mat, x, y, z, parent = scene) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 28), mat); m.position.set(x, y, z); parent.add(m); return m; };
+const rep = (tex, a, b) => { if (!tex) return tex; const t = tex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(a, b); return t; };
+const glow = (c, size, x, y, z, parent = scene) => { if (grey) return null; const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false })); s.scale.set(size, size, 1); s.position.set(x, y, z); s.raycast = () => {}; parent.add(s); return s; };
+const click = (m, act, fx) => { m.userData.act = act; m.userData.fx = fx; clickables.push(m); return m; };
+const SOL = { 1: [{ x: -3.2, z: 2.6, sx: 1.4, sz: 1.6 }, { x: 2.6, z: 2.6, sx: 1.2, sz: 1.0 }, { x: 1.25, z: -0.5, sx: 1.4, sz: 1.4 }, { x: 3.55, z: -2.3, sx: 0.9, sz: 1.4 }],
+  2: [{ x: -3.2, z: 0, sx: 0.8, sz: 0.8 }, { x: -3.3, z: -1.9, sx: 0.6, sz: 0.6 }, { x: -3.3, z: 1.9, sx: 0.6, sz: 0.6 }, { x: -1.6, z: 3.1, sx: 1.8, sz: 0.9 }] };
+const DIM = { 1: { w: 8, d: 7, h: 3 }, 2: { w: 8, d: 7, h: 2.6 } };
+
+function buildScene() {
+  T = THEMES[cfg.variant] || THEMES.A; grey = cfg.grey || !!T.grey; deck = cfg.deck; C = deck === 1 ? T.e : T.w;
+  const R = DIM[deck];
+  scene = new THREE.Scene(); scene.add(camera); anims = []; clickables = [];
+  scene.background = new THREE.Color(grey ? 0x8a8f96 : 0x050607);
+  if (!grey) scene.fog = new THREE.FogExp2(C.fog[0], C.fog[1]);
+  deck === 1 ? buildEngine(R) : buildWheelhouse(R);
+  if (grey) { scene.add(new THREE.AmbientLight(0xffffff, 1.25)); const d = new THREE.DirectionalLight(0xffffff, 1.4); d.position.set(2, 6, 3); scene.add(d); }
+  else scene.add(new THREE.AmbientLight(C.amb[0], C.amb[1]));
+  torch = new THREE.PointLight(0xffffff, 0, 3, 1.5); camera.add(torch);
+  P.x = deck === 1 ? 0.4 : 0; P.z = deck === 1 ? 2.8 : 3.0; P.yaw = deck === 1 ? -0.1 : 0; P.pitch = -0.1;
+}
+function shell(R, wallMat, floorMat, ceilMat, skipWalls = []) {
+  const f = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), floorMat); f.rotation.x = -Math.PI / 2; scene.add(f);
+  const c = new THREE.Mesh(new THREE.PlaneGeometry(R.w, R.d), ceilMat); c.position.y = R.h; c.rotation.x = Math.PI / 2; scene.add(c);
+  const wall = (name, w, x, z, ry) => { if (skipWalls.includes(name)) return; const m = new THREE.Mesh(new THREE.PlaneGeometry(w, R.h), wallMat(w)); m.position.set(x, R.h / 2, z); m.rotation.y = ry; scene.add(m); };
+  wall('N', R.w, 0, -R.d / 2, 0); wall('S', R.w, 0, R.d / 2, Math.PI); wall('W', R.d, -R.w / 2, 0, Math.PI / 2); wall('E', R.d, R.w / 2, 0, -Math.PI / 2);
+}
+function shipPlate(x, y, z, ry, w = 1.0, h = 0.3) {
+  const t = textTex('S.S. ' + cfg.ship.toUpperCase(), 512, 154, hex(C.trim), '#2a1c08', '700 58px Georgia, serif', '#6b4a14');
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), MT(t)); m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m;
+}
+function voicePipe(x, y, z, ry) {          // a brass tube down the wall ending in a flared mouth, with a hinged cap
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+  const br = M(C.trim);
+  cyl(0.05, 0.05, DIM[deck].h - y, br, 0.06, (DIM[deck].h + y) / 2, 0.08, g);
+  const bend = torus(0.12, 0.05, br, 0.06, y + 0.0, 0.2, g); bend.rotation.y = Math.PI / 2; bend.scale.set(1, 1, 1); bend.visible = false;
+  const horn = cyl(0.22, 0.05, 0.3, br, 0.06, y, 0.25, g, 20); horn.rotation.x = Math.PI / 2;
+  cyl(0.19, 0.19, 0.02, M(0x1a1008), 0.06, y, 0.4, g, 20).rotation.x = Math.PI / 2;
+  const cap = cyl(0.23, 0.23, 0.02, br, 0.06, y, 0.42, g, 20); cap.rotation.x = Math.PI / 2; cap.position.x = 0.06; cap.visible = false;
+  for (const k of [-0.35, 0.35]) torus(0.06, 0.012, br, 0.06, (DIM[deck].h + y) / 2 + k * 1.2, 0.08, g);
+  const tag = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.1), MT(textTex('VOICE PIPE', 256, 64, hex(C.trim), '#2a1c08', '700 34px Georgia, serif', '#6b4a14'))); tag.position.set(0.06, y - 0.36, 0.1); g.add(tag);
+  glow(C.trim, 0.8, 0.06, y, 0.3, g);
+}
+function plate(g, w, h, frame) { box(w, h, 0.08, M(0x2f2b27), 0, 0, 0.04, g); for (const [bw, bh, bx, by] of [[w + 0.1, 0.05, 0, h / 2 + 0.02], [w + 0.1, 0.05, 0, -h / 2 - 0.02], [0.05, h, -w / 2 - 0.02, 0], [0.05, h, w / 2 + 0.02, 0]]) box(bw, bh, 0.1, M(frame), bx, by, 0.05, g); }
+function panelGroup(wall, at, y, R) { const g = new THREE.Group(); const p = { N: [at, -R.d / 2, 0], S: [at, R.d / 2, Math.PI], W: [-R.w / 2, at, Math.PI / 2], E: [R.w / 2, at, -Math.PI / 2] }[wall]; g.position.set(p[0], y, p[1]); g.rotation.y = p[2]; scene.add(g); return g; }
+
+/* ---------- Engine Room: soot, riveted iron, a boiler, a furnace, a lantern ---------- */
+function buildEngine(R) {
+  const rv = (w) => MT(rivetTex(C.wall, [Math.round(w / 2), Math.round(R.h / 2)]));
+  shell(R, rv, MT(gratingTex([R.w * 1.5, R.d * 1.5])), M(C.ceil));
+  const iron = M(0x3a342e), brass = M(C.trim), rust = M(0x6b3b20), soot = M(0x1c1814);
+  // ceiling pipes, flanges, a drop
+  for (const z of [-2.6, -0.3, 1.8]) { const p = cyl(0.11, 0.11, R.w, iron, 0, 2.66, z, scene, 12); p.rotation.z = Math.PI / 2; for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) { const f = cyl(0.16, 0.16, 0.06, brass, x, 2.66, z, scene, 12); f.rotation.z = Math.PI / 2; } }
+  cyl(0.09, 0.09, 2.7, iron, -3.75, 1.35, -0.3, scene, 10); cyl(0.09, 0.09, 2.7, iron, 3.75, 1.35, 1.8, scene, 10);
+  // the boiler: a riveted column floor to ceiling, a glass gauge, a brass dial
+  const bx = 1.25, bz = -0.5;
+  cyl(0.62, 0.62, 3, MT(rivetTex(0x5a4a3e, [4, 3])), bx, 1.5, bz, scene, 24); for (const y of [0.4, 1.5, 2.6]) torus(0.64, 0.045, brass, bx, y, bz).rotation.x = Math.PI / 2;
+  cyl(0.035, 0.035, 1.1, EM(grey ? 0xcccccc : 0x7be39a), bx, 1.1, bz + 0.64, scene, 8);
+  const dial = dyn(128, 128, (x, w, h, t) => { x.fillStyle = '#f4ead0'; x.fillRect(0, 0, w, h); x.strokeStyle = '#2a1c08'; x.lineWidth = 4; x.beginPath(); x.arc(64, 70, 46, Math.PI, 0); x.stroke(); x.strokeStyle = '#b91c1c'; x.lineWidth = 8; x.beginPath(); x.arc(64, 70, 46, -0.9, -0.1); x.stroke(); const a = Math.PI * (1 - (0.55 + Math.sin(t * 0.7) * 0.06)); x.strokeStyle = '#111'; x.lineWidth = 4; x.beginPath(); x.moveTo(64, 70); x.lineTo(64 + 42 * Math.cos(a), 70 - 42 * Math.sin(a)); x.stroke(); });
+  const dm = new THREE.Mesh(new THREE.CircleGeometry(0.17, 24), MT(dial.tex)); dm.position.set(bx, 1.8, bz + 0.64); scene.add(dm); torus(0.17, 0.025, brass, bx, 1.8, bz + 0.64); dial.draw(0); anims.push((t) => { if ((t * 10 | 0) % 3 === 0) dial.draw(t); });
+  // furnace on the east wall: a hot door and the main light
+  const fx = 3.55, fz = -2.3;
+  box(0.9, 1.7, 1.4, MT(rivetTex(0x4a3a30, [1, 1])), fx, 0.85, fz); box(0.06, 1.0, 0.9, M(0x14100c), 3.08, 0.95, fz);
+  const fdoor = dyn(256, 200, (x, w, h, t) => { x.fillStyle = '#220a02'; x.fillRect(0, 0, w, h); const g = x.createRadialGradient(w / 2, h * 0.7, 6, w / 2, h * 0.6, 120); g.addColorStop(0, '#ffd27a'); g.addColorStop(0.5, `rgba(255,${100 + (Math.sin(t * 7) * 20 | 0)},20,.95)`); g.addColorStop(1, '#3a0e04'); x.fillStyle = g; x.fillRect(8, 8, w - 16, h - 16); x.fillStyle = '#16100c'; for (let i = 1; i < 5; i++) x.fillRect(i * w / 5 - 3, 8, 6, h - 16); });
+  const fd = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.62), grey ? EM(0xff9a40) : new THREE.MeshBasicMaterial({ map: fdoor.tex, fog: false })); fd.position.set(3.04, 0.95, fz); fd.rotation.y = -Math.PI / 2; scene.add(fd); fdoor.draw(0);
+  box(0.1, 0.12, 0.9, brass, 3.04, 1.34, fz); box(0.1, 0.12, 0.9, brass, 3.04, 0.56, fz);
+  anims.push((t) => { if ((t * 8 | 0) % 2 === 0) fdoor.draw(t); });
+  const fl = new THREE.PointLight(0xff6a1a, 0, 0, 1.6); fl.position.set(2.8, 0.9, fz); scene.add(fl);
+  glow(0xff7a20, 2.6, 3.0, 0.95, fz);
+  // lantern and the wall lamp
+  cyl(0.012, 0.012, 0.7, iron, -1.2, 2.65, 0.9, scene, 4); const lan = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), EM(C.lamp[0])); lan.position.set(-1.2, 2.2, 0.9); scene.add(lan); cyl(0.14, 0.14, 0.02, brass, -1.2, 2.34, 0.9); cyl(0.14, 0.14, 0.02, brass, -1.2, 2.06, 0.9);
+  const lg = glow(C.lamp[0], 1.2, -1.2, 2.2, 0.9); const lp = new THREE.PointLight(C.lamp[0], 0, 0, 1.6); lp.position.set(-1.2, 2.1, 0.9); scene.add(lp);
+  // coal bunker, crates, barrels
+  box(1.4, 0.7, 1.6, M(0x3a2a1c), -3.2, 0.35, 2.6); for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18 + Math.random() * 0.18, 0), M(0x12100e)); m.position.set(-3.2 + (Math.random() - 0.5) * 1.1, 0.7 + Math.random() * 0.25, 2.6 + (Math.random() - 0.5) * 1.3); m.rotation.set(Math.random() * 3, Math.random() * 3, 0); scene.add(m); }
+  box(1.0, 0.9, 0.9, M(0x6b5238), 2.6, 0.45, 2.6); box(0.7, 0.6, 0.7, M(0x7a5c3c), 2.55, 1.2, 2.55).rotation.y = 0.3; const barrel = cyl(0.32, 0.32, 0.8, M(0x5a3a22), 2.1, 0.4, 3.1); for (const y of [0.15, 0.65]) torus(0.325, 0.02, iron, 2.1, y, 3.1).rotation.x = Math.PI / 2;
+  // the way out
+  const door = box(1.0, 2.1, 0.08, M(0x5b3a1e), 1.8, 1.05, -R.d / 2 + 0.04); box(1.14, 0.08, 0.1, brass, 1.8, 2.14, -R.d / 2 + 0.05); box(0.08, 2.14, 0.1, brass, 1.27, 1.07, -R.d / 2 + 0.05); box(0.08, 2.14, 0.1, brass, 2.33, 1.07, -R.d / 2 + 0.05);
+  shipPlate(0.4, 1.9, -R.d / 2 + 0.05, 0, 0.9, 0.27);
+  voicePipe(-3.97, 1.2, -2.5, Math.PI / 2);
+  // the Puzzle panels, dressed: keypad (north), cabinet (east), valve wheels (west)
+  const kp = panelGroup('N', -1.5, 1.45, R); plate(kp, 0.64, 0.9, C.trim);
+  const sym = ['▲', '●', '■', '★', '◆', '✚'];
+  sym.forEach((s, i) => { const b = box(0.16, 0.16, 0.05, MT(textTex(s, 96, 96, '#44403c', '#fafaf9', '72px sans-serif', '#1c1917')), -0.19 + (i % 3) * 0.19, 0.08 - Math.floor(i / 3) * 0.2, 0.105, kp); click(b, 'key', { z0: 0.105 }); });
+  const kd = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.14), grey ? EM(0x88aa88) : EM(0x86efac)); kd.position.set(0, 0.3, 0.09); kp.add(kd);
+  const cab = panelGroup('E', 0, 1.4, R); plate(cab, 1.0, 1.0, C.trim); box(0.9, 0.9, 0.03, M(0x5b4a38), 0, 0, 0.1, cab); box(0.05, 0.2, 0.06, brass, 0.35, 0, 0.13, cab);
+  const vw = panelGroup('W', 0, 1.35, R); plate(vw, 2.1, 1.1, C.trim);
+  for (let k = 0; k < 3; k++) { const wh = new THREE.Group(); wh.position.set((k - 1) * 0.7, 0.1, 0.16); vw.add(wh); torus(0.21, 0.04, M(0xb91c1c), 0, 0, 0, wh); for (let a = 0; a < 3; a++) box(0.42, 0.03, 0.03, M(0xb91c1c), 0, 0, 0, wh).rotation.z = a * Math.PI / 3; const hit = cyl(0.23, 0.23, 0.05, new THREE.MeshBasicMaterial({ visible: false }), 0, 0, 0, wh); hit.rotation.x = Math.PI / 2; click(hit, 'valve', { spin: wh }); cyl(0.05, 0.05, 0.08, brass, 0, 0, 0.0, wh).rotation.x = Math.PI / 2; }
+  // steam leaking from a flange
+  const puffs = []; for (let i = 0; i < 7; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, color: 0xdddddd, transparent: true, depthWrite: false, opacity: 0 })); s.raycast = () => {}; scene.add(s); puffs.push(s); }
+  if (!grey) anims.push((t) => puffs.forEach((s, i) => { const k = ((t * 0.35 + i / puffs.length) % 1); s.position.set(-3.2 + k * 0.5, 2.5 - 0.1 + k * 0.55, -2.6 + k * 0.4); s.scale.setScalar(0.25 + k * 0.9); s.material.opacity = (1 - k) * 0.5; }));
+  // light behaviour
+  const k = C.lamp[1];
+  anims.push((t, dt) => { const g = 1 - L.dim * 0.75; fl.intensity = grey ? 0 : (14 * T.e.furnace + Math.sin(t * 11) * 3 + Math.sin(t * 5.3) * 2) * g; lp.intensity = grey ? 0 : (k + Math.sin(t * 3.1) * 0.7) * g; if (lg) lg.material.opacity = g; });
+}
+
+/* ---------- Wheelhouse: planked teak, brass, a wall of windows, a helm ---------- */
+function buildWheelhouse(R) {
+  const plaster = (w) => MT(T.windows === 'portholes' ? plankTex(C.wall, [Math.round(w / 2), 1], true) : canvasTex(128, 128, (x, a, b) => { x.fillStyle = hex(C.wall); x.fillRect(0, 0, a, b); for (let i = 0; i < 200; i++) { x.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; x.fillRect(Math.random() * a, Math.random() * b, 4, 4); } }, [Math.round(w / 2), 1]));
+  shell(R, plaster, MT(plankTex(C.floor, [3, 3], false)), MT(plankTex(C.ceil, [3, 3], true)), ['W']);
+  const wood = M(C.wood), brass = M(C.trim), dark = M(0x2a1c10);
+  // wainscot and brass rail on N, S, E; ceiling beams
+  for (const [w, x, z, ry] of [[R.w, 0, -R.d / 2 + 0.02, 0], [R.w, 0, R.d / 2 - 0.02, Math.PI], [R.d, R.w / 2 - 0.02, 0, -Math.PI / 2]]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.95), MT(plankTex(C.wood, [Math.round(w / 1.5), 1], true))); m.position.set(x, 0.475, z); m.rotation.y = ry; scene.add(m); const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.05), M(C.trim)); r.position.set(x + (ry ? 0 : 0), 0.97, z); r.rotation.y = ry; r.translateZ(0.02); scene.add(r); }
+  for (const z of [-2.2, 0, 2.2]) box(R.w, 0.14, 0.2, wood, 0, R.h - 0.07, z);
+  // the west wall: windows (tall panes) or portholes onto a moving view
+  const view = dyn(1024, 256, (x, w, h, t) => drawView(x, w, h, t, T.view));
+  const vm = new THREE.Mesh(new THREE.PlaneGeometry(R.d + 0.5, R.h), grey ? EM(0xaab4c0) : new THREE.MeshBasicMaterial({ map: view.tex, fog: false })); vm.position.set(-R.w / 2 - 0.35, R.h / 2, 0); vm.rotation.y = Math.PI / 2; scene.add(vm);
+  if (!grey) { view.draw(0); anims.push((t) => { if ((t * 15 | 0) % 2 === 0) view.draw(t); }); }
+  const wm = M(C.wall);
+  if (T.windows === 'portholes') {
+    const sh = new THREE.Shape(); sh.moveTo(-R.d / 2, 0); sh.lineTo(R.d / 2, 0); sh.lineTo(R.d / 2, R.h); sh.lineTo(-R.d / 2, R.h); sh.lineTo(-R.d / 2, 0);
+    for (const z of [-2.1, 0, 2.1]) { const h = new THREE.Path(); h.absarc(z, 1.5, 0.42, 0, Math.PI * 2, true); sh.holes.push(h); }
+    const wall = new THREE.Mesh(new THREE.ShapeGeometry(sh), MT(plankTex(C.wall, [3, 1], true), { side: THREE.DoubleSide })); wall.position.x = -R.w / 2; wall.rotation.y = Math.PI / 2; wall.scale.x = -1; wall.rotation.y = -Math.PI / 2; wall.position.x = -R.w / 2; scene.add(wall);
+    for (const z of [-2.1, 0, 2.1]) { const r = torus(0.45, 0.05, brass, -R.w / 2 + 0.03, 1.5, z); r.rotation.y = Math.PI / 2; for (let b = 0; b < 8; b++) { const a = b / 8 * Math.PI * 2; cyl(0.02, 0.02, 0.04, brass, -R.w / 2 + 0.05, 1.5 + Math.sin(a) * 0.5, z + Math.cos(a) * 0.5, scene, 6).rotation.z = Math.PI / 2; } }
+  } else {
+    box(0.1, 0.9, R.d, wm, -R.w / 2 + 0.05, 0.45, 0); box(0.1, R.h - 2.1, R.d, wm, -R.w / 2 + 0.05, (R.h + 2.1) / 2, 0);
+    for (const [a, b] of [[-3.5, -2.8], [-1.4, -0.7], [0.7, 1.4], [2.8, 3.5]]) box(0.1, 1.2, b - a, wm, -R.w / 2 + 0.05, 1.5, (a + b) / 2);
+    for (const z of [-2.1, 0, 2.1]) { box(0.06, 1.2, 0.05, brass, -R.w / 2 + 0.1, 1.5, z); box(0.06, 0.05, 1.4, brass, -R.w / 2 + 0.1, 1.5, z); }
+  }
+  if (T.view === 'storm') { const ll = new THREE.PointLight(0xbcd0ff, 0, 0, 1.4); ll.position.set(-3.6, 1.7, 0); scene.add(ll); anims.push(() => { ll.intensity = grey ? 0 : L.flash * 40; }); }
+  // helm, telegraph, binnacle: the rim of the floor
+  const hp = cyl(0.12, 0.2, 0.95, wood, -3.2, 0.475, 0); const hw = new THREE.Group(); hw.position.set(-3.2, 1.2, 0); scene.add(hw);
+  const ring = torus(0.38, 0.035, wood, 0, 0, 0, hw); ring.rotation.y = Math.PI / 2; for (let a = 0; a < 8; a++) { const sp = box(0.03, 0.76 + 0.2, 0.03, wood, 0, 0, 0, hw); sp.rotation.x = a * Math.PI / 8; } cyl(0.07, 0.07, 0.14, brass, 0, 0, 0, hw).rotation.z = Math.PI / 2;
+  const hhit = cyl(0.5, 0.5, 0.2, new THREE.MeshBasicMaterial({ visible: false }), -3.2, 1.2, 0); hhit.rotation.z = Math.PI / 2; click(hhit, 'helm', { spin: hw, axis: 'x' });
+  cyl(0.1, 0.16, 1.0, brass, -3.3, 0.5, -1.9); const td = dyn(256, 256, (x, w, h, t) => { x.fillStyle = '#f4ead0'; x.beginPath(); x.arc(128, 128, 122, 0, 7); x.fill(); x.fillStyle = '#2a1c08'; x.font = '700 22px Georgia'; x.textAlign = 'center'; ['STOP', 'AHEAD', 'FULL', 'ASTERN'].forEach((s, i) => { const a = -2.2 + i * 1.0; x.fillText(s, 128 + 88 * Math.sin(a), 134 - 88 * Math.cos(a)); }); x.strokeStyle = '#b91c1c'; x.lineWidth = 9; x.lineCap = 'round'; const a = -2.2 + (0.5 + Math.sin(t * 0.3) * 0.2) * 3; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + 100 * Math.sin(a), 128 - 100 * Math.cos(a)); x.stroke(); });
+  const tm = new THREE.Mesh(new THREE.CircleGeometry(0.3, 28), MT(td.tex)); tm.position.set(-3.18, 1.3, -1.9); tm.rotation.y = Math.PI / 2; scene.add(tm); td.draw(0); const tr = torus(0.3, 0.03, brass, -3.18, 1.3, -1.9); tr.rotation.y = Math.PI / 2; click(tm, 'telegraph', {});
+  cyl(0.14, 0.2, 0.9, wood, -3.3, 0.45, 1.9); const bn = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), brass); bn.position.set(-3.3, 0.9, 1.9); scene.add(bn); const cmp = new THREE.Mesh(new THREE.CircleGeometry(0.15, 20), EM(grey ? 0xffeeaa : 0xffdca0)); cmp.rotation.x = -Math.PI / 2; cmp.position.set(-3.3, 0.96, 1.9); scene.add(cmp);
+  // the chart table
+  box(1.6, 0.06, 0.8, wood, -1.6, 0.95, 3.1); for (const [dx, dz] of [[-0.7, -0.3], [0.7, -0.3], [-0.7, 0.3], [0.7, 0.3]]) box(0.07, 0.95, 0.07, wood, -1.6 + dx, 0.475, 3.1 + dz);
+  const ch = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.6), MT(canvasTex(256, 128, (x, w, h) => { x.fillStyle = '#e5d6ae'; x.fillRect(0, 0, w, h); x.strokeStyle = '#4a5f7a'; x.lineWidth = 2; x.beginPath(); x.moveTo(10, 100); x.bezierCurveTo(70, 20, 120, 110, 240, 30); x.stroke(); x.strokeStyle = '#7a1f12'; x.setLineDash([6, 5]); x.beginPath(); x.moveTo(10, 40); x.lineTo(240, 96); x.stroke(); }))); ch.rotation.x = -Math.PI / 2; ch.position.set(-1.6, 0.985, 3.1); scene.add(ch);
+  // lamps and the light
+  const ml = (z, x) => { cyl(0.012, 0.012, 0.45, dark, x, R.h - 0.22, z, scene, 4); const b = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), EM(C.lamp[0])); b.position.set(x, R.h - 0.5, z); scene.add(b); cyl(0.13, 0.13, 0.02, brass, x, R.h - 0.38, z); cyl(0.13, 0.13, 0.02, brass, x, R.h - 0.62, z); return glow(C.lamp[0], 1.3, x, R.h - 0.5, z); };
+  const g1 = ml(0.6, 0.5), g2 = ml(2.4, 1.8);
+  const lp = new THREE.PointLight(C.lamp[0], 0, 0, 1.6); lp.position.set(0.3, R.h - 0.6, 1.4); scene.add(lp);
+  const lp2 = new THREE.PointLight(C.lamp[0], 0, 0, 1.6); lp2.position.set(-1.6, 1.6, 3.0); scene.add(lp2);
+  anims.push((t) => { const g = 1 - L.dim * 0.8, sw = Math.sin(t * 0.8) * 0.12; lp.intensity = grey ? 0 : (C.lamp[1] + sw * 4 + (T.view === 'sea' ? Math.sin(t * 1.7) * 1.4 : 0)) * g; lp2.intensity = grey ? 0 : C.lamp[1] * 0.35 * g; if (g1) g1.material.opacity = g2.material.opacity = g; });
+  // the ship's name, a lifebuoy, the voice pipe
+  const lb = torus(0.3, 0.07, M(0xf3efe6), 2.4, 1.55, R.d / 2 - 0.09); for (let a = 0; a < 4; a++) { const m = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.071, 8, 8, Math.PI / 4), M(0xb91c1c)); m.rotation.z = a * Math.PI / 2 + Math.PI / 8; m.position.copy(lb.position); scene.add(m); }
+  scene.children.slice(-4).forEach(m => { if (m.geometry?.type === 'TorusGeometry') m.rotation.y = 0; });
+  shipPlate(2.4, 1.1, R.d / 2 - 0.05, Math.PI, 1.1, 0.33);
+  voicePipe(3.97, 1.2, -1.2, -Math.PI / 2);
+  // the Puzzle panels, dressed: the mural (east), the instrument wall (north)
+  const mu = panelGroup('E', 2.4, 1.45, R); plate(mu, 1.5, 1.0, C.trim); const mm = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.93), MT(canvasTex(512, 340, (x, w, h) => { x.fillStyle = '#e7d8b5'; x.fillRect(0, 0, w, h); x.fillStyle = '#7c2d12'; x.font = '130px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; ['■', '★', '▲'].forEach((s, i) => x.fillText(s, w * (i + 0.5) / 3, h / 2 + 6)); }))); mm.position.z = 0.09; mu.add(mm);
+  const ig = panelGroup('N', 0, 1.5, R); plate(ig, 2.4, 1.3, C.trim); const needles = [];
+  for (let k = 0; k < 3; k++) { const d = dyn(256, 256, (x, w, h, t) => { x.fillStyle = '#1f2937'; x.fillRect(0, 0, w, h); x.strokeStyle = '#4b5563'; x.lineWidth = 6; x.beginPath(); x.arc(128, 196, 100, Math.PI, 2 * Math.PI); x.stroke(); x.strokeStyle = '#4ade80'; x.lineWidth = 16; x.beginPath(); x.arc(128, 196, 100, -2.3, -1.6); x.stroke(); const a = Math.PI * (1 - (0.45 + Math.sin(t * 0.9 + k) * 0.05)); x.strokeStyle = '#f9fafb'; x.lineWidth = 7; x.beginPath(); x.moveTo(128, 196); x.lineTo(128 + 90 * Math.cos(a), 196 - 90 * Math.sin(a)); x.stroke(); }); const pm = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), MT(d.tex)); pm.position.set((k - 1) * 0.8, 0.1, 0.09); ig.add(pm); d.draw(0); needles.push(d); }
+  anims.push((t) => { if ((t * 10 | 0) % 3 === 0) needles.forEach(d => d.draw(t)); });
+}
+
+/* ============================================================
+   WALKING, INPUT, USING THINGS (a trimmed copy of the movement prototype's scheme)
+   ============================================================ */
+function walkable(x, z) { const R = DIM[deck], RAD = 0.3; if (Math.abs(x) > R.w / 2 - RAD || Math.abs(z) > R.d / 2 - RAD) return false; for (const o of SOL[deck]) if (Math.abs(x - o.x) < o.sx / 2 + RAD && Math.abs(z - o.z) < o.sz / 2 + RAD) return false; return true; }
+function tryMove(dx, dz) { if (walkable(P.x + dx, P.z + dz)) { P.x += dx; P.z += dz; } else if (walkable(P.x + dx, P.z)) P.x += dx; else if (walkable(P.x, P.z + dz)) P.z += dz; }
+const ray = new THREE.Raycaster(), V2 = new THREE.Vector2(); let fxList = [];
+const rectOf = () => renderer.domElement.getBoundingClientRect();
+function tapAt(cx, cy) {
+  const r = rectOf(); V2.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); ray.setFromCamera(V2, camera);
+  const hit = ray.intersectObjects(scene.children, true).find(h => h.object.visible !== false && !(h.object.isSprite));
+  if (!hit || hit.distance > REACH) return;
+  let o = hit.object; while (o && !o.userData.act) o = o.parent; if (!o) return;
+  play(o.userData.act); const f = o.userData.fx || {};
+  if (f.z0 !== undefined) { o.position.z = f.z0 - 0.025; fxList.push([() => (o.position.z = f.z0), performance.now() + 140]); }
+  if (f.spin) { const s = f.spin; s.userData.axisSet = f.axis || 'z'; s.userData.target = (s.userData.target || 0) + 0.9; }
+}
+const lookBy = (dx, dy) => { P.yaw += dx * 0.006; P.pitch = clamp(P.pitch + dy * 0.006, -1.2, 1.0); };
+function bindCanvas() {
+  const el = renderer.domElement, locked = () => document.pointerLockElement === el;
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  el.addEventListener('pointerdown', e => {
+    audioStart(); if (IN.ptr) return;
+    if (cfg.lock) { if (!locked()) { try { el.requestPointerLock()?.catch?.(() => {}); } catch {} return; } const r = rectOf(); tapAt(r.left + r.width / 2, r.top + r.height / 2); return; }
+    IN.ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false }; el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e => {
+    if (cfg.lock && locked()) { P.yaw -= e.movementX * 0.0025; P.pitch = clamp(P.pitch - e.movementY * 0.0025, -1.2, 1.0); return; }
+    const p = IN.ptr; if (!p || p.id !== e.pointerId) return; const dx = e.clientX - p.lx, dy = e.clientY - p.ly; p.lx = e.clientX; p.ly = e.clientY;
+    if (!p.drag && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) p.drag = true; if (p.drag) lookBy(dx, dy);
+  });
+  const up = e => { const p = IN.ptr; if (!p || p.id !== e.pointerId) return; IN.ptr = null; if (e.type === 'pointerup' && !p.drag) tapAt(e.clientX, e.clientY); };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); document.addEventListener('pointerlockchange', syncUi);
+}
+const MOVE = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
+addEventListener('keydown', e => {
+  audioStart(); const k = e.key.toLowerCase();
+  if (k === '[' || k === ']') return cycle(k === ']' ? 1 : -1);
+  if (k === 'g') { cfg.grey = !cfg.grey; return rebuild(); }
+  if (k === 't' && !A.duck) { A.duck = true; applyMix(); return; }
+  if (k === 'escape') { $('#card').style.display = 'none'; return; }
+  if (MOVE[k]) { e.preventDefault(); IN.keys.add(MOVE[k]); }
+});
+addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 't') { A.duck = false; applyMix(); } IN.keys.delete(MOVE[k]); });
+addEventListener('blur', () => IN.keys.clear());
+addEventListener('pointerdown', audioStart, { capture: true });
+const stick = $('#stick'), knob = stick.querySelector('.knob');
+stick.addEventListener('pointerdown', e => { stick.setPointerCapture(e.pointerId); IN.stick = { id: e.pointerId, x: 0, y: 0 }; moveStick(e); });
+stick.addEventListener('pointermove', e => { if (IN.stick?.id === e.pointerId) moveStick(e); });
+const stickUp = () => { IN.stick = null; knob.style.transform = ''; }; stick.addEventListener('pointerup', stickUp); stick.addEventListener('pointercancel', stickUp);
+function moveStick(e) { const r = stick.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2); const m = Math.hypot(dx, dy), max = 46; if (m > max) { dx *= max / m; dy *= max / m; } knob.style.transform = `translate(${dx}px, ${dy}px)`; const dead = v => Math.abs(v) < 0.18 ? 0 : v; IN.stick.x = dead(dx / max); IN.stick.y = dead(dy / max); }
+
+/* ============================================================
+   FRAME LOOP
+   ============================================================ */
+let last = performance.now(), tAbs = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; tAbs += dt;
+  let fwd = (IN.keys.has('f') ? 1 : 0) - (IN.keys.has('b') ? 1 : 0), side = (IN.keys.has('r') ? 1 : 0) - (IN.keys.has('l') ? 1 : 0), turn = 0;
+  if (cfg.stick && IN.stick) { fwd = -IN.stick.y; turn = -IN.stick.x; }
+  P.yaw += turn * dt * 1.9;
+  if (fwd || side) { const len = Math.max(1, Math.hypot(fwd, side)), v = 2.2 * dt / len, sy = Math.sin(P.yaw), cy = Math.cos(P.yaw); tryMove((-sy * fwd + cy * side) * v, (-cy * fwd - sy * side) * v); }
+  if (tAbs > L.next && deck === 2 && T.view === 'storm' && A.ctx) { L.flash = 1; L.next = tAbs + 7 + Math.random() * 9; setTimeout(() => A.ctx && SND.thunder(), 350 + Math.random() * 1100); }
+  else if (tAbs > L.next) L.next = tAbs + 6 + Math.random() * 6;
+  L.flash = Math.max(0, L.flash - dt * 2.6) * (L.flash > 0.5 ? 1 : 1); L.jolt = Math.max(0, L.jolt - dt * 1.6); L.dim = Math.max(0, L.dim - dt * 0.9);
+  anims.forEach(f => f(tAbs, dt));
+  scene.traverse(o => { if (o.userData.target !== undefined) { const cur = o.userData.cur || 0; o.userData.cur = cur + (o.userData.target - cur) * Math.min(1, dt * 6); o.rotation[o.userData.axisSet || 'z'] = o.userData.cur; } });
+  fxList = fxList.filter(([fn, until]) => { if (performance.now() >= until) { fn(); return false; } return true; });
+  const jx = (Math.sin(tAbs * 55) * L.jolt * 0.035), jy = (Math.cos(tAbs * 47) * L.jolt * 0.03);
+  camera.position.set(P.x + jx, 1.6 + jy, P.z); camera.rotation.set(P.pitch, P.yaw, 0);
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   UI: tools panel, end cards, switcher
+   ============================================================ */
+function flashRed() { const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+const shipSvg = (kind) => kind === 'launched'
+  ? `<svg viewBox="0 0 400 150"><path d="M0 120 Q50 100 100 120 T200 120 T300 120 T400 120 V150 H0Z" fill="currentColor" opacity=".25"/><g transform="translate(150,70)"><path d="M0 30 Q50 52 100 30 L88 8 H12Z" fill="currentColor"/><rect x="40" y="-6" width="3" height="14" fill="currentColor"/><path d="M43 -6 L74 6 H43Z" fill="currentColor" opacity=".7"/></g><path d="M0 130 Q50 112 100 130 T200 130 T300 130 T400 130" stroke="currentColor" fill="none" stroke-width="3"/></svg>`
+  : kind === 'sunk'
+  ? `<svg viewBox="0 0 400 170"><g transform="rotate(-17 200 90)"><path d="M40 90 Q200 124 360 90 L330 55 H80Z" fill="currentColor"/><rect x="150" y="14" width="26" height="42" rx="3" fill="currentColor"/><rect x="200" y="22" width="22" height="34" rx="3" fill="currentColor"/><rect x="262" y="0" width="3" height="56" fill="currentColor"/>${[100, 130, 160, 190, 220, 250, 280, 310].map(x => `<circle cx="${x}" cy="76" r="4" fill="#000" opacity=".4"/>`).join('')}</g><path d="M0 120 Q50 102 100 120 T200 120 T300 120 T400 120 V170 H0Z" fill="currentColor" opacity=".35"/><path d="M0 120 Q50 102 100 120 T200 120 T300 120 T400 120" stroke="currentColor" fill="none" stroke-width="3"/></svg>`
+  : `<svg viewBox="0 0 400 90"><circle cx="200" cy="45" r="30" fill="none" stroke="currentColor" stroke-width="5"/><rect x="190" y="25" width="6" height="40" fill="currentColor"/><rect x="204" y="25" width="6" height="40" fill="currentColor"/></svg>`;
+function showCard(kind) {
+  const c = $('#card'); if (!kind) { c.style.display = 'none'; return; }
+  const name = 'S.S. ' + cfg.ship;
+  const body = { launched: [`Lifeboat launched`, `Both of you made it aboard.`, `Time left on the Clock <b>12:41</b> · Strikes <b>1</b><br>Score <b>12:41</b>`],
+    sunk: [`She's going down`, `The ship is lost. A new Voyage is a new ship and a fresh Draw.`, `Time on the Clock <b>0:00</b> · Strikes <b>3</b>`],
+    paused: [`Paused`, `Your partner's Deck has gone quiet. The Clock and the ship are holding.`, `Waiting for the other Deck to reconnect`] }[kind];
+  c.className = T.card; c.innerHTML = `<div class="cardbox"><div class="kick">${body[0]}</div><div class="ship">${name}</div>${shipSvg(kind)}<div class="line">${body[1]}</div><div class="stats">${body[2]}</div><button data-card="close">${kind === 'paused' ? 'Close' : 'Back to the ship'}</button></div>`;
+  c.style.display = 'grid'; if (kind === 'launched') play('launch'); if (kind === 'sunk') play('sink');
+}
+function drawTools() {
+  const b = (id, label, on) => `<button data-do="${id}" class="${on ? 'on' : ''}">${label}</button>`;
+  $('#tools').innerHTML = `<h4>Sounds</h4><div class="g">${b('strike', 'Strike')}${b('solve', 'Puzzle solved')}${b('warn5', '5 minutes left')}${b('partner-j', 'Partner joins the pipe')}${b('partner-l', 'Partner leaves')}${b('thunder', 'Thunder')}</div>
+  <h4>Mix</h4><div class="g"><label>Ambience <input type="range" min="0" max="1" step="0.05" value="${A.amb}" data-mix="amb"></label><label>Effects <input type="range" min="0" max="1" step="0.05" value="${A.fx}" data-mix="fx"></label>${b('bed', 'Voice Pipe air bed', A.pipeBed)}${b('duck', 'Hold T: duck while talking', A.duck)}</div>
+  <h4>Cards</h4><div class="g">${b('c-launched', 'Lifeboat launched')}${b('c-sunk', 'Going down')}${b('c-paused', 'Paused')}${b('name', 'New ship name')}</div>
+  <h4>View</h4><div class="g">${b('deck', 'Deck: ' + (deck === 1 ? 'Engine Room' : 'Wheelhouse') + ' ⇄')}${b('grey', 'Greybox', cfg.grey)}${b('pop', 'Other Deck in a new window')}</div>`;
+}
+document.addEventListener('click', e => {
+  const m = e.target.closest('[data-do]'), cd = e.target.closest('[data-card]');
+  if (cd) { showCard(null); return; }
+  if (!m) return; audioStart(); const k = m.dataset.do;
+  if (k === 'strike' || k === 'solve' || k === 'warn5' || k === 'thunder') play(k);
+  else if (k === 'partner-j') play('partner', true); else if (k === 'partner-l') play('partner', false);
+  else if (k === 'bed') { A.pipeBed = !A.pipeBed; pipeBed(); } else if (k === 'duck') { A.duck = !A.duck; applyMix(); }
+  else if (k.startsWith('c-')) { showCard(k.slice(2)); return; }
+  else if (k === 'name') { cfg.ship = SHIPS[(SHIPS.indexOf(cfg.ship) + 1) % SHIPS.length]; rebuild(); }
+  else if (k === 'deck') { cfg.deck = 3 - cfg.deck; rebuild(); }
+  else if (k === 'grey') { cfg.grey = !cfg.grey; rebuild(); }
+  else if (k === 'pop') open(location.pathname + '?' + new URLSearchParams({ variant: cfg.variant, deck: 3 - deck, ship: cfg.ship, grey: cfg.grey ? 1 : 0 }), 'deck' + (3 - deck), 'width=420,height=900');
+  drawTools();
+});
+document.addEventListener('input', e => { const r = e.target.closest('[data-mix]'); if (!r) return; A[r.dataset.mix] = +r.value; applyMix(); });
+$('#toolbtn').onclick = () => { $('#tools').classList.toggle('open'); drawTools(); };
+function syncUi() { const locked = renderer && document.pointerLockElement === renderer.domElement; $('#crosshair').style.display = cfg.lock && locked ? 'block' : 'none'; $('#lockhint').style.display = cfg.lock && !locked ? 'block' : 'none'; $('#stick').style.display = cfg.stick ? 'block' : 'none'; }
+function hud() {
+  const R = deck === 1 ? ['Lower Deck', 'Engine Room'] : ['Upper Deck', 'Wheelhouse'];
+  $('#help').innerHTML = `<b>${cfg.variant} · ${T.name}</b>${grey ? ' · greybox' : ''}${cfg.stick ? '' : '<br>WASD walk · click to look · click again to use · [ ] looks · g greybox · hold T duck'}`;
+  $('#hint').innerHTML = `<b>${R[0]} · ${R[1]}</b> · S.S. ${cfg.ship}`;
+  $('#vlabel').textContent = cfg.variant + ' · ' + T.name;
+  const u = new URL(location); u.searchParams.set('variant', cfg.variant); u.searchParams.set('deck', deck); u.searchParams.set('ship', cfg.ship); u.searchParams.set('grey', cfg.grey ? 1 : 0); try { history.replaceState(null, '', u); } catch {}
+}
+function rebuild() { buildScene(); applyMix(); setAmbience(); hud(); syncUi(); showCard(null); if ($('#tools').classList.contains('open')) drawTools(); }
+function cycle(d) { cfg.variant = ORDER[(ORDER.indexOf(cfg.variant) + d + ORDER.length) % ORDER.length]; rebuild(); }
+$('#prev').onclick = () => cycle(-1); $('#next').onclick = () => cycle(1);
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+try { renderer = new THREE.WebGLRenderer({ antialias: true }); } catch (e) { document.body.insertAdjacentHTML('afterbegin', '<div class="nogl">WebGL is unavailable here. A real build would fall back to the 2D view.</div>'); throw e; }
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); $('#view').append(renderer.domElement);
+camera = new THREE.PerspectiveCamera(70, 1, 0.05, 40); camera.rotation.order = 'YXZ';
+const fit = () => { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? Math.min(105, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) / (w / h)) * 180 / Math.PI) : 70; camera.updateProjectionMatrix(); };
+addEventListener('resize', fit); fit(); bindCanvas();
+buildScene(); hud(); syncUi(); if (q.get('tools') === '1') { $('#tools').classList.add('open'); drawTools(); } if (q.get('card')) showCard(q.get('card'));
+window.__proto = { cfg, A, audioStart, play, get deck() { return deck; }, showCard, P, rebuild };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
