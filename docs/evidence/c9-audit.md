@@ -82,3 +82,15 @@ at override, the run ended secured with zero strikes, and both browser
 page-error/console-error lists were empty. Desktop and narrow screenshots were
 visually inspected, alongside the reconnect screenshot. This is agent-run UI
 inspection, not evidence of classmates enjoying the game or a human pod trial.
+
+## Final production-style suite
+
+`PLAYWRIGHT_BROWSERS_PATH=/tmp/c9-browsers EVIDENCE_DIR=/tmp/c9-ui pnpm check`:
+8 files, 43 tests passed, including typecheck. Browser timing measured from the
+outgoing POST to the remote DOM: 19 ms to Expert strike; 6 ms to the open
+station log. The tests assert <1000 ms; timings describe this local run only.
+`pnpm build` passed. `pnpm check:evidence` passed. No lint/format script exists;
+`git diff --check` is the whitespace check. Final documentation: README within
+400–600 words, PROCESS within 900–1100, reflection within 150–300 with both
+standing prompts. Production deployment is intentionally left to the existing
+`main` merge workflow; these results do not claim the branch is deployed.

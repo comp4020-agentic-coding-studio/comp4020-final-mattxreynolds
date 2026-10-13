@@ -30,3 +30,20 @@ can judge; those are left to the crit and the marker.
 At a crit, a green `check` job is half the shipped mark, but it's never the
 judgement of the work: your tutor checks what you deployed against the published
 spec.
+
+## Browser and restart checks
+
+Install locked dependencies with `pnpm install --frozen-lockfile`, then install
+Chromium with `pnpm exec playwright install chromium` (`--with-deps` on fresh
+Linux). Build with `pnpm build`, start with `pnpm start`, and run `pnpm check`
+in another terminal. `DATA_DIR` can point to a disposable directory for local
+verification. Restart the production server after rebuilding its assets.
+
+`browser.test.ts` opens separate Chromium contexts with independent storage;
+it never treats two components or role tabs as two people. It checks visible
+propagation within 1000ms from the actual outgoing command, recovery, isolated
+rooms and delayed acknowledgements. Set `EVIDENCE_DIR` to an external directory
+to capture screenshots and timings. `persistence.test.ts` uses isolated API
+processes and temporary databases, removing them afterwards. Neither test
+needs production credentials. Against a deployed older version, new-contract
+checks will fail until that version is deployed.

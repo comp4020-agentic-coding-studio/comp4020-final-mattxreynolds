@@ -2,111 +2,124 @@
 
 ## From the brief to Dead Air
 
-The brief asks for a multi-user, real-time website that's good, and warns that
-an agent left to itself builds the median answer. Before touching this repo I
-used Claude Code to compare two directions: an asymmetric co-op game in the
-spirit of *Keep Talking and Nobody Explodes* and *Spaceteam*, or a small party
-board game with simultaneous trivia. I went with the co-op game. Its multi-user
-part isn't bolted on: the game doesn't exist without two people, and the
-information split between them gives the server a real job, since it has to
-make sure the Expert never sees the device.
+Dead Air began with a choice between an asymmetric co-op game inspired by
+*Keep Talking and Nobody Explodes* and *Spaceteam*, and a party board game with
+simultaneous trivia. I chose the co-op game. Its multi-user behaviour is part
+of the game: two seats hold different information and must talk. A throwaway
+static prototype fixed the appearance before the server build. The definition
+of good remains communication, a quick start, fairness and a station that
+remembers its crews.
 
-I then built a throwaway static prototype, *Dead Air*, outside this repo: one
-page, three fixed modules and two role tabs, with no server. It fixed the look
-and the feel of the two seats before I committed to a stack. This repo starts
-from that prototype.
+During C8, three batches of questions directed Claude Code. I chose React,
+Vite and Express over the recommended vanilla-JS port because this is the
+stack I can explain and extend. I requested both private room codes and solo
+seat switching. Random devices, a general-rule manual, editable anonymous
+callsigns and new missions in the same room came from those answers. The dev
+server ran from the first minute
+([`4a59ac1`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/4a59ac1)),
+and commits recorded working steps. Persistence made randomisation necessary:
+a fixed replayable device would reward memorisation instead of conversation.
 
-## How I directed the build
+## Stack and constraints
 
-I ran the first build as one long Claude Code session the night before crit 8,
-with a deliberate rule: the agent asks me questions in batches before writing
-code, and only stops when the prototype is ready to show. Three batches set
-the design:
+React gives the five modules and two seats a component structure. Express
+serves the API and built Vite client from one process; Node 24 runs TypeScript
+with type stripping. SQLite uses the existing Fly volume rather than requiring
+a separate database service. These choices fit the course's single small
+machine, but synchronous writes and in-process streams constrain scaling.
 
-- **Stack, multiplayer, persistence and modules.** The agent recommended
-  vanilla JS on Express as the fastest port of the prototype. I chose Vite,
-  React and Express instead, because that's the stack I can explain and extend
-  for four more weeks. For multiplayer it offered "room codes" or "local tabs",
-  and I asked for both. Every visitor gets their own room, so pairs at the
-  crit don't collide, and both seats stay available in one browser so one
-  person can test alone. I picked the keypad and switch panel from four
-  proposed modules.
-- **Variation, timer, identity and deployment.** The prototype's device was
-  fixed, so a logged, replayable run would turn into a memory test. I chose
-  randomised devices with a manual of general rules, kept the 5:00 clock and
-  3 strikes, and chose an auto-generated, editable callsign over a login gate.
-  I kept deployment local for the session so I could deploy myself.
-- **Harness, checks and the run lifecycle.** I asked for a draft CLAUDE.md for
-  me to rewrite, spec checks for every promise, and a new device in the same
-  room after each run.
+SSE carries server-to-client snapshots; ordinary POSTs carry actions. WebSockets
+would add a second protocol without solving the gameplay decision. SQLite
+stores devices, deadlines, strikes and mission history. Manual text and rule
+logic live together in `shared/game.ts`
+([`2c02f96`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/2c02f96)).
+Server authority and role-filtered views preserve the information split.
+Seats remain switchable views, not exclusive ownership or adversarial security.
 
-The dev server ran from the first minute ([`4a59ac1`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/4a59ac1)),
-so I could watch the build come together in the browser, and the agent
-committed at each working step.
+## Directing C9
 
-## Stack, and why
+For C9 I instructed Codex to audit the actual application, make one defensible
+multi-user decision, improve the backpressure and finish with a reviewable PR.
+The instruction explicitly preserved the definition of good and rejected a
+superficial transport replacement. The agent read the live
+[C9 brief](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/crits/09-all-at-once/)
+and [final project contract](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/assessments/final-project/),
+then the project material, architecture, specs and C8 history. It confirmed a
+clean tree, updated `main` and branched from `2aab958`.
 
-| Choice | Over | Because |
-| --- | --- | --- |
-| React client built by Vite | Porting the prototype's vanilla JS | Five modules and two seats are component-shaped, and it's my stack. It cost a rewrite of the prototype's markup on the first night. |
-| Express, TypeScript run directly by Node 24 | A compiled server or a zero-dependency `node:http` server | Type stripping means no server build step. In dev, Express mounts Vite as middleware, so dev and production are both one process on :8080. |
-| SQLite via `node:sqlite`, on the `/data` volume | Postgres with Prisma | The course's Fly setup gives one 256 MB machine and one volume, with no database server. `node:sqlite` is built into Node, so there's no native module to compile in the image. |
-| Server-sent events for updates, POST for actions | WebSockets, or polling | Updates only flow server-to-client, and actions are ordinary requests. SSE reconnects by itself and passes through Fly's proxy. The trade-off is that an open tab keeps the machine awake. |
+The starting assumption in the old process overview was that SSE already
+covered real-time. Investigation separated transport from semantics. All 21
+baseline tests passed, yet a concurrent double flip restored the original
+switch position. An out-of-range integer action returned an error after
+starting the clock in memory without saving or broadcasting it. The existing
+malformed-action check covered a string, missing that boundary. Independent
+desktop/mobile browser contexts reproduced a third gap: after going offline,
+the Expert still saw “LINK: LIVE”. Inspection also found ten-second station-log
+polling and HTTP responses able to replace newer stream state.
 
-The server is the authority: clients send intents like "cut wire 2", and only
-the server judges them. Each rule's manual text and its logic live side by side
-in `shared/game.ts`, so the manual the Expert reads and the check the server
-runs come from the same place ([`2c02f96`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/2c02f96)).
-Rooms are written through to SQLite on every change, so a live mission
-survives a restart or redeploy with the same device, strikes and deadline.
+The [audit](docs/evidence/c9-audit.md) records these findings. Failing checks
+and the decision were committed before implementation
+([`6dde07c`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/6dde07c)).
 
-## Grounding the work
+## The multi-user decision
 
-The agent's claims about the game are only as good as what checks them, so
-the promises the README makes are tests against the running app
-([`e2ea270`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/e2ea270)).
-One test plays a whole device through the API using only the manual's rules.
-Another generates 2000 random devices and checks each module has exactly one
-answer. The agent also drove the real UI in a headless browser: two separate
-players joining by code, a full defuse through the buttons, and both marking
-viewports, with screenshots I could check.
+[ADR 0001](docs/adr/0001-observed-state-actions.md) considers accepting every
+arrival, reserving the Operator seat, merging by module, and requiring the
+observed mission/revision. The last option was chosen because a key pressed on
+an unseen stage is not a communication mistake. First valid arrival wins;
+stale commands are refused without strikes and require another read-back.
+Presence changes do not invalidate an instruction.
 
-## Corrections
+The cost is rejecting simultaneous actions even on unrelated modules.
+Exclusive ownership would need takeover rules and disrupt solo switching;
+module merging would add dependencies around strikes, override and reset.
+No option promises fairness by player identity. Lost acknowledgements are
+resolved by reading the recovered device, not automatically retrying commands.
+This is a deliberate small-game policy for one server, not distributed merging.
 
-- **A malformed action started the clock.** Probing the API showed that a
-  request with no body crashed with a 500, and a `cut` with a nonsense wire
-  started the countdown before being refused. The fix validates an action's
-  shape first, and a spec check now holds it
-  ([`0db8377`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/0db8377)).
-- **The station log grew without limit.** After the first build I asked for
-  the lobby's log to stop growing. It now shows the latest eight runs, while
-  every run stays in the database so totals and personal records still count
-  them all ([`6dac076`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/6dac076)).
-- **Mobile layout.** Screenshots at 390px showed the override button squeezed
-  into a tall column. It was fixed before the client was committed
-  ([`5c9f6f6`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/5c9f6f6)).
-- **Feedback you can feel.** Watching a run end showed that a strike and a
-  finished mission were easy to miss, especially on a phone. The console now
-  shakes on each strike on both screens, and shows an end-of-run banner
-  ([`865cd1e`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/865cd1e)).
+## Implementation and corrections
 
-## The harness
+Revision checks, field bounds and transactional state/end-log writes landed
+in [`6720569`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/6720569).
+Rejected actions use a discarded copy, preventing hidden mutations. Deadline
+expiry is checked at access as well as by the timer. Existing C8 rooms begin
+at revision zero without replacing their devices.
 
-CLAUDE.md started as an agent draft of the rules this session followed: the
-server is the authority, the Expert never gets the device, rule text and logic
-change together, every README promise gets a check, fit the Fly box, keep the
-prototype's look, and check both viewports. I'll rewrite it in my own terms
-before crit 9. When the agent gets something wrong, the correction should land
-there or in `spec/` rather than as another retry.
+Next, SSE became the client's sole source of room views. Controls pause on
+link loss and while submitting; reconnect restores a full snapshot, including
+an ended mission. Acknowledgements cannot roll back newer events. Stream
+cleanup removes empty room sets and heartbeats; queued writes are bounded.
+Late joiners are saved into the mission crew. Open station logs now stream
+personalised updates
+([`3490a29`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/3490a29)).
 
-The agent flagged that the brief advises drafting the README and this document
-yourself. I had it draft both from the session and from my answers, then
-reviewed and edited them. The definition of good is mine to defend at the crit.
+Screenshot review then found that the recovery warning sat below the long
+Expert manual on a phone. It moved above the timer with a viewport assertion
+([`3922f38`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/3922f38)).
+One verification rerun used stale asset references after rebuilding while the
+production server retained its old index. Restarting after build corrected
+the setup; the clean browser run passed. This operational lesson also went
+into CLAUDE.md.
 
-## Next
+## Backpressure and limits
 
-Week 10 asks for real-time, which SSE already covers, so that week goes on a
-written multi-user decision: what happens when both seats press at once.
-Week 11 adds server-side logging. The judged claims in the README, that talking
-is the game and that a stranger is playing within a minute, get tested by
-watching pods play at crit 8.
+The full `pnpm check` passed 43 checks, including the original game rules,
+2000 generated-device checks and privacy checks. New HTTP/SSE specs cover
+same-snapshot races, duplicate keypad input, old missions, filtered conflicts,
+room isolation, every listener, presence and live station logs. Browser tests
+use separate storage contexts, real buttons, desktop/narrow layouts, offline
+recovery, leave/rejoin, and a real HTTP response delayed behind newer SSE.
+Restart tests use independent processes and disposable SQLite: device,
+revision, deadline and late crew survive; downtime expiry logs once.
+
+A separate UI review completed all five modules without a strike. Giving the
+Expert browser a 45-second clock skew still produced matching countdowns.
+Screenshots were inspected and console-error lists were empty. These are
+agent-run checks, not a human pod trial or proof every network meets one
+second. The judged claims still need first-time pairs at the crit.
+
+CLAUDE.md now records server authority, information separation, observed-state
+commands, persistence before broadcast and independent-session verification.
+The reflection is an evidence-based draft for my review. Deployment remains
+unchanged: this public repo's CI checks and deploys `main` after merge; the
+branch itself has only been verified locally in production mode.
