@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PROTOTYPE – movement (throwaway)</title>
+<!--
+  PROTOTYPE · THROWAWAY · never merged.
+  Question (wayfinder ticket "How do Players move and look in 3D with a single pointer?"):
+  what should moving and looking around a 3D Room feel like, at 1920×1080 with a mouse and at
+  390×844 portrait with one emulated touch point?
+
+  One greybox Engine Room with furniture to walk around, nine control schemes switchable via
+  ?variant= and the floating bottom bar (or [ and ]; the arrow keys are taken by walking):
+    Desktop  D1 WASD + drag to look   D2 WASD + mouse look (pointer lock)
+             D3 WASD + right-drag look   D4 point and click (no keyboard)
+    Touch    T1 joystick   T2 arrow buttons   T3 tap to walk   T4 hold to walk   T5 viewpoints + look
+  ⇄ on the bar swaps between the desktop and touch sets. The page opens on the touch set when the
+  pointer is coarse (DevTools device mode with touch).
+
+  An errand (Logbook → Valves → Gauges → Keypad) times each scheme so they can be compared;
+  results stay in memory for this tab only. G shows the walkable area, R restarts the errand.
+  three.js 0.170 loads from jsdelivr, so this needs a network connection.
+-->
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#0b0a09; color:#f5f5f4; font:14px/1.35 system-ui, sans-serif; }
+  #view { position:fixed; inset:0; }
+  #view canvas { display:block; width:100%; height:100%; touch-action:none; }
+  .nogl { position:fixed; inset:0; display:grid; place-items:center; padding:24px; text-align:center; }
+
+  .hud { position:fixed; left:8px; right:8px; top:8px; pointer-events:none; display:flex; flex-direction:column; gap:6px; align-items:flex-start; z-index:5; }
+  .chip { background:rgba(0,0,0,.62); padding:6px 9px; border-radius:6px; max-width:calc(100% - 18px); }
+  .chip b { color:#fbbf24; }
+  .chip.help { font-size:13px; }
+  .state { font:11px/1.4 ui-monospace, monospace; color:#d6d3d1; }
+  .chip button { pointer-events:auto; font:inherit; font-size:12px; margin-left:6px; padding:2px 8px; border-radius:4px; border:0; background:#f5f5f4; cursor:pointer; }
+  #results { font:11px/1.45 ui-monospace, monospace; }
+  #results:empty { display:none; }
+
+  #crosshair { position:fixed; left:50%; top:50%; width:14px; height:14px; margin:-7px 0 0 -7px; pointer-events:none; display:none; z-index:4; }
+  #crosshair::before, #crosshair::after { content:''; position:absolute; background:#fff; mix-blend-mode:difference; }
+  #crosshair::before { left:6px; top:0; width:2px; height:14px; } #crosshair::after { top:6px; left:0; height:2px; width:14px; }
+  #lockhint { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,.7); padding:10px 14px; border-radius:8px; pointer-events:none; display:none; z-index:4; }
+
+  /* T1 joystick */
+  #stick { position:fixed; left:24px; bottom:72px; width:132px; height:132px; border-radius:50%; background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.35); touch-action:none; display:none; z-index:6; }
+  #stick .knob { position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px; border-radius:50%; background:rgba(245,245,244,.85); pointer-events:none; }
+
+  /* T2 arrow buttons */
+  #pad { position:fixed; left:50%; transform:translateX(-50%); bottom:68px; display:none; grid-template-columns:repeat(3,60px); grid-template-rows:repeat(2,60px); gap:6px; z-index:6; }
+  #pad button { font-size:22px; border:0; border-radius:12px; background:rgba(245,245,244,.82); touch-action:none; user-select:none; -webkit-user-select:none; cursor:pointer; }
+  #pad button.on { background:#fbbf24; }
+  #pad .up { grid-column:2; grid-row:1; } #pad .left { grid-column:1; grid-row:2; } #pad .down { grid-column:2; grid-row:2; } #pad .right { grid-column:3; grid-row:2; }
+
+  /* T5 viewpoints */
+  #vpbar { position:fixed; left:50%; transform:translateX(-50%); bottom:72px; display:none; align-items:center; gap:8px; background:rgba(0,0,0,.6); padding:6px; border-radius:999px; z-index:6; }
+  #vpbar button { width:48px; height:48px; border-radius:50%; border:0; background:#f5f5f4; font-size:18px; touch-action:manipulation; cursor:pointer; }
+  #vpbar span { min-width:120px; text-align:center; font-size:13px; }
+
+  /* T4 hold indicator */
+  #holdring { position:fixed; width:54px; height:54px; margin:-27px 0 0 -27px; border-radius:50%; border:3px solid #fbbf24; pointer-events:none; display:none; z-index:6; }
+
+  #toast { position:fixed; left:50%; transform:translateX(-50%); bottom:150px; width:min(360px, calc(100% - 32px)); background:#fffdf8; color:#1c1917; border-radius:12px; padding:12px 14px; box-shadow:0 10px 30px rgba(0,0,0,.5); display:none; z-index:7; font-size:14px; }
+
+  /* floating variant switcher (prototype chrome, not part of the design) */
+  #switcher { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:4px; background:#0f172a; color:#fff; padding:5px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.45); font-size:13px; white-space:nowrap; }
+  #switcher button { border:0; background:#334155; color:#fff; width:34px; height:34px; border-radius:50%; cursor:pointer; font-size:16px; touch-action:manipulation; }
+  #switcher span { padding:0 8px; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+</head>
+<body>
+<div id="view"></div>
+<div class="hud">
+  <div class="chip help" id="help"></div>
+  <div class="chip" id="errand"></div>
+  <div class="chip state" id="state"></div>
+  <div class="chip" id="results"></div>
+</div>
+<div id="crosshair"></div>
+<div id="lockhint">Click to look around · Esc releases the mouse</div>
+<div id="stick"><div class="knob"></div></div>
+<div id="pad"><button class="up" data-k="up">▲</button><button class="left" data-k="left">⟲</button><button class="down" data-k="down">▼</button><button class="right" data-k="right">⟳</button></div>
+<div id="vpbar"><button data-d="-1">◀</button><span></span><button data-d="1">▶</button></div>
+<div id="holdring"></div>
+<div id="toast"></div>
+<div id="switcher"><button id="prev" title="previous scheme ([)">‹</button><span id="vlabel"></span><button id="next" title="next scheme (])">›</button><button id="group" title="swap desktop / touch schemes">⇄</button></div>
+
+<script type="module">
+let THREE = null;
+try { THREE = await import('three'); } catch (e) { console.warn('three.js failed to load', e); }
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ============================================================
+   VARIANTS
+   ============================================================ */
+const VARIANTS = [
+  { key: 'D1', set: 'desktop', name: 'WASD + drag to look', keys: true, look: 'drag',
+    help: '<b>WASD</b> or arrows to walk · <b>drag</b> to look · <b>click a thing</b> to walk up and use it' },
+  { key: 'D2', set: 'desktop', name: 'WASD + mouse look (pointer lock)', keys: true, look: 'lock',
+    help: '<b>Click</b> to capture the mouse · <b>move</b> to look · <b>WASD</b> to walk · <b>click</b> uses what the crosshair is on, if close · <b>Esc</b> releases' },
+  { key: 'D3', set: 'desktop', name: 'WASD + right-drag look', keys: true, look: 'rdrag', tapWalk: true,
+    help: '<b>WASD</b> to walk · hold the <b>right button</b> and move to look · <b>left-click</b> the floor to walk there, a thing to use it' },
+  { key: 'D4', set: 'desktop', name: 'Point and click', look: 'drag', tapWalk: true,
+    help: '<b>Click the floor</b> to walk there · <b>click a thing</b> to walk up and use it · <b>drag</b> to look · no keyboard' },
+  { key: 'T1', set: 'touch', name: 'Joystick', look: 'drag', ui: 'stick',
+    help: '<b>Stick</b>: push up to walk, sideways to turn · <b>drag the view</b> to look · <b>tap a thing</b> to walk up and use it' },
+  { key: 'T2', set: 'touch', name: 'Arrow buttons', look: 'drag', ui: 'pad',
+    help: 'Hold <b>▲ ▼</b> to walk, <b>⟲ ⟳</b> to turn · <b>drag the view</b> to look · <b>tap a thing</b> to walk up and use it' },
+  { key: 'T3', set: 'touch', name: 'Tap to walk', look: 'drag', tapWalk: true,
+    help: '<b>Tap the floor</b> to walk there · <b>drag</b> to look · <b>tap a thing</b> to walk up and use it' },
+  { key: 'T4', set: 'touch', name: 'Hold to walk', look: 'hold',
+    help: '<b>Press and hold</b> to walk the way you face · <b>drag while holding</b> to steer · a quick <b>drag</b> looks · <b>tap a thing</b> to use it' },
+  { key: 'T5', set: 'touch', name: 'Viewpoints + look', look: 'drag', ui: 'vp',
+    help: '<b>◀ ▶</b> to move between spots · <b>drag</b> to look · <b>tap a thing</b> to go to it' },
+];
+
+/* ============================================================
+   ROOM DATA · the Engine Room (Lower Deck), greybox
+   Metres; x runs west→east, z north→south; yaw 0 looks north, yaw π/2 looks west.
+   solids block walking; things are what a Player can use, each with an approach pose (ap).
+   ============================================================ */
+const ROOM = { w: 8, d: 7, h: 3.0, start: { x: 0.4, z: 2.9, yaw: -0.1 } };
+const SOLIDS = [
+  { id: 'boiler', x: -1.2, z: -0.9, sx: 2.4, sz: 2.0 },
+  { id: 'bench', x: 2.9, z: -1.0, sx: 1.0, sz: 2.0 },
+  { id: 'crates', x: 2.6, z: 2.4, sx: 1.2, sz: 1.0 },
+  { id: 'coal', x: -3.2, z: 2.6, sx: 1.4, sz: 1.6 },
+  { id: 'pipe', x: 2.0, z: 0.5, r: 0.12 },
+  { id: 'telegraph', x: -0.6, z: 2.2, r: 0.18 },
+];
+const THINGS = [
+  { id: 'logbook', label: 'Logbook', ap: { x: 1.85, z: -1.0, yaw: -Math.PI / 2, pitch: -0.55 } },
+  { id: 'valves', label: 'Valves', ap: { x: -3.0, z: -2.6, yaw: Math.PI / 2, pitch: -0.1 } },
+  { id: 'gauges', label: 'Gauges', ap: { x: 3.0, z: 1.0, yaw: -Math.PI / 2, pitch: 0 } },
+  { id: 'keypad', label: 'Keypad', ap: { x: 1.4, z: -2.5, yaw: 0, pitch: -0.05 } },
+  { id: 'telegraph', label: 'Telegraph', ap: { x: -0.6, z: 3.0, yaw: 0, pitch: -0.3 } },
+];
+const ERRAND = ['logbook', 'valves', 'gauges', 'keypad'];
+
+/* walkable area: everything inside the walls not within RAD of a solid */
+const RAD = 0.3, CELL = 0.2, GW = Math.round(ROOM.w / CELL), GD = Math.round(ROOM.d / CELL);
+function blocked(x, z) {
+  if (Math.abs(x) > ROOM.w / 2 - RAD || Math.abs(z) > ROOM.d / 2 - RAD) return true;
+  for (const o of SOLIDS) {
+    if (o.r ? Math.hypot(x - o.x, z - o.z) < o.r + RAD : Math.abs(x - o.x) < o.sx / 2 + RAD && Math.abs(z - o.z) < o.sz / 2 + RAD) return true;
+  }
+  return false;
+}
+const cx = i => -ROOM.w / 2 + (i + 0.5) * CELL, cz = j => -ROOM.d / 2 + (j + 0.5) * CELL;
+const gi = x => clamp(Math.floor((x + ROOM.w / 2) / CELL), 0, GW - 1), gj = z => clamp(Math.floor((z + ROOM.d / 2) / CELL), 0, GD - 1);
+const GRID = new Uint8Array(GW * GD);
+for (let j = 0; j < GD; j++) for (let i = 0; i < GW; i++) GRID[j * GW + i] = blocked(cx(i), cz(j)) ? 1 : 0;
+const open = (i, j) => i >= 0 && j >= 0 && i < GW && j < GD && !GRID[j * GW + i];
+
+function nearestOpen(i, j) {
+  if (open(i, j)) return [i, j];
+  for (let r = 1; r < 40; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++)
+    if (Math.max(Math.abs(di), Math.abs(dj)) === r && open(i + di, j + dj)) return [i + di, j + dj];
+  return [i, j];
+}
+function sight(a, b) {
+  const n = Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.08);
+  for (let k = 1; k <= n; k++) { const t = k / n; if (blocked(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false; }
+  return true;
+}
+/* A* over the grid, then pull the string so paths are straight lines between corners */
+function findPath(from, to) {
+  const [si, sj] = nearestOpen(gi(from.x), gj(from.z));
+  const [ti, tj] = nearestOpen(gi(to.x), gj(to.z));
+  const end = blocked(to.x, to.z) ? { x: cx(ti), z: cz(tj) } : { x: to.x, z: to.z };
+  if (sight(from, end)) return [end];
+  const id = (i, j) => j * GW + i, g = new Float32Array(GW * GD).fill(Infinity), came = new Int32Array(GW * GD).fill(-1), done = new Uint8Array(GW * GD);
+  const h = (i, j) => { const dx = Math.abs(i - ti), dy = Math.abs(j - tj); return Math.max(dx, dy) + 0.414 * Math.min(dx, dy); };
+  const openSet = [id(si, sj)]; g[id(si, sj)] = 0;
+  while (openSet.length) {
+    let bi = 0; for (let k = 1; k < openSet.length; k++) { const a = openSet[k], b = openSet[bi]; if (g[a] + h(a % GW, a / GW | 0) < g[b] + h(b % GW, b / GW | 0)) bi = k; }
+    const cur = openSet.splice(bi, 1)[0]; if (done[cur]) continue; done[cur] = 1;
+    const ci = cur % GW, cj = cur / GW | 0; if (ci === ti && cj === tj) break;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      if (!di && !dj) continue; const ni = ci + di, nj = cj + dj;
+      if (!open(ni, nj) || (di && dj && (!open(ci + di, cj) || !open(ci, cj + dj)))) continue;
+      const ng = g[cur] + (di && dj ? 1.414 : 1), n = id(ni, nj);
+      if (ng < g[n]) { g[n] = ng; came[n] = cur; openSet.push(n); }
+    }
+  }
+  const cells = []; for (let c = id(ti, tj); c !== -1; c = came[c]) cells.unshift({ x: cx(c % GW), z: cz(c / GW | 0) });
+  if (cells.length < 2) return [end];
+  cells[cells.length - 1] = end;
+  const out = []; let at = from, k = 0;
+  while (k < cells.length) { let far = k; for (let m = cells.length - 1; m > k; m--) if (sight(at, cells[m])) { far = m; break; } out.push(cells[far]); at = cells[far]; k = far + 1; }
+  return out;
+}
+
+/* ============================================================
+   PLAYER STATE (in memory)
+   ============================================================ */
+const P = { x: 0, z: 0, yaw: 0, pitch: -0.1, path: null, onArrive: null, tYaw: null, tPitch: null, speed: 2.2 };
+const IN = { keys: new Set(), stick: null, pad: {}, hold: false, ptr: null };
+const ER = { i: 0, t0: null, dist: 0, taps: 0, done: null };
+const RESULTS = [];
+let V = VARIANTS[0], vpIndex = 0, showGrid = false;
+
+function reset() {
+  Object.assign(P, { x: ROOM.start.x, z: ROOM.start.z, yaw: ROOM.start.yaw, pitch: -0.1, path: null, onArrive: null, tYaw: null, tPitch: null });
+  Object.assign(ER, { i: 0, t0: null, dist: 0, taps: 0, done: null });
+  vpIndex = 0; hideToast(); drawPath();
+}
+const startClock = () => { if (ER.t0 == null && !ER.done) ER.t0 = performance.now(); };
+const countInput = () => { startClock(); if (!ER.done) ER.taps++; };
+
+function walkTo(to, onArrive, speed = 2.2) {
+  const path = findPath(P, to);
+  P.path = path; P.onArrive = onArrive || null; P.speed = speed; drawPath();
+}
+function cancelPath() { if (P.path) { P.path = null; P.onArrive = null; drawPath(); } }
+function approach(t) {
+  const a = t.ap;
+  P.tYaw = a.yaw;
+  if (Math.hypot(P.x - a.x, P.z - a.z) < 0.25) { P.tPitch = a.pitch; arrive(t); return; }
+  walkTo(a, () => { P.tPitch = a.pitch; arrive(t); }, V.ui === 'vp' ? 3.0 : 2.2);
+}
+function arrive(t) {
+  let extra = '';
+  if (!ER.done && ERRAND[ER.i] === t.id) {
+    ER.i++;
+    if (ER.i === ERRAND.length) {
+      ER.done = { t: (performance.now() - ER.t0) / 1000, dist: ER.dist, taps: ER.taps };
+      RESULTS.push({ key: V.key, name: V.name, ...ER.done });
+      extra = `<br><b>Errand done</b> in ${ER.done.t.toFixed(1)} s, ${ER.done.dist.toFixed(1)} m, ${ER.done.taps} inputs.`;
+    }
+  }
+  toast(`<b>${t.label}</b>: the close-up would open here (what you do with it is the in-scene Puzzle ticket).${extra}`);
+}
+
+/* ============================================================
+   RENDERER
+   ============================================================ */
+let renderer, scene, camera, pickables = [], thingMeshes = {}, pathLine, gridMesh, marker;
+const host = $('#view');
+const texCache = {};
+function textTexture(key, w, h, draw) {
+  if (texCache[key]) return texCache[key];
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return (texCache[key] = t);
+}
+const labelTex = t => textTexture('l' + t, 256, 64, (x, w, h) => { x.fillStyle = 'rgba(0,0,0,.55)'; x.beginPath(); x.roundRect(0, 8, w, 48, 24); x.fill(); x.fillStyle = '#fff'; x.font = '600 30px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, w / 2, h / 2); });
+
+function build() {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  host.append(renderer.domElement);
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0a09);
+  camera = new THREE.PerspectiveCamera(70, 1, 0.05, 40); camera.rotation.order = 'YXZ'; scene.add(camera);
+  const lam = c => new THREE.MeshLambertMaterial({ color: c });
+  const box = (sx, sy, sz, c, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), lam(c)); m.position.set(x, y, z); scene.add(m); return m; };
+  const blocker = m => { m.userData.block = true; pickables.push(m); return m; };
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), lam(0x3f3a35)); floor.rotation.x = -Math.PI / 2; floor.userData.floor = true; scene.add(floor); pickables.push(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), lam(0x221d19)); ceil.rotation.x = Math.PI / 2; ceil.position.y = ROOM.h; scene.add(ceil);
+  const wall = (w, x, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, ROOM.h), lam(0x6f5f50)); m.position.set(x, ROOM.h / 2, z); m.rotation.y = ry; scene.add(m); blocker(m); };
+  wall(ROOM.w, 0, -ROOM.d / 2, 0); wall(ROOM.w, 0, ROOM.d / 2, Math.PI); wall(ROOM.d, -ROOM.w / 2, 0, Math.PI / 2); wall(ROOM.d, ROOM.w / 2, 0, -Math.PI / 2);
+  // rivet strips so motion reads against the walls
+  for (let k = -3; k <= 3; k++) { box(0.06, ROOM.h, 0.04, 0x57493c, k * 1.15, ROOM.h / 2, -ROOM.d / 2 + 0.03); box(0.06, ROOM.h, 0.04, 0x57493c, k * 1.15, ROOM.h / 2, ROOM.d / 2 - 0.03); }
+
+  // boiler: a horizontal drum with a glowing firebox door on its south face
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 2.4, 24), lam(0x44403c)); drum.rotation.z = Math.PI / 2; drum.position.set(-1.2, 1.0, -0.9); scene.add(drum); blocker(drum);
+  const fire = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.45, 0.05), new THREE.MeshBasicMaterial({ color: 0xf97316 })); fire.position.set(-1.2, 0.75, 0.12); scene.add(fire);
+  const fireLight = new THREE.PointLight(0xff7a2f, 3, 4, 1.5); fireLight.position.set(-1.2, 0.8, 0.6); scene.add(fireLight);
+  const cyl = (r, h, c, x, y, z) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 10), lam(c)); m.position.set(x, y, z); scene.add(m); return m; };
+  for (const x of [-2.2, -0.2]) blocker(cyl(0.1, ROOM.h - 1.9, 0x78716c, x, 1.9 + (ROOM.h - 1.9) / 2, -0.9));
+  blocker(box(1.0, 0.9, 2.0, 0x6b4f35, 2.9, 0.45, -1.0));                // bench
+  blocker(box(1.2, 0.9, 1.0, 0x92400e, 2.6, 0.45, 2.4));                 // crates
+  blocker(box(0.6, 0.5, 0.6, 0xa16207, 2.4, 1.15, 2.3));
+  blocker(box(1.4, 1.2, 1.6, 0x1c1917, -3.2, 0.6, 2.6));                 // coal bunker
+  blocker(cyl(0.12, ROOM.h, 0x78716c, 2.0, ROOM.h / 2, 0.5));            // steam pipe
+  box(1.0, 2.1, 0.06, 0x5b3a1e, 0.4, 1.05, -3.47);                          // door (scenery)
+
+  const thing = (id, objs, labelAt) => {
+    const g = new THREE.Group(); objs.forEach(o => g.add(o)); g.userData.thing = id; scene.add(g); pickables.push(g); thingMeshes[id] = g;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(THINGS.find(t => t.id === id).label), transparent: true, sizeAttenuation: false, depthTest: false }));
+    sp.scale.set(0.16, 0.04, 1); sp.position.set(...labelAt); sp.renderOrder = 2; scene.add(sp);
+  };
+  const at = (m, x, y, z) => { m.position.set(x, y, z); return m; };
+  const glowy = c => new THREE.MeshLambertMaterial({ color: c });
+  thing('logbook', [at(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.4), glowy(0xe7d8b5)), 2.7, 0.93, -1.0)], [2.7, 1.25, -1.0]);
+  const valves = [at(new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.0, 1.6), glowy(0x4b5563)), -3.95, 1.3, -2.6)];
+  for (let k = -1; k <= 1; k++) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 20), glowy(0xb91c1c)); w.rotation.y = Math.PI / 2; valves.push(at(w, -3.85, 1.3, -2.6 + k * 0.5)); }
+  thing('valves', valves, [-3.7, 2.05, -2.6]);
+  const gauges = [at(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 1.6), glowy(0x374151)), 3.95, 1.5, 1.0)];
+  for (let k = -1; k <= 1; k++) { const d = new THREE.Mesh(new THREE.CircleGeometry(0.18, 20), glowy(0xf5f5f4)); d.rotation.y = -Math.PI / 2; gauges.push(at(d, 3.89, 1.5, 1.0 + k * 0.5)); }
+  thing('gauges', gauges, [3.7, 2.15, 1.0]);
+  thing('keypad', [at(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.08), glowy(0x9ca3af)), 1.4, 1.35, -3.46)], [1.4, 1.8, -3.3]);
+  const post = at(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 1.0, 10), glowy(0x7c2d12)), -0.6, 0.5, 2.2);
+  const head = at(new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.14, 20), glowy(0xd4a373)), -0.6, 1.15, 2.2); head.rotation.x = Math.PI / 2;
+  thing('telegraph', [post, head], [-0.6, 1.6, 2.2]);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const lamp = new THREE.PointLight(0xffcf8a, 14, 0, 1.6); lamp.position.set(0.5, ROOM.h - 0.2, 0.8); scene.add(lamp);
+
+  pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xfbbf24, dashSize: 0.12, gapSize: 0.08 })); scene.add(pathLine);
+  marker = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.18, 24), new THREE.MeshBasicMaterial({ color: 0xfbbf24 })); marker.rotation.x = -Math.PI / 2; marker.visible = false; scene.add(marker);
+  const gc = document.createElement('canvas'); gc.width = GW; gc.height = GD; const gx = gc.getContext('2d');
+  for (let j = 0; j < GD; j++) for (let i = 0; i < GW; i++) { gx.fillStyle = GRID[j * GW + i] ? 'rgba(220,38,38,.55)' : 'rgba(34,197,94,.35)'; gx.fillRect(i, j, 1, 1); }
+  const gt = new THREE.CanvasTexture(gc); gt.magFilter = THREE.NearestFilter;
+  gridMesh = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), new THREE.MeshBasicMaterial({ map: gt, transparent: true })); gridMesh.rotation.x = -Math.PI / 2; gridMesh.position.y = 0.01; gridMesh.visible = false; scene.add(gridMesh);
+
+  const fit = () => {
+    const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h;
+    // hold the horizontal view at about 75° in portrait (settled in the 3D-form ticket)
+    camera.fov = w < h ? Math.min(105, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) / (w / h)) * 180 / Math.PI) : 70;
+    camera.updateProjectionMatrix();
+  };
+  addEventListener('resize', fit); fit();
+}
+function drawPath() {
+  if (!pathLine) return;
+  const pts = P.path ? [{ x: P.x, z: P.z }, ...P.path] : [];
+  pathLine.geometry.dispose(); pathLine.geometry = new THREE.BufferGeometry().setFromPoints(pts.map(p => new THREE.Vector3(p.x, 0.03, p.z)));
+  pathLine.computeLineDistances(); pathLine.visible = pts.length > 1;
+  const last = P.path?.[P.path.length - 1]; marker.visible = !!last; if (last) marker.position.set(last.x, 0.03, last.z);
+}
+
+/* ============================================================
+   PICKING
+   ============================================================ */
+const ray = THREE && new THREE.Raycaster();
+function pick(ndcX, ndcY) {
+  ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+  for (const h of ray.intersectObjects(pickables, true)) {
+    let o = h.object; while (o && !o.userData.thing && !o.userData.floor && !o.userData.block) o = o.parent;
+    if (!o) continue;
+    if (o.userData.thing) return { thing: THINGS.find(t => t.id === o.userData.thing), point: h.point, dist: h.distance };
+    if (o.userData.floor) return { floor: h.point, dist: h.distance };
+    return { blocked: true };
+  }
+  return {};
+}
+function pickAt(e) { const r = renderer.domElement.getBoundingClientRect(); return pick(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); }
+function tap(e) {
+  countInput();
+  const hit = pickAt(e);
+  if (hit.thing) return V.ui === 'vp' ? gotoVp(viewpoints().findIndex(v => v.id === hit.thing.id)) : approach(hit.thing);
+  if (hit.floor && V.tapWalk) { P.tYaw = null; walkTo({ x: hit.floor.x, z: hit.floor.z }); }
+}
+
+/* ============================================================
+   INPUT
+   ============================================================ */
+const canvasEl = () => renderer.domElement;
+function lookBy(dx, dy) { P.yaw += dx * 0.006; P.pitch = clamp(P.pitch + dy * 0.006, -1.2, 1.0); P.tYaw = P.tPitch = null; }
+
+function bindCanvas() {
+  const el = canvasEl();
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  el.addEventListener('pointerdown', e => {
+    if (IN.ptr) return;                                             // one pointer only
+    if (V.look === 'lock') {
+      if (document.pointerLockElement !== el) { el.requestPointerLock(); return; }
+      countInput();
+      const hit = pick(0, 0);
+      if (hit.thing) { if (hit.dist < 2.2) { P.tYaw = null; arrive(hit.thing); } else toast(`<b>${hit.thing.label}</b> is too far away. Walk closer.`); }
+      return;
+    }
+    IN.ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, drag: false, hold: false, button: e.button };
+    el.setPointerCapture(e.pointerId);
+    if (V.look === 'hold') IN.ptr.timer = setTimeout(() => { const p = IN.ptr; if (p && !p.drag) { p.hold = true; IN.hold = true; countInput(); cancelPath(); P.tYaw = P.tPitch = null; showRing(p.lx, p.ly); } }, 220);
+  });
+  el.addEventListener('pointermove', e => {
+    if (V.look === 'lock') { if (document.pointerLockElement === el) { P.yaw -= e.movementX * 0.0025; P.pitch = clamp(P.pitch - e.movementY * 0.0025, -1.2, 1.0); } return; }
+    const p = IN.ptr; if (!p || p.id !== e.pointerId) return;
+    const dx = e.clientX - p.lx, dy = e.clientY - p.ly; p.lx = e.clientX; p.ly = e.clientY;
+    if (p.hold) { P.yaw -= dx * 0.008; showRing(p.lx, p.ly); return; }  // steering: drag right turns right
+    if (!p.drag && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) { p.drag = true; countInput(); }
+    if (p.drag && (V.look !== 'rdrag' || p.button === 2)) lookBy(dx, dy);
+  });
+  const up = e => {
+    const p = IN.ptr; if (!p || p.id !== e.pointerId) return;
+    clearTimeout(p.timer); IN.ptr = null; IN.hold = false; $('#holdring').style.display = 'none';
+    if (e.type === 'pointerup' && !p.drag && !p.hold && p.button === 0) tap(e);
+  };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  document.addEventListener('pointerlockchange', () => syncLockUi());
+}
+function showRing(x, y) { const r = $('#holdring'); r.style.display = 'block'; r.style.left = x + 'px'; r.style.top = y + 'px'; }
+
+const MOVE_KEYS = { w: 'f', arrowup: 'f', s: 'b', arrowdown: 'b', a: 'l', arrowleft: 'l', d: 'r', arrowright: 'r' };
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === '[' || k === ']') return switchTo(step(k === ']' ? 1 : -1));
+  if (k === 'g') { showGrid = !showGrid; if (gridMesh) gridMesh.visible = showGrid; return; }
+  if (k === 'r') return reset();
+  if (V.keys && MOVE_KEYS[k]) { e.preventDefault(); if (!IN.keys.has(MOVE_KEYS[k])) { IN.keys.add(MOVE_KEYS[k]); countInput(); } }
+});
+addEventListener('keyup', e => IN.keys.delete(MOVE_KEYS[e.key.toLowerCase()]));
+addEventListener('blur', () => IN.keys.clear());
+
+// T1 joystick: up/down walks, sideways turns (one pointer can't look and walk at once)
+const stick = $('#stick'), knob = stick.querySelector('.knob');
+stick.addEventListener('pointerdown', e => { stick.setPointerCapture(e.pointerId); IN.stick = { id: e.pointerId, x: 0, y: 0 }; countInput(); moveStick(e); });
+stick.addEventListener('pointermove', e => { if (IN.stick?.id === e.pointerId) moveStick(e); });
+const stickUp = () => { IN.stick = null; knob.style.transform = ''; };
+stick.addEventListener('pointerup', stickUp); stick.addEventListener('pointercancel', stickUp);
+function moveStick(e) {
+  const r = stick.getBoundingClientRect(); let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+  const m = Math.hypot(dx, dy), max = 46; if (m > max) { dx *= max / m; dy *= max / m; }
+  knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  const dead = v => Math.abs(v) < 0.18 ? 0 : v;
+  IN.stick.x = dead(dx / max); IN.stick.y = dead(dy / max);
+}
+// T2 arrow buttons: hold to walk or turn
+for (const b of document.querySelectorAll('#pad button')) {
+  const k = b.dataset.k;
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); IN.pad[k] = true; b.classList.add('on'); countInput(); });
+  const off = () => { IN.pad[k] = false; b.classList.remove('on'); };
+  b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off);
+}
+// T5 viewpoints: the start spot plus each thing's approach pose
+const viewpoints = () => [{ name: 'Middle of the Room', x: 0.4, z: 1.8, yaw: 0.6, pitch: -0.1 }, ...THINGS.map(t => ({ name: t.label, id: t.id, ...t.ap }))];
+function gotoVp(k) {
+  const v = viewpoints(); if (k < 0) return; vpIndex = (k + v.length) % v.length; const p = v[vpIndex];
+  $('#vpbar span').textContent = p.name;
+  const t = THINGS.find(t => t.id === p.id);
+  if (t) approach(t); else { P.tYaw = p.yaw; walkTo(p, () => (P.tPitch = p.pitch), 3.0); }
+}
+for (const b of document.querySelectorAll('#vpbar button')) b.addEventListener('click', () => { countInput(); gotoVp(vpIndex + Number(b.dataset.d)); });
+
+/* ============================================================
+   FRAME
+   ============================================================ */
+function tryMove(dx, dz) {
+  const before = { x: P.x, z: P.z };
+  if (!blocked(P.x + dx, P.z + dz)) { P.x += dx; P.z += dz; }
+  else if (!blocked(P.x + dx, P.z)) P.x += dx;            // slide along whatever is in the way
+  else if (!blocked(P.x, P.z + dz)) P.z += dz;
+  if (!ER.done && ER.t0 != null) ER.dist += Math.hypot(P.x - before.x, P.z - before.z);
+}
+let last = performance.now();
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  let fwd = 0, side = 0, turn = 0;
+  if (V.keys) { fwd += (IN.keys.has('f') ? 1 : 0) - (IN.keys.has('b') ? 1 : 0); side += (IN.keys.has('r') ? 1 : 0) - (IN.keys.has('l') ? 1 : 0); }
+  if (V.ui === 'stick' && IN.stick) { fwd = -IN.stick.y; turn = -IN.stick.x; }
+  if (V.ui === 'pad') { fwd = (IN.pad.up ? 1 : 0) - (IN.pad.down ? 1 : 0); turn = (IN.pad.left ? 1 : 0) - (IN.pad.right ? 1 : 0); }
+  if (V.look === 'hold' && IN.hold) fwd = 1;
+  if (fwd || side || turn) { cancelPath(); if (turn) P.tYaw = null; P.tPitch = null; }
+  P.yaw += turn * dt * 1.9;
+  if (fwd || side) {
+    const len = Math.max(1, Math.hypot(fwd, side)), v = (V.look === 'hold' ? 1.6 : 2.2) * dt / len;
+    const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
+    tryMove((-sy * fwd + cy * side) * v, (-cy * fwd - sy * side) * v);
+  }
+  if (P.path) {
+    const p = P.path[0], d = Math.hypot(p.x - P.x, p.z - P.z), s = P.speed * dt;
+    if (d <= s) { tryMove(p.x - P.x, p.z - P.z); P.path.shift(); if (!P.path.length) { const f = P.onArrive; P.path = null; P.onArrive = null; f?.(); } }
+    else { const bx = P.x, bz = P.z; tryMove((p.x - P.x) / d * s, (p.z - P.z) / d * s); if (bx === P.x && bz === P.z) P.path.shift(); }  // stuck: skip the waypoint
+    drawPath();
+  }
+  const k = 1 - Math.exp(-dt * 6);
+  if (P.tYaw != null) { let d = P.tYaw - P.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); P.yaw += d * k; if (Math.abs(d) < 0.005) P.tYaw = null; }
+  if (P.tPitch != null) { const d = P.tPitch - P.pitch; P.pitch += d * k; if (Math.abs(d) < 0.005) P.tPitch = null; }
+  camera.position.set(P.x, 1.6, P.z); camera.rotation.set(P.pitch, P.yaw, 0);
+  const glow = 0.2 + 0.2 * Math.sin(t / 250), next = ER.done ? null : ERRAND[ER.i];
+  for (const [id, g] of Object.entries(thingMeshes)) { const on = id === next; g.traverse(m => m.material?.emissive?.setRGB(on ? glow + 0.1 : 0.04, on ? (glow + 0.1) * 0.7 : 0.03, 0)); }
+  renderer.render(scene, camera);
+  hud(); window.__dbg.frames++;
+}
+
+/* ============================================================
+   HUD, TOAST, SWITCHER
+   ============================================================ */
+const shown = {};
+function setHtml(sel, html) { if (shown[sel] !== html) { shown[sel] = html; $(sel).innerHTML = html; } }  // don't rebuild the restart button every frame
+const deg = r => Math.round(((r * 180 / Math.PI) % 360 + 540) % 360 - 180);
+function hud() {
+  const names = ERRAND.map((id, i) => i < ER.i ? `<s>${THINGS.find(t => t.id === id).label}</s>` : i === ER.i ? `<b>${THINGS.find(t => t.id === id).label}</b>` : THINGS.find(t => t.id === id).label).join(' → ');
+  const secs = ER.done ? ER.done.t : ER.t0 == null ? 0 : Math.floor((performance.now() - ER.t0) / 100) / 10;
+  setHtml('#errand', `Errand: ${names} · ${secs.toFixed(1)} s · ${ER.dist.toFixed(1)} m · ${ER.taps} inputs<button onclick="window.__reset()">restart (R)</button>`);
+  const mode = P.path ? `pathing (${P.path.length} leg${P.path.length > 1 ? 's' : ''})` : IN.hold ? 'hold-walking' : IN.stick ? `stick ${IN.stick.x.toFixed(2)},${IN.stick.y.toFixed(2)}` : IN.ptr?.drag ? 'looking' : 'idle';
+  $('#state').textContent = `${V.key} · pos ${P.x.toFixed(2)}, ${P.z.toFixed(2)} · yaw ${deg(P.yaw)}° · pitch ${deg(P.pitch)}° · ${mode} · fov ${camera.fov.toFixed(0)}° · ${innerWidth}×${innerHeight}${matchMedia('(pointer:coarse)').matches ? ' touch' : ''}`;
+}
+window.__reset = reset;
+window.__dbg = { P, IN, ER, go: id => approach(THINGS.find(t => t.id === id)), blocked, hits: (x, y) => { ray.setFromCamera(new THREE.Vector2(x, y), camera); return ray.intersectObjects(pickables, true).slice(0, 4).map(h => [h.object.geometry.type, h.distance.toFixed(2), JSON.stringify(h.object.userData), h.object.position.toArray().map(n => n.toFixed(1)).join()]); }, pick: (x, y) => { const h = pick(x, y); return { thing: h.thing?.id, floor: h.floor && [h.floor.x, h.floor.z], blocked: h.blocked }; }, frames: 0 };
+function renderResults() {
+  $('#results').innerHTML = RESULTS.length ? 'Results this tab:<br>' + RESULTS.map(r => `${r.key} ${r.name}: ${r.t.toFixed(1)} s · ${r.dist.toFixed(1)} m · ${r.taps} inputs`).join('<br>') : '';
+}
+let toastTimer;
+function toast(html) { const el = $('#toast'); el.innerHTML = html; el.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, ER.done ? 4000 : 1800); renderResults(); }
+function hideToast() { $('#toast').style.display = 'none'; }
+
+function syncLockUi() {
+  const locked = renderer && document.pointerLockElement === canvasEl();
+  $('#crosshair').style.display = V.look === 'lock' && locked ? 'block' : 'none';
+  $('#lockhint').style.display = V.look === 'lock' && !locked ? 'block' : 'none';
+}
+const setOf = () => VARIANTS.filter(v => v.set === V.set);
+const step = d => { const s = setOf(), i = s.indexOf(V); return s[(i + d + s.length) % s.length]; };
+function switchTo(v) {
+  if (document.pointerLockElement) document.exitPointerLock();
+  V = v; IN.keys.clear(); IN.stick = null; IN.pad = {}; IN.hold = false; IN.ptr = null;
+  $('#stick').style.display = V.ui === 'stick' ? 'block' : 'none';
+  $('#pad').style.display = V.ui === 'pad' ? 'grid' : 'none';
+  $('#vpbar').style.display = V.ui === 'vp' ? 'flex' : 'none';
+  $('#vpbar span').textContent = viewpoints()[0].name;
+  $('#help').innerHTML = `<b>${V.key} · ${V.name}</b><br>${V.help}`;
+  $('#vlabel').textContent = `${V.key} · ${V.name}`;
+  const u = new URL(location); u.searchParams.set('variant', V.key); history.replaceState(null, '', u);
+  reset(); syncLockUi(); renderResults();
+}
+$('#prev').onclick = () => switchTo(step(-1));
+$('#next').onclick = () => switchTo(step(1));
+$('#group').onclick = () => switchTo(VARIANTS.find(v => v.set !== V.set));
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+if (!THREE) document.body.insertAdjacentHTML('afterbegin', '<div class="nogl">three.js did not load (offline?). This prototype needs jsdelivr.</div>');
+else {
+  try { build(); } catch (e) { document.body.insertAdjacentHTML('afterbegin', '<div class="nogl">WebGL is unavailable here.</div>'); throw e; }
+  bindCanvas();
+  const want = new URL(location).searchParams.get('variant');
+  switchTo(VARIANTS.find(v => v.key === want) ?? VARIANTS.find(v => v.set === (matchMedia('(pointer:coarse)').matches ? 'touch' : 'desktop')));
+  requestAnimationFrame(frame);
+}
+</script>
+</body>
+</html>
