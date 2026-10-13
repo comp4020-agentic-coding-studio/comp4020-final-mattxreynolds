@@ -50,6 +50,14 @@ _Avoid_: Chat, intercom, radio
 Where every Voyage is heading: launching it with both Players aboard is the only way to win.
 _Avoid_: Exit, goal, escape hatch
 
+**Clock**:
+The time a Voyage has left before the ship goes down, running only while both Players are present and shown the same on both Decks.
+_Avoid_: Timer, countdown, stopwatch
+
+**Strike**:
+A wrong answer the server rejects, which takes time off the Clock and brings the ship nearer to going down. It belongs to the Voyage, never to the Player who gave it.
+_Avoid_: Mistake, penalty, error, life
+
 ## Puzzles
 
 **Puzzle Type**:
@@ -75,7 +83,7 @@ _Avoid_: Deal, run, seed
 ## Competition
 
 **Score**:
-The result of one Team's Voyage, computed by the game from what happened in it. It always belongs to the Team, never to one Player.
+The result of one Team's launched Voyage: the time left on the Clock when the Lifeboat launched, computed by the game from what happened in it. A Voyage that sank or was ended has none. It always belongs to the Team, never to one Player.
 _Avoid_: Points, time, result
 
 **Leaderboard**:
