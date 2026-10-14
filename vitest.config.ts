@@ -1,3 +1,4 @@
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vitest/config";
 
 // Two projects, both under spec/. `app` runs against the running app, which
@@ -8,6 +9,8 @@ export default defineConfig({
   test: {
     projects: [
       {
+        plugins: [svelte()],
+        resolve: { conditions: ["browser"] },
         test: {
           name: "unit",
           include: ["spec/**/*.unit.test.ts"],
