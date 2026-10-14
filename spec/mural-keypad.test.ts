@@ -5,7 +5,9 @@ import type { LobbySnapshot } from "../shared/lobby.ts";
 import { codeFromClue } from "./helpers/mural.ts";
 import { type SecondServer, startSecondServer } from "./helpers/second-server.ts";
 import { openSse, parseFrame } from "./helpers/sse.ts";
-import { guest, intent, lobby, snapshot, underway } from "./helpers/voyage.ts";
+import { guest, intent, lobby, snapshot, underwayWith } from "./helpers/voyage.ts";
+
+const underway = (base: string) => underwayWith(base, "mural");
 
 // A second server, so the events table can be read back and restarted.
 let server: SecondServer;

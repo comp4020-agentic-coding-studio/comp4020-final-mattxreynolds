@@ -6,7 +6,7 @@ import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
 // a metre spans about 127 px and 44 px is about 0.35 m.
 const engine = roomForDeck("Lower Deck");
 const wheelhouse = roomForDeck("Upper Deck");
-const buttons = engine.things.filter((t) => t.press);
+const buttons = engine.things.filter((t) => t.press && t.control === "keypad");
 
 describe("the keypad and the mural in the scene", () => {
   it("the Engine Room has a button for each digit, a clear and an enter, all on the opener", () => {
