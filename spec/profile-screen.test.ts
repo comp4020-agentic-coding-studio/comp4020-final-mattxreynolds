@@ -63,8 +63,12 @@ it("either Player ends the Voyage from inside the ship, after a confirm, and bot
 
   await partner.getByRole("button", { name: "End the Voyage" }).click();
   await partner.getByRole("button", { name: "Yes, end it" }).click();
+  // both Decks get the end card (#60); from it, back to the profile
+  await partner.getByTestId("end-card").waitFor();
+  await partner.getByRole("button", { name: "Back to profile" }).click();
   await expect.poll(() => partner.getByTestId("finished-voyage").count()).toBe(1);
-  // the host, still in the lobby, is told and sent home
+  await host.getByTestId("end-card").waitFor();
+  await host.getByRole("button", { name: "Back to profile" }).click();
   await expect.poll(() => host.getByTestId("finished-voyage").count()).toBe(1);
   expect(await host.getByTestId("unfinished-voyage").count()).toBe(0);
 });
