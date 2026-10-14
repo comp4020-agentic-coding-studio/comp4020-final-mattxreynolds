@@ -7,7 +7,7 @@ describe("the rotten floor in the Wheelhouse", () => {
   const wheelhouse = roomForDeck("Upper Deck");
 
   it("lays out as many tiles as the Puzzle's floor has, inside the Room", () => {
-    const data = rottenFloorV1.generate(() => 0.5);
+    const data = rottenFloorV1.generate(Math.random);
     const f = wheelhouse.floor!;
     expect([f.cols, f.rows]).toEqual([data.width, data.height]);
     expect(f.x0).toBeGreaterThanOrEqual(0);
