@@ -101,9 +101,9 @@ it("the Engine Room turns valve wheels and the Wheelhouse sets trims in the scen
   await expect.poll(() => shown(wheelhouse, "hold"), { timeout: 20_000 }).toMatch(/^In band 0 s/);
 
   // held for ten seconds, the Lifeboat launches on both Decks
-  // (the end card is #60's; until it lands both Decks leave the scene for their finished Voyages)
+  // the end card (#60) shows a Score on both Decks
   for (const page of [wheelhouse, engine]) {
-    await expect.poll(() => page.getByTestId("finished-voyage").innerText().catch(() => ""), { timeout: 40_000 }).toMatch(/launched/i);
+    await page.getByTestId("end-score").waitFor({ timeout: 60_000 });
   }
   for (const who of [host, partner]) expect((await view(who)).puzzles[2].status).toBe("solved");
   expect((await view(host)).strikes).toBe(0);
