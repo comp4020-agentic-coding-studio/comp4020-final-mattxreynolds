@@ -46,6 +46,11 @@
       const next = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
       // either Player may end the Voyage, so the other's ship ends too
       if (next.ended) return void goHome();
+      // a reload restores the half-typed code once, from this Player's own snapshot (#57)
+      if (!draftRestored) {
+        draftRestored = true;
+        code4 = next.drafts.opener ?? "";
+      }
       snapshot = next;
     });
     es.addEventListener("strike", () => (strikeNote = "A wrong answer. The ship groans."));
@@ -76,6 +81,7 @@
   function enter(voyage: VoyageView): void {
     history.replaceState(null, "", voyage.link);
     screen = "lobby";
+    draftRestored = false;
     watch(voyage);
   }
 
@@ -187,6 +193,17 @@
   }
 
   let code4 = $state("");
+  let draftRestored = false;
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Low-trust and fire-and-forget: no seq, no refusal handling, and it never touches state (#57).
+  function saveDraft(): void {
+    clearTimeout(draftTimer);
+    const text = code4;
+    const id = snapshot?.voyage.id;
+    if (!id) return;
+    draftTimer = setTimeout(() => void api(`/api/voyages/${id}/intents`, { kind: "keypad-draft", slot: "opener", text }), 250);
+  }
   let strikeNote = $state("");
   let bellNote = $state("");
 
@@ -201,7 +218,10 @@
       seq: snapshot.seq,
     });
     intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
-    if (res.ok) code4 = "";
+    if (res.ok) {
+      code4 = "";
+      saveDraft();
+    }
   }
 
   async function copy(text: string): Promise<void> {
@@ -308,7 +328,7 @@
               <pre data-testid="mural">{p.clue}</pre>
             {:else if p.role === "lock"}
               <form data-testid="keypad" onsubmit={(e) => { e.preventDefault(); void enterCode(); }}>
-                <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} disabled={p.status !== "live"} /></label>
+                <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} oninput={saveDraft} disabled={p.status !== "live"} /></label>
                 <button type="submit" disabled={p.status !== "live"}>Enter</button>
               </form>
             {/if}
