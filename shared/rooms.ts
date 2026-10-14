@@ -50,6 +50,8 @@ export interface Room {
   start: { x: number; z: number; yaw: number };
   /** How far from the Player a thing can be used: about 2 m (#17). */
   reach: number;
+  /** How close, in screen pixels, a press must land to a thing to hit it; the nearest wins (#18). */
+  hitRadiusPx: number;
   /** The Player is a circle on the floor; walls and blockers are padded by this. */
   radius: number;
   eyeHeight: number;
@@ -57,7 +59,7 @@ export interface Room {
   things: Thing[];
 }
 
-const COMMON = { width: 8, depth: 7, wallHeight: 3, reach: 2, radius: 0.3, eyeHeight: 1.6 } as const;
+const COMMON = { width: 8, depth: 7, wallHeight: 3, reach: 2, hitRadiusPx: 22, radius: 0.3, eyeHeight: 1.6 } as const;
 
 // An alcove in the east of each Room, shut by a hatch that the opener Puzzle opens.
 function alcove(prefix: string): Blocker[] {
@@ -164,4 +166,48 @@ export function reachableCells(room: Room, opened: Opened): { x: number; z: numb
     }
   }
   return out;
+}
+
+/** A Player's place on the floor and the way they face (yaw 0 looks north, towards -z). */
+export interface Stance {
+  x: number;
+  z: number;
+  yaw: number;
+}
+
+/** Usable only within the Room's reach and in front of the Player (#17, #52). Nothing marks it as usable (#33). */
+export function inReach(room: Room, me: Stance, thing: Pick<Thing, "x" | "z">): boolean {
+  const dx = thing.x - me.x;
+  const dz = thing.z - me.z;
+  const ahead = dx * -Math.sin(me.yaw) + dz * -Math.cos(me.yaw);
+  return ahead > 0 && Math.hypot(dx, dz) <= room.reach;
+}
+
+/**
+ * The thing a press hits: among things in reach, the one nearest the press on
+ * screen, if within the hit radius; otherwise null, a miss that does nothing.
+ * `pixelsFrom` is the on-screen distance from the press to the thing.
+ */
+export function pickThing(room: Room, me: Stance, pixelsFrom: (t: Thing) => number): Thing | null {
+  let best: Thing | null = null;
+  let bestPx = Infinity;
+  for (const t of room.things) {
+    if (!inReach(room, me, t)) continue;
+    const px = pixelsFrom(t);
+    if (px <= room.hitRadiusPx && px < bestPx) {
+      best = t;
+      bestPx = px;
+    }
+  }
+  return best;
+}
+
+/**
+ * What using a thing shows (#52): a decoy its plaque, a station whose Puzzle is
+ * not live yet "rusted solid". A live station points at its Puzzle's controls.
+ */
+export function examineText(thing: Thing, live: ReadonlySet<Slot>): string {
+  if (thing.kind === "decoy") return thing.plaque ?? "Nothing of note.";
+  if (thing.slot && live.has(thing.slot)) return "It answers to the controls on your Deck screen.";
+  return "Rusted solid.";
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { Slot } from "../shared/draw.ts";
-  import { roomForDeck } from "../shared/rooms.ts";
+  import { SLOTS, type Slot } from "../shared/draw.ts";
+  import { examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
   import type { DeckName, Pose } from "../shared/intents.ts";
   import { createPoseSaver } from "./pose.ts";
   import { buildScene, type SceneHandle } from "./scene.ts";
@@ -55,13 +55,26 @@
     handle?.setStick({ forward: 0, right: 0 });
   }
 
+  let seen = $state("");
+
+  // Using a thing: show its text and log the examine through the intent pipeline. It is never a Strike (#52).
+  function use(thing: Thing): void {
+    const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
+    seen = examineText(thing, live);
+    void fetch(`/api/voyages/${voyageId}/intents`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "examine", thing: thing.id }),
+    }).catch(() => {});
+  }
+
   onMount(() => {
     const saver = createPoseSaver(voyageId);
     const flush = (): void => saver.flush();
     const onHide = (): void => { if (document.visibilityState === "hidden") saver.flush(); };
     const onLock = (): void => { locked = document.pointerLockElement === handle?.canvas; };
     try {
-      handle = buildScene(room, new Set(opened), pose, (p) => saver.capture(p));
+      handle = buildScene(room, new Set(opened), pose, (p) => saver.capture(p), use);
     } catch {
       failed = true;
       return;
@@ -70,10 +83,7 @@
     handle.canvas.dataset.testid = "scene";
     handle.canvas.setAttribute("data-testid", "scene");
     handle.canvas.setAttribute("aria-label", `The ${room.name}, in 3D`);
-    // While the mouse is captured, clicks are delivered to the canvas rather than the prompt, so a click there releases it.
-    const canvas = handle.canvas;
-    canvas.addEventListener("click", () => { if (document.pointerLockElement === canvas) document.exitPointerLock(); });
-    host.prepend(canvas);
+    host.prepend(handle.canvas);
     document.addEventListener("pointerlockchange", onLock);
     window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", onHide);
@@ -122,6 +132,7 @@
         <div class="knob" style:transform="translate({knob.x}px, {knob.y}px)"></div>
       </div>
     {/if}
+    {#if seen}<p class="seen" data-testid="examine-text" role="status">{seen}</p>{/if}
   </div>
 {/if}
 
@@ -132,4 +143,5 @@
   .stick { position: absolute; left: 1rem; bottom: 0.75rem; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.4); touch-action: none; display: grid; place-items: center; }
   .knob { width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); pointer-events: none; }
   .prompt { min-height: 44px; position: absolute; left: 50%; bottom: 0.75rem; transform: translateX(-50%); }
+  .seen { position: absolute; left: 50%; top: 0.75rem; transform: translateX(-50%); margin: 0; padding: 0.4rem 0.8rem; background: #000b; color: #fff; }
 </style>

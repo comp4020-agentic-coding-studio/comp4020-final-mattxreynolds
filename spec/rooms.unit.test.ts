@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SLOTS, type Slot } from "../shared/draw.ts";
 import { DECKS } from "../shared/intents.ts";
-import { moveInRoom, reachableCells, roomForDeck, ROOMS, type Room } from "../shared/rooms.ts";
+import { examineText, inReach, moveInRoom, pickThing, reachableCells, roomForDeck, ROOMS, type Room } from "../shared/rooms.ts";
 
 const NONE: ReadonlySet<Slot> = new Set();
 const ALL: ReadonlySet<Slot> = new Set(SLOTS);
@@ -90,4 +90,62 @@ describe("walking", () => {
     expect(shut.z).toBeGreaterThan(gate.box.maxZ);
     expect(open.z).toBeCloseTo(cz);
   });
+});
+
+describe("using things within reach (#52)", () => {
+  const wheelhouse = roomForDeck("Upper Deck");
+  const thing = (id: string) => wheelhouse.things.find((t) => t.id === id)!;
+  const facingNorth = (x: number, z: number) => ({ x, z, yaw: 0 });
+
+  it("records the reach (about 2 m) and the 22 px hit radius in Room data", () => {
+    for (const room of ROOMS) {
+      expect(room.reach).toBe(2);
+      expect(room.hitRadiusPx).toBe(22);
+    }
+  });
+
+  it("a thing is usable inside reach and in front of the Player, and not beyond 2 m", () => {
+    expect(inReach(wheelhouse, facingNorth(2, 2), thing("mural"))).toBe(true);
+    expect(inReach(wheelhouse, facingNorth(2, 2.5), thing("mural"))).toBe(false);
+  });
+
+  it("a thing behind the Player is not usable, however close", () => {
+    expect(inReach(wheelhouse, { x: 2, z: 1, yaw: Math.PI }, thing("mural"))).toBe(false);
+    expect(inReach(wheelhouse, { x: 2, z: 1, yaw: 0 }, thing("mural"))).toBe(true);
+  });
+
+  it("the nearest thing within the hit radius wins, and a press with none near is a miss", () => {
+    const room = { ...wheelhouse, things: [thing("mural"), { ...thing("brass-barometer"), x: 3, z: 1.5 }] };
+    const pose = facingNorth(2.5, 1.8);
+    const px = (a: number, b: number) => (t: { id: string }) => (t.id === "mural" ? a : b);
+    expect(pickThing(room, pose, px(15, 6))?.id).toBe("brass-barometer");
+    expect(pickThing(room, pose, px(10, 12))?.id).toBe("mural");
+    expect(pickThing(room, pose, px(22, 40))?.id).toBe("mural");
+    expect(pickThing(room, pose, px(22.5, 40))).toBeNull();
+  });
+
+  it("never picks a thing that is out of reach or behind, even under the pointer", () => {
+    expect(pickThing(wheelhouse, facingNorth(4, 6.8), () => 0)).toBeNull();
+  });
+
+  for (const room of ROOMS) {
+    describe(room.name, () => {
+      it("holds at least one decoy", () => {
+        expect(room.things.filter((t) => t.kind === "decoy").length).toBeGreaterThan(0);
+      });
+
+      it("gives every thing an effect when used, whichever Puzzles are live (no silent hit)", () => {
+        for (const live of [NONE, new Set<Slot>(["opener"]), new Set<Slot>(["middle"]), ALL]) {
+          for (const t of room.things) expect(examineText(t, live).trim().length, `${t.id}`).toBeGreaterThan(0);
+        }
+      });
+
+      it("examines a decoy to its plaque and a station that is not live to rusted solid", () => {
+        for (const t of room.things) {
+          if (t.kind === "decoy") expect(examineText(t, NONE)).toBe(t.plaque);
+          else if (t.slot !== "opener") expect(examineText(t, NONE)).toMatch(/rusted solid/i);
+        }
+      });
+    });
+  }
 });

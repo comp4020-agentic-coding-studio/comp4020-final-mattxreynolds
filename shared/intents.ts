@@ -18,6 +18,8 @@ export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("cast-off"), seq }),
   // An answer for one Puzzle's lock. The server checks it; the client never decides a solve.
   z.strictObject({ kind: z.literal("submit"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), answer: z.string().regex(/^\d{4}$/) }),
+  // Using a thing in the scene (#52): never a Strike, never a state change, so seq is optional.
+  z.strictObject({ kind: z.literal("examine"), seq: seq.optional(), thing: z.string().min(1).max(60) }),
   // One step of the Walker (blind navigator Puzzles). The server decides what the step does.
   z.strictObject({ kind: z.literal("walk-step"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), dir: z.enum(WALK_DIRS) }),
   // Ending needs no seq: either Player may stop at any state, from the profile
