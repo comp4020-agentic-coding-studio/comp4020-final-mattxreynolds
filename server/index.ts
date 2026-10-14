@@ -7,12 +7,14 @@ import { marked } from "marked";
 import { createApi } from "./app.ts";
 import { openDatabase } from "./database.ts";
 import { rearmFinales } from "./finale.ts";
+import { rearmPresence } from "./presence.ts";
 import { serveSpa } from "./static.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const port = Number(process.env.PORT ?? 8080);
 const db = openDatabase(process.env.DATA_DIR ?? "/data");
 rearmFinales(db);
+rearmPresence(db);
 
 // README.md is published in full at /readme/, rendered server-side so it is
 // there with no script running.

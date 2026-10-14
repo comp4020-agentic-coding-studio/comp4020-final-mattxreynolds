@@ -16,11 +16,12 @@ export interface SecondServer {
 // (PORT=0) with its own DATA_DIR and an optional frozen clock. Restart, Clock
 // and Away checks use this because the CI container's /data is a tmpfs.
 export async function startSecondServer(
-  options: { dataDir?: string; now?: number } = {},
+  options: { dataDir?: string; now?: number; ticking?: boolean } = {},
 ): Promise<SecondServer> {
   const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "second-server-"));
   const env: Record<string, string | undefined> = { ...process.env, PORT: "0", DATA_DIR: dataDir };
   if (options.now !== undefined) env.FAKE_NOW = String(options.now);
+  if (options.ticking) env.FAKE_TICKS = "1"; // the fake time then runs on at real speed from `now`
   const child: ChildProcess = spawn(
     process.execPath,
     ["--import", "./spec/fake-clock.ts", "server/index.ts"],

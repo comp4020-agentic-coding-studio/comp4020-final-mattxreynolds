@@ -42,6 +42,8 @@ export interface LobbySnapshot {
   draw: PublicDraw | null;
   /** Time left on the Clock as of this snapshot, the same on both Decks; null before cast off. */
   clock: { secondsLeft: number } | null;
+  /** True while a Player is Away (#56): the Clock is stopped and the Deck still connected shows a paused screen. */
+  paused: boolean;
   /** True once the Voyage is over: ended by a Player, launched or sunk. */
   ended: boolean;
   /** Where you last stood, or null. Yours alone: the partner's snapshot never carries it (#57). */

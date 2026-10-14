@@ -6,11 +6,12 @@ import { createGuest, endSession, personForToken, recordSignInFailure, renamePer
 import { sanitisePlayerName } from "./player-name.ts";
 import type { Notice } from "../shared/draw.ts";
 import { logEvent } from "./events.ts";
-import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
+import { isConnected, markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
 import { isLowTrustKind, saveLowTrust } from "./low-trust.ts";
 import { withVoyage } from "./mutex.ts";
 import { attachSession, offersFor } from "./rejoin.ts";
+import { playerBack, playerDropped } from "./presence.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
 
 const COOKIE = "session";
@@ -251,18 +252,21 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return streamSSE(c, async (stream) => {
       logEvent(db, { ...who, action: "stream.connected" });
       const disconnected = markConnected(voyage.id, you.id);
+      playerBack(db, voyage.id, you.id);
       const send = async (notice?: Notice): Promise<void> => {
         await stream.writeSSE({ event: "snapshot", data: JSON.stringify(snapshotFor(db, voyage, you)) });
         // a notice carries no Clue, no answer and no Player, so both Decks get the same one
         if (notice) await stream.writeSSE({ event: notice.event, data: JSON.stringify(notice.data) });
       };
-      await send(); // the first event on every connection is the full state
+      // subscribe before the first send, so a change made while it is in flight (the Voyage resuming) is not missed
       const unsubscribe = subscribe(voyage.id, (notice) => void send(notice));
+      await send(); // the first event on every connection is the full state
       const beat = setInterval(() => void stream.write(": heartbeat\n\n"), HEARTBEAT_MS);
       await new Promise<void>((resolve) => stream.onAbort(resolve));
       clearInterval(beat);
       unsubscribe();
       disconnected();
+      if (!isConnected(voyage.id, you.id)) playerDropped(db, voyage.id, you.id); // Away only if it stays closed for 8 s
       logEvent(db, { ...who, action: "stream.closed" });
     });
   });
