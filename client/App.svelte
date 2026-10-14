@@ -2,10 +2,10 @@
   import { onMount } from "svelte";
   import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
-  import { roomForDeck } from "../shared/rooms.ts";
-  import type { LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
+  import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
+  import type { Debrief, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
-  type Screen = "loading" | "first" | "profile" | "lobby";
+  type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief";
   let screen: Screen = $state("loading");
   let person: PersonView | null = $state(null);
   let snapshot: LobbySnapshot | null = $state(null);
@@ -48,7 +48,14 @@
       retry = 0;
       const next = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
       // either Player may end the Voyage, so the other's ship ends too
-      if (next.ended) return void goHome();
+      if (next.ended) {
+        // either Player may end it, and a launch or a sinking ends it too: both Decks get the end card
+        source?.close();
+        source = null;
+        snapshot = next;
+        screen = "end";
+        return;
+      }
       // a reload restores the half-typed code once, from this Player's own snapshot (#57)
       if (!draftRestored) {
         draftRestored = true;
@@ -81,10 +88,23 @@
     if (res.ok) voyages = (await res.json()) as ProfileVoyages;
   }
 
+  let debrief: Debrief | null = $state(null);
+  let debriefFrom: Screen = "profile";
+  async function openDebrief(id: string, from: Screen): Promise<void> {
+    const res = await api<Debrief>(`/api/voyages/${id}/debrief`);
+    if (!res.ok) return;
+    debrief = res.data;
+    debriefFrom = from;
+    screen = "debrief";
+  }
+  const fmtMs = (ms: number): string => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
+  const outcomeWords = { launched: "The Lifeboat is away", sank: "The ship went down", abandoned: "The Voyage was ended" } as const;
+
   async function endVoyage(id: string): Promise<void> {
     const res = await api(`/api/voyages/${id}/intents`, { kind: "end-voyage" });
     confirming = null;
-    if (res.ok || res.status === 409) await goHome();
+    // inside the ship the stream brings the end card; from the profile the lists refresh
+    if ((res.ok || res.status === 409) && screen === "profile") await goHome();
   }
 
   function enter(voyage: VoyageView): void {
@@ -262,6 +282,13 @@
     }
   }
 
+  // A keypad button pressed in the 3D scene: the same keypad and the same submission as the 2D view.
+  function pressKey(key: string): void {
+    if (key === "enter") return void enterCode();
+    code4 = keypadAfter(code4, key);
+    saveDraft();
+  }
+
   // Dial turns carry no seq: both Decks turn at once and each turn is applied in server order.
   async function dial(kind: "turn-valve" | "turn-trim", index: number, by: 1 | -1): Promise<void> {
     if (!snapshot?.yourDeck) return;
@@ -360,7 +387,8 @@
     <section>
       <h2>Finished Voyages</h2>
       {#each voyages.finished as v (v.id)}
-        <article data-testid="finished-voyage"><h3>{v.ship}</h3><p>{v.outcome}</p></article>
+        <article data-testid="finished-voyage"><h3>{v.ship}</h3><p>{v.outcome}</p>
+          <button onclick={() => openDebrief(v.id, "profile")}>Debrief</button></article>
       {:else}
         <p>None yet.</p>
       {/each}
@@ -387,7 +415,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
@@ -486,6 +514,35 @@
     <ul>
       {#each snapshot.players as p}<li data-testid="player">{p.name}{p.id === snapshot.you.id ? " (you)" : ""}</li>{/each}
     </ul>
+  {:else if screen === "end" && snapshot?.end}
+    <section data-testid="end-card">
+      <h1>{outcomeWords[snapshot.end.outcome]}</h1>
+      <h2>{snapshot.voyage.ship}</h2>
+      {#if snapshot.end.scoreMs !== null}<p data-testid="end-score">Score: {fmtMs(snapshot.end.scoreMs)}</p>{/if}
+      <p data-testid="end-strikes">Strikes: {snapshot.end.strikes} of 3</p>
+      <p data-testid="end-solved">Puzzles solved: {snapshot.end.solved} of {snapshot.end.total}</p>
+      <button onclick={() => openDebrief(snapshot!.voyage.id, "end")}>Open the debrief</button>
+      <button onclick={goHome}>Back to profile</button>
+    </section>
+  {:else if screen === "debrief" && debrief}
+    <section data-testid="debrief">
+      <h1>{debrief.ship}: debrief</h1>
+      {#each debrief.decks as d}
+        <article data-testid="debrief-deck">
+          <h2>{d.deck}: {d.room}</h2>
+          <p>{d.player?.name ?? "No Player"}</p>
+          {#each d.puzzles as p}
+            <h3>{p.slot}: {p.role === "clue" ? "held the Clue" : "took the answer"}, {p.solved ? "solved" : "unsolved"}</h3>
+            {#if p.clue}<pre>{p.clue}</pre>{/if}
+          {/each}
+        </article>
+      {/each}
+      <h2>Timeline</h2>
+      <ol data-testid="timeline">
+        {#each debrief.timeline as e}<li>{e.actor ? `${e.actor}: ` : ""}{e.text}</li>{/each}
+      </ol>
+      <button onclick={() => (debriefFrom === "end" ? (screen = "end") : void goHome())}>Back</button>
+    </section>
   {:else if screen === "loading" || screen === "lobby"}
     <p>Loading</p>
   {/if}
