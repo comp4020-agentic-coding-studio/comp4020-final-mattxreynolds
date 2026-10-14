@@ -3,11 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import type { PublicDraw } from "../shared/draw.ts";
 import type { LobbySnapshot } from "../shared/lobby.ts";
-import { codeFromClue } from "./helpers/mural.ts";
 import { type Dir, DIRS, parsePlan, routes } from "./helpers/rotten-floor.ts";
 import { type SecondServer, startSecondServer } from "./helpers/second-server.ts";
 import { openSse, parseFrame } from "./helpers/sse.ts";
-import { intent, snapshot, underway } from "./helpers/voyage.ts";
+import { intent, snapshot, underway, underwayAtMiddle } from "./helpers/voyage.ts";
 
 let server: SecondServer;
 beforeAll(async () => {
@@ -26,10 +25,7 @@ const step = (voyageId: string, who: Who, dir: unknown, extra: Record<string, un
 
 /** An underway Voyage with the opener's hatch open, so the middle is live. Host walks (Upper Deck), partner holds the plan. */
 async function atTheFloor() {
-  const l = await underway(server.url);
-  const code = codeFromClue((await draw(l.voyage.id, l.host)).puzzles[0].clue!);
-  const res = await intent(server.url, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: code });
-  expect(res.status).toBe(200);
+  const l = await underwayAtMiddle(server.url, "rotten-floor"); // the Draw picks the middle at random (#63)
   const plan = parsePlan((await draw(l.voyage.id, l.partner)).puzzles[1].clue!);
   return { ...l, plan, route: routes(plan)[0] };
 }
@@ -162,6 +158,6 @@ it("the Draw holds an opener, a middle and a finale, stored with their versions"
   db.close();
   const keys = JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key) as string[];
   expect(["mural-keypad@1", "lever-order@1"]).toContain(keys[0]);
-  expect(keys[1]).toBe("rotten-floor@1");
+  expect(["rotten-floor@1", "bilge-plates@1"]).toContain(keys[1]);
   expect(["valves-gauges@1", "helm-telegraph@1"]).toContain(keys[2]);
 });

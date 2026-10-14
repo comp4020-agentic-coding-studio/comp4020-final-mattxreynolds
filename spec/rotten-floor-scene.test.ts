@@ -1,8 +1,7 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { pageFor } from "./helpers/browser.ts";
-import { codeFromClue } from "./helpers/mural.ts";
-import { intent, snapshot, underway } from "./helpers/voyage.ts";
+import { snapshot, underwayAtMiddle } from "./helpers/voyage.ts";
 import { parsePlan, routes } from "./helpers/rotten-floor.ts";
 
 // The rotten floor worked in the scene at 390x844 (#54, #37): two phones, no 2D buttons pressed.
@@ -34,10 +33,7 @@ async function tapPlate(page: Page, dir: string): Promise<void> {
 }
 
 it("the Walker crosses the dark floor by tapping plates in the scene while the plan holder reads the plan on the wall; a trapdoor is one Strike and back to the start", async () => {
-  const l = await underway(baseUrl);
-  // the opener is only setup here: it is solved through the API, whichever opener the Draw picked
-  const opener = (await snapshot(baseUrl, l.voyage.id, l.host.cookie)).draw!.puzzles[0];
-  await intent(baseUrl, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener.clue!) });
+  const l = await underwayAtMiddle(baseUrl, "rotten-floor"); // the Draw picks the middle at random (#63); the opener is solved through the API
   const phone = { width: 390, height: 844 };
   const host = await pageFor(browser, baseUrl, l.voyage, l.host, phone);
   const partner = await pageFor(browser, baseUrl, l.voyage, l.partner, phone);

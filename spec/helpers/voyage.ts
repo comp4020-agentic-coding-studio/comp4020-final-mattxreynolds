@@ -1,4 +1,5 @@
 import type { LobbySnapshot } from "../../shared/lobby.ts";
+import { codeFromClue } from "./mural.ts";
 import { openSse, parseFrame } from "./sse.ts";
 
 export interface Sailor {
@@ -81,4 +82,25 @@ export async function underwayWith(base: string, kind: OpenerKind): ReturnType<t
     if (openerOf(clue) === kind) return l;
   }
   throw new Error(`no ${kind} opener drawn in 40 Voyages`);
+}
+
+export type MiddleKind = "rotten-floor" | "bilge-plates";
+
+/** Which middle a Clue text belongs to (#63). */
+export const middleOf = (clue: string): MiddleKind => (/bilge survey/i.test(clue) ? "bilge-plates" : "rotten-floor");
+
+/**
+ * An underway Voyage with the opener solved through the API (from its Clue, whichever opener the Draw picked)
+ * so the middle is live, and the middle is the given Puzzle. A middle's Clue shows only once it is live and the
+ * Draw picks it at random, so this casts off fresh Voyages until it gets that one.
+ */
+export async function underwayAtMiddle(base: string, kind: MiddleKind): ReturnType<typeof lobby> {
+  for (let tries = 0; tries < 60; tries++) {
+    const l = await underway(base);
+    const opener = (await snapshot(base, l.voyage.id, l.host.cookie)).draw!.puzzles[0].clue!;
+    await intent(base, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener) });
+    const middle = (await snapshot(base, l.voyage.id, l.partner.cookie)).draw!.puzzles[1].clue!;
+    if (middleOf(middle) === kind) return l;
+  }
+  throw new Error(`no ${kind} middle drawn in 60 Voyages`);
 }
