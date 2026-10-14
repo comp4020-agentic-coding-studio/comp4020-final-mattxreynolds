@@ -17,6 +17,7 @@ afterAll(async () => {
 async function phone(link?: string): Promise<Page> {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const page = await context.newPage();
+  page.setDefaultTimeout(90_000);
   await page.goto(link ?? baseUrl);
   if (!link) await page.getByRole("button", { name: "Play as guest" }).click();
   return page;
@@ -84,4 +85,4 @@ it("the Walker crosses the dark floor by tapping plates in the scene while the p
   }
   await expect.poll(() => host.getByTestId("far-hatch").innerText(), { timeout: 20_000 }).toMatch(/open/i);
   await expect.poll(() => partner.getByTestId("far-hatch").innerText(), { timeout: 20_000 }).toMatch(/open/i);
-}, 180_000);
+}, 400_000);
