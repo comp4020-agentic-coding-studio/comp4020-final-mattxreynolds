@@ -16,8 +16,25 @@ export interface PublicPuzzle {
   role: "clue" | "lock" | null;
   /** The rendered Clue; present only on the Clue Deck, and only once the Puzzle is live or solved. */
   clue?: string;
+  /** Present on a split-instrument finale once it is live: only the dials this Deck may see (#48). */
+  instrument?: InstrumentView;
   /** The Walker's view, on the walking Deck only, while the Puzzle is live: where they stand and the lit tiles beside them. */
   walk?: WalkView;
+}
+
+/**
+ * One Deck's half of a split instrument. The Engine Room holds the valves; the
+ * Wheelhouse reads the gauges, sets the trims and sees how long the band has
+ * held. Neither half holds the target, which lives in the Wheelhouse Clue.
+ */
+export interface InstrumentView {
+  /** The lowest and highest level this Deck's dials turn to. */
+  range: readonly [number, number];
+  valves?: number[];
+  trims?: number[];
+  readings?: number[];
+  /** Milliseconds the gauges have sat in band as of this snapshot, or null while out of band. */
+  holdMs?: number | null;
 }
 
 export interface WalkView {
