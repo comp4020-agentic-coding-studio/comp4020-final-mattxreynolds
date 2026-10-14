@@ -4,16 +4,23 @@
 import * as THREE from "three";
 import type { Slot } from "../shared/draw.ts";
 import { moveInRoom, type Room } from "../shared/rooms.ts";
+import { walkTowards, type ControlsMode, type Walk } from "./controls.ts";
 
 export interface SceneHandle {
   canvas: HTMLCanvasElement;
   /** The Puzzles whose areas are open; their blockers stop blocking and stop being drawn. */
   setOpened(opened: ReadonlySet<Slot>): void;
+  /** The virtual joystick's walk, each axis -1..1; {0,0} lets go. */
+  setStick(walk: Walk): void;
+  /** "tap" turns a tap or click on the floor into a walk there; "direct" leaves walking to keys and the stick. */
+  setMode(mode: ControlsMode): void;
   dispose(): void;
 }
 
 const WALK_SPEED = 2.5; // metres per second
 const LOOK_SPEED = 0.0025; // radians per pixel of mouse movement
+const DRAG_LOOK_SPEED = 0.005; // radians per pixel of a finger drag
+const TAP_SLOP = 10; // pixels a finger may move and still be a tap
 const KEYS: Record<string, "forward" | "back" | "left" | "right"> = {
   w: "forward", arrowup: "forward", s: "back", arrowdown: "back", a: "left", arrowleft: "left", d: "right", arrowright: "right",
 };
@@ -91,6 +98,49 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     me.yaw -= e.movementX * LOOK_SPEED;
     me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - e.movementY * LOOK_SPEED));
   };
+
+  // Touch and pen: dragging looks; in tap mode a press that barely moved walks to that spot on the floor.
+  let mode: ControlsMode = "direct";
+  let stick: Walk = { forward: 0, right: 0 };
+  let target: { x: number; z: number } | null = null;
+  const floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const raycaster = new THREE.Raycaster();
+  let drag: { id: number; x: number; y: number; startX: number; startY: number; moved: boolean } | null = null;
+  const pointerdown = (e: PointerEvent): void => {
+    if (e.pointerType === "mouse" && mode === "direct") return;
+    if (drag) return;
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, moved: false };
+    canvas.setPointerCapture(e.pointerId);
+  };
+  const pointermove = (e: PointerEvent): void => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > TAP_SLOP) drag.moved = true;
+    if (drag.moved) {
+      me.yaw -= (e.clientX - drag.x) * DRAG_LOOK_SPEED;
+      me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - (e.clientY - drag.y) * DRAG_LOOK_SPEED));
+    }
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+  };
+  const pointerup = (e: PointerEvent): void => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const tapped = !drag.moved;
+    drag = null;
+    if (!tapped || mode !== "tap") return;
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const hit = raycaster.ray.intersectPlane(floor, new THREE.Vector3());
+    if (hit) target = { x: hit.x, z: hit.z };
+  };
+  const pointercancel = (e: PointerEvent): void => {
+    if (drag && e.pointerId === drag.id) drag = null;
+  };
+  canvas.addEventListener("pointerdown", pointerdown);
+  canvas.addEventListener("pointermove", pointermove);
+  canvas.addEventListener("pointerup", pointerup);
+  canvas.addEventListener("pointercancel", pointercancel);
+
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
   window.addEventListener("blur", blur);
@@ -103,10 +153,16 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     raf = requestAnimationFrame(frame);
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    const f = (held.forward ? 1 : 0) - (held.back ? 1 : 0);
-    const r = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    let f = (held.forward ? 1 : 0) - (held.back ? 1 : 0) + stick.forward;
+    let r = (held.right ? 1 : 0) - (held.left ? 1 : 0) + stick.right;
+    if (f || r) target = null; // steering by hand cancels a tap-to-walk
+    else if (target) {
+      const toward = walkTowards(me, me.yaw, target);
+      if (toward) ({ forward: f, right: r } = toward);
+      else target = null;
+    }
     if (f || r) {
-      const len = Math.hypot(f, r);
+      const len = Math.max(Math.hypot(f, r), 1);
       const step = (WALK_SPEED * dt) / len;
       // yaw 0 looks north (towards -z); right is (cos, -sin)
       const dx = (-Math.sin(me.yaw) * f + Math.cos(me.yaw) * r) * step;
@@ -120,6 +176,7 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     canvas.dataset.frames = String(frames);
     canvas.dataset.x = me.x.toFixed(3);
     canvas.dataset.z = me.z.toFixed(3);
+    canvas.dataset.yaw = me.yaw.toFixed(3);
   };
   raf = requestAnimationFrame(frame);
 
@@ -129,6 +186,13 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
       open = next;
       showOpened();
     },
+    setStick(walk) {
+      stick = walk;
+    },
+    setMode(next) {
+      mode = next;
+      target = null;
+    },
     dispose() {
       cancelAnimationFrame(raf);
       observer.disconnect();
@@ -136,6 +200,10 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
       window.removeEventListener("keyup", keyup);
       window.removeEventListener("blur", blur);
       document.removeEventListener("mousemove", mousemove);
+      canvas.removeEventListener("pointerdown", pointerdown);
+      canvas.removeEventListener("pointermove", pointermove);
+      canvas.removeEventListener("pointerup", pointerup);
+      canvas.removeEventListener("pointercancel", pointercancel);
       renderer.dispose();
     },
   };
