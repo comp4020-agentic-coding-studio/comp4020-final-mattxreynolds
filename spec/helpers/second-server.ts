@@ -6,6 +6,8 @@ import { join } from "node:path";
 export interface SecondServer {
   url: string;
   dataDir: string;
+  /** Everything the server has printed to stdout so far. */
+  output(): string;
   /** Sends SIGTERM and resolves with the exit code once the process is gone. */
   stop(): Promise<number | null>;
 }
@@ -26,8 +28,8 @@ export async function startSecondServer(
   );
   const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
 
+  let out = "";
   const port = await new Promise<number>((resolve, reject) => {
-    let out = "";
     child.stdout!.on("data", (chunk: Buffer) => {
       out += chunk;
       const found = out.match(/listening on port (\d+)/);
@@ -37,6 +39,7 @@ export async function startSecondServer(
   });
 
   return {
+    output: () => out,
     url: `http://127.0.0.1:${port}`,
     dataDir,
     async stop() {
