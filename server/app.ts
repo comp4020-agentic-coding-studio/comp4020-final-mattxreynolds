@@ -6,11 +6,14 @@ import { createGuest, endSession, personForToken, recordSignInFailure, renamePer
 import { sanitisePlayerName } from "./player-name.ts";
 import type { Notice } from "../shared/draw.ts";
 import { logEvent } from "./events.ts";
+import { settleClock } from "./clock.ts";
+import { debriefOf } from "./debrief.ts";
 import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
 import { isLowTrustKind, saveLowTrust } from "./low-trust.ts";
 import { withVoyage } from "./mutex.ts";
 import { attachSession, offersFor } from "./rejoin.ts";
+import { bannersFor, publishProfile, sailAgain, watchProfile } from "./sail-again.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
 
 const COOKIE = "session";
@@ -124,6 +127,45 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return c.json(voyage);
   });
 
+  // Sail again: one tap each. The first opens the new lobby and banners the partner; the second boards it.
+  api.post("/voyages/:id/sail-again", async (c) => {
+    const you = c.get("person");
+    const fromId = c.req.param("id");
+    const result = await withVoyage(fromId, () => sailAgain(db, you.id, fromId));
+    const who = { actor: you.id, actorName: you.name };
+    if (typeof result === "string") {
+      const status = result === "not seated" ? 403 : 409;
+      logEvent(db, { ...who, action: "sail-again.refused", detail: { reason: result, status } });
+      return c.json({ error: result === "live" ? "the Voyage is not over yet" : result === "full" ? "the new Voyage is full" : "not seated in this Voyage" }, status);
+    }
+    if (result.opened) {
+      logEvent(db, { ...who, voyageId: result.voyage.id, action: "voyage.started", detail: { ship: result.voyage.ship, sail_again: true } });
+      for (const p of seatedPlayers(db, fromId)) if (p.id !== you.id) publishProfile(p.id);
+    } else {
+      publish(result.voyage.id);
+      publishProfile(you.id);
+    }
+    return c.json(result.voyage);
+  });
+
+  api.get("/banners", (c) => c.json(bannersFor(db, c.get("person").id)));
+
+  // The profile's own stream: the banners, now and whenever they change.
+  api.get("/me/events", (c) => {
+    const you = c.get("person");
+    return streamSSE(c, async (stream) => {
+      const send = async (): Promise<void> => {
+        await stream.writeSSE({ event: "banners", data: JSON.stringify(bannersFor(db, you.id)) });
+      };
+      await send();
+      const unwatch = watchProfile(you.id, () => void send());
+      const beat = setInterval(() => void stream.write(": heartbeat\n\n"), HEARTBEAT_MS);
+      await new Promise<void>((resolve) => stream.onAbort(resolve));
+      clearInterval(beat);
+      unwatch();
+    });
+  });
+
   api.post("/join", async (c) => {
     const you = c.get("person");
     const who = { actor: you.id, actorName: you.name };
@@ -148,6 +190,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     if (result.newlySeated) {
       logEvent(db, { ...who, voyageId: result.voyage.id, action: "voyage.joined", detail: { via } });
       publish(result.voyage.id);
+      publishProfile(you.id); // a banner for this Voyage is answered
     }
     return c.json(result.voyage);
   });
@@ -237,6 +280,24 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       );
     }
     return c.json({ ok: true });
+  });
+
+  // The debrief: both Decks and the timeline, for the Voyage's two Players only,
+  // and only once it is over. 403 for a stranger (and for an unknown id), then 409 while live.
+  api.get("/voyages/:id/debrief", (c) => {
+    const you = c.get("person");
+    const voyage = voyageById(db, c.req.param("id"));
+    if (!voyage || !seatedPlayers(db, voyage.id).some((p) => p.id === you.id)) {
+      logEvent(db, { actor: you.id, actorName: you.name, action: "debrief.refused", detail: { reason: "not seated", status: 403 } });
+      return c.json({ error: "not seated in this Voyage" }, 403);
+    }
+    settleClock(db, voyage.id, Date.now());
+    const debrief = debriefOf(db, voyage.id);
+    if (!debrief) {
+      logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: "debrief.refused", detail: { reason: "voyage live", status: 409 } });
+      return c.json({ error: "the debrief opens once the Voyage is over" }, 409);
+    }
+    return c.json(debrief);
   });
 
   api.get("/voyages/:id/events", (c) => {

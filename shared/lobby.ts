@@ -44,6 +44,8 @@ export interface LobbySnapshot {
   clock: { secondsLeft: number } | null;
   /** True once the Voyage is over: ended by a Player, launched or sunk. */
   ended: boolean;
+  /** The end card's numbers once the Voyage is over; null while it is live. Both Decks get the same. */
+  end: EndCard | null;
   /** Where you last stood, or null. Yours alone: the partner's snapshot never carries it (#57). */
   pose: Pose | null;
   /** Your half-typed keypad codes by slot. Yours alone (#57). */
@@ -59,6 +61,55 @@ export interface VoyageListing extends VoyageView {
 export interface ProfileVoyages {
   unfinished: VoyageListing[];
   finished: VoyageListing[];
+}
+
+/** The end card both Decks show once the Voyage is over (#60). The Score is set only for a launch. */
+export interface EndCard {
+  outcome: "abandoned" | "launched" | "sank";
+  /** Clock time left at launch, in ms; null unless launched. */
+  scoreMs: number | null;
+  strikes: number;
+  solved: number;
+  /** How many Puzzles the Draw held. */
+  total: number;
+}
+
+export interface DebriefPuzzle {
+  slot: Slot;
+  /** "clue" if this Deck held the Clue, "lock" if it took the answer. */
+  role: "clue" | "lock";
+  solved: boolean;
+  /** The Clue text, only on the Deck that held it; never an answer. */
+  clue: string | null;
+}
+
+export interface DebriefDeck {
+  deck: DeckName;
+  room: string;
+  player: { name: string } | null;
+  puzzles: DebriefPuzzle[];
+}
+
+export interface DebriefEntry {
+  at: number;
+  /** Player name of whoever did it; null for things that belong to the Voyage (a Strike, a solve). */
+  actor: string | null;
+  text: string;
+}
+
+/** Both Decks side by side, for the two Players only and only once the Voyage is over (#60). */
+export interface Debrief {
+  ship: string;
+  end: EndCard;
+  decks: DebriefDeck[];
+  timeline: DebriefEntry[];
+}
+
+/** "<from> started a new Voyage with you": on the partner's profile after "Sail again" (#61). */
+export interface Banner {
+  /** Player name of whoever opened the new lobby. */
+  from: string;
+  voyage: VoyageView;
 }
 
 /** A Deck a fresh browser may take over: its Player isn't connected. */

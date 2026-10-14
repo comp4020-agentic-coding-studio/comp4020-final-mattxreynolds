@@ -23,6 +23,8 @@ export interface SceneHandle {
   setFloor(view: WalkView | null, onStep?: (dir: string) => void): void;
   /** The trapdoor plan, written on the Room's plan board; null clears it. */
   setPlan(text: string | null): void;
+  /** Text for a thing's face: the Clue on the mural, the code typed so far on the keypad display. */
+  setScreen(which: "clue" | "code", text: string): void;
   dispose(): void;
 }
 
@@ -38,6 +40,33 @@ function box(w: number, h: number, d: number, color: number, x: number, y: numbe
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
   mesh.position.set(x, y, z);
   return mesh;
+}
+
+/** A face for a thing, drawn on a canvas texture; returns the plane and a way to change its text. */
+function face(t: Thing, text: string): { mesh: THREE.Mesh; draw: (text: string) => void } {
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(t.size[0] * 256);
+  cv.height = Math.round(t.size[1] * 256);
+  const ctx = cv.getContext("2d")!;
+  const texture = new THREE.CanvasTexture(cv);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const draw = (words: string): void => {
+    ctx.fillStyle = t.press ? "#e9dcc0" : "#f2ead6";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#1b1b1b";
+    ctx.textAlign = t.press || t.screen === "code" ? "center" : "left";
+    ctx.textBaseline = "middle";
+    const lines = t.press || t.screen === "code" ? [words] : words.split("\n");
+    const size = t.press || t.screen === "code" ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
+    ctx.font = `bold ${size}px monospace`;
+    const x = t.press || t.screen === "code" ? cv.width / 2 : 12;
+    lines.forEach((line, i) => ctx.fillText(line, x, ((i + 0.5) * cv.height) / lines.length, cv.width - 24));
+    texture.needsUpdate = true;
+  };
+  draw(text);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.size[0] * 0.92, t.size[1] * 0.92), new THREE.MeshBasicMaterial({ map: texture }));
+  mesh.position.set(t.x, t.y, t.z + t.size[2] / 2 + 0.002);
+  return { mesh, draw };
 }
 
 /** Throws if the browser cannot make a WebGL context; the caller shows the 2D views instead. */
@@ -59,6 +88,14 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   scene.add(box(0.1, wallHeight, depth, 0x73777d, width + 0.05, wallHeight / 2, depth / 2));
 
   // Nothing marks a usable thing as usable (#33): stations and decoys are drawn alike.
+  // Buttons and screens carry writing on their faces: key labels, the mural, the typed code.
+  const screens = new Map<string, (text: string) => void>();
+  for (const t of room.things) {
+    if (!t.press && !t.screen) continue;
+    const f = face(t, t.press ? t.press.toUpperCase() : "");
+    scene.add(f.mesh);
+    if (t.screen) screens.set(t.screen, f.draw);
+  }
 
   const blockerMeshes = room.blockers.map((b) => {
     const w = b.box.maxX - b.box.minX;
@@ -280,6 +317,19 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
       if (at) centres[t.id] = [Math.round(at.x), Math.round(at.y)];
     }
     canvas.dataset.things = JSON.stringify(centres);
+    // and how big each thing's front face is on screen, in CSS px (width, height)
+    const sizes: Record<string, number[]> = {};
+    for (const t of room.things) {
+      const z = t.z + t.size[2] / 2;
+      const px = (x: number, y: number): THREE.Vector3 => new THREE.Vector3(x, y, z).project(camera);
+      const l = px(t.x - t.size[0] / 2, t.y);
+      const r = px(t.x + t.size[0] / 2, t.y);
+      const u = px(t.x, t.y + t.size[1] / 2);
+      const d = px(t.x, t.y - t.size[1] / 2);
+      if (Math.max(l.z, r.z, u.z, d.z) > 1) continue;
+      sizes[t.id] = [Math.round((Math.abs(r.x - l.x) / 2) * canvas.clientWidth), Math.round((Math.abs(u.y - d.y) / 2) * canvas.clientHeight)];
+    }
+    canvas.dataset.sizes = JSON.stringify(sizes);
   };
   raf = requestAnimationFrame(frame);
 
@@ -346,6 +396,9 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     },
     setStick(walk) {
       stick = walk;
+    },
+    setScreen(which, text) {
+      screens.get(which)?.(text);
     },
     setMode(next) {
       mode = next;
