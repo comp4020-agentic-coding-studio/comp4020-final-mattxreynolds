@@ -2,6 +2,7 @@ import type { LobbySnapshot } from "../../shared/lobby.ts";
 import { settingsFromClue } from "./finale.ts";
 import { codeFromClue } from "./mural.ts";
 import { parsePlan, routes } from "./rotten-floor.ts";
+import { openSse } from "./sse.ts";
 import { intent, post, snapshot, underway } from "./voyage.ts";
 
 type Who = Parameters<typeof intent>[2];
@@ -9,6 +10,8 @@ type Who = Parameters<typeof intent>[2];
 /** A Voyage on `base` with the opener and the middle solved from the Clues alone, so the finale is live. */
 export async function atFinale(base: string) {
   const l = await underway(base);
+  // both Players stay connected the way open browsers do: a slow setup must not outlast the 8 s grace and freeze the Voyage (#56)
+  const streams = [await openSse(new URL(`/api/voyages/${l.voyage.id}/events`, base), l.host.cookie), await openSse(new URL(`/api/voyages/${l.voyage.id}/events`, base), l.partner.cookie)];
   const snap = (who: Who): Promise<LobbySnapshot> => snapshot(base, l.voyage.id, who.cookie);
   const opener = (await snap(l.host)).draw!.puzzles[0];
   await intent(base, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener.clue!) });
@@ -16,7 +19,7 @@ export async function atFinale(base: string) {
   for (const dir of routes(plan)[0]) {
     await intent(base, l.voyage.id, l.host, { kind: "walk-step", deck: "Upper Deck", slot: "middle", dir });
   }
-  return l;
+  return { ...l, streams };
 }
 
 /** Turns the dials from the Decks' own views and the Clue text until every gauge is in band. */

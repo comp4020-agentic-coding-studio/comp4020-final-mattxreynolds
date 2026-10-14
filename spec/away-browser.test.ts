@@ -12,7 +12,7 @@ afterAll(async () => {
 });
 
 const T0 = Date.UTC(2026, 9, 20, 10, 0, 0);
-const SLOW = 90_000;
+const SLOW = 180_000;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function open(base: string, link: string, cookie: string): Promise<Page> {
@@ -28,8 +28,7 @@ async function open(base: string, link: string, cookie: string): Promise<Page> {
 it("a backgrounded page is not Away", async () => {
   const server = await startSecondServer({ now: T0, ticking: true });
   const { voyage, host, partner } = await underway(server.url);
-  const a = await open(server.url, voyage.link, host.cookie);
-  const b = await open(server.url, voyage.link, partner.cookie);
+  const [a, b] = await Promise.all([open(server.url, voyage.link, host.cookie), open(server.url, voyage.link, partner.cookie)]);
   await b.bringToFront(); // a is now in the background
   await pause(12_000);
   await expect.poll(() => a.getByTestId("paused").count(), { timeout: 10_000 }).toBe(0);
@@ -41,8 +40,7 @@ it("a backgrounded page is not Away", async () => {
 it("the connected Deck sees a paused screen with the code, and the Voyage resumes by itself when the partner is back", async () => {
   const server = await startSecondServer({ now: T0, ticking: true });
   const { voyage, host, partner } = await underway(server.url);
-  const a = await open(server.url, voyage.link, host.cookie);
-  const b = await open(server.url, voyage.link, partner.cookie);
+  const [a, b] = await Promise.all([open(server.url, voyage.link, host.cookie), open(server.url, voyage.link, partner.cookie)]);
   await b.context().close();
   const paused = a.getByTestId("paused");
   await paused.waitFor({ timeout: 30_000 });

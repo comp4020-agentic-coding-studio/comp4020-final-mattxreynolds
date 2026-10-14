@@ -168,6 +168,8 @@ it("drifting out of band resets the hold and is never a Strike", async () => {
   const l = await atFinale();
   const { voyage, host, partner } = l;
   await steerIntoBand(l);
+  // both Players stay connected, as in a browser: a closed stream for 8 s is Away (#56) and would freeze the hold
+  const streams = [await openSse(new URL(`/api/voyages/${voyage.id}/events`, server.url), host.cookie), await openSse(new URL(`/api/voyages/${voyage.id}/events`, server.url), partner.cookie)];
   const startedAt = Date.now();
   await new Promise((r) => setTimeout(r, 3000));
   expect((await finaleOf(voyage.id, host)).instrument!.holdMs).toBeGreaterThanOrEqual(2500);
@@ -185,4 +187,5 @@ it("drifting out of band resets the hold and is never a Strike", async () => {
 
   expect((await turnValve(voyage.id, partner, 0, -1)).status).toBe(200); // back in band: the hold starts again from zero
   expect((await finaleOf(voyage.id, host)).instrument!.holdMs).toBeLessThan(2000);
+  for (const { stream } of streams) stream.close();
 }, SLOW);

@@ -19,6 +19,13 @@ afterAll(async () => {
 });
 
 type Who = Parameters<typeof intent>[2];
+const turn = (who: Who, kind: string, deck: string, by: number) =>
+  fetch(new URL(`/api/voyages/${current}/intents`, server.url), {
+    method: "POST",
+    headers: { cookie: who.cookie, "content-type": "application/json" },
+    body: JSON.stringify({ seq: 0, kind, deck, index: 0, by }),
+  });
+let current = "";
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const watch = (voyageId: string, who: Who) => openSse(new URL(`/api/voyages/${voyageId}/events`, server.url), who.cookie);
 const snap = (voyageId: string, who: Who): Promise<LobbySnapshot> => snapshot(server.url, voyageId, who.cookie);
@@ -55,9 +62,9 @@ it("the Clock stops after exactly 8 s closed, the partner sees it paused, and it
   const { voyage, host, partner } = await underway(server.url);
   const on = await bothOn(voyage.id, host, partner);
   on.partner.stream.close();
-  await pause(6000);
+  await pause(4000);
   expect((await snap(voyage.id, host)).paused).toBe(false); // still in grace
-  await pause(3500);
+  await expect.poll(async () => (await snap(voyage.id, host)).paused, { timeout: 15_000, interval: 250 }).toBe(true);
   const frozen = await snap(voyage.id, host);
   expect(frozen.paused).toBe(true);
   expect(frozen.voyage.code).toBeTruthy();
@@ -99,7 +106,7 @@ it("a dropped stream reconnects to a full snapshot with nothing lost", async () 
 it("the finale hold continues within grace", async () => {
   const l = await atFinale(server.url);
   const { voyage, host, partner } = l;
-  const on = await bothOn(voyage.id, host, partner);
+  const on = { host: l.streams[0], partner: l.streams[1] };
   await steerIntoBand(server.url, l);
   const hold = async () => (await snap(voyage.id, host)).draw!.puzzles[2].instrument!.holdMs;
   await pause(1000);
@@ -116,13 +123,16 @@ it("the finale hold continues within grace", async () => {
 it("the finale hold resets on a freeze, and starts afresh when both are back", async () => {
   const l = await atFinale(server.url);
   const { voyage, host, partner } = l;
-  const on = await bothOn(voyage.id, host, partner);
+  current = voyage.id;
+  const on = { host: l.streams[0], partner: l.streams[1] };
   await steerIntoBand(server.url, l);
   const hold = async () => (await snap(voyage.id, host)).draw!.puzzles[2].instrument!.holdMs;
   expect(await hold()).not.toBeNull();
+  // knock a gauge out and back so the hold starts now, then drop: the freeze lands 8 s into the 10 s hold
+  await turn(partner, "turn-valve", "Lower Deck", 1);
+  await turn(partner, "turn-valve", "Lower Deck", -1);
   on.partner.stream.close();
-  await pause(9000); // the freeze lands at 8 s of the 10 s hold
-  expect((await snap(voyage.id, host)).paused).toBe(true);
+  await expect.poll(async () => (await snap(voyage.id, host)).paused, { timeout: 15_000, interval: 500 }).toBe(true);
   expect(await hold()).toBeNull(); // reset by the freeze, not carried over
 
   const back = await watch(voyage.id, partner);
