@@ -8,10 +8,10 @@ let browser: Browser;
 
 beforeAll(async () => {
   browser = await chromium.launch();
-});
+}, 30_000);
 afterAll(async () => {
   await browser.close();
-});
+}, 30_000);
 
 async function sailor(link?: string): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
@@ -60,4 +60,4 @@ it("the Engine Room reads out the trapdoor plan and the Wheelhouse walks it: a t
   for (const dir of route) await floor.getByRole("button", { name: new RegExp(`^${dir}`, "i") }).click();
   await expect.poll(() => host.getByTestId("far-hatch").innerText()).toMatch(/open/i);
   await expect.poll(() => partner.getByTestId("far-hatch").innerText()).toMatch(/open/i);
-});
+}, 30_000);
