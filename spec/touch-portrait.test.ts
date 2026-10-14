@@ -45,7 +45,7 @@ const yaw = async (page: Page): Promise<number> => Number(await page.getByTestId
 /** One finger down at `from`, moved to `to`, held until `until` passes, then lifted. */
 async function touchDrag(page: Page, from: [number, number], to: [number, number], until: () => Promise<void>): Promise<void> {
   const cdp = await page.context().newCDPSession(page);
-  const send = (type: string, points: [number, number][]): Promise<unknown> =>
+  const send = (type: "touchStart" | "touchMove" | "touchEnd", points: [number, number][]): Promise<unknown> =>
     cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map(([x, y], id) => ({ x, y, id })) });
   await send("touchStart", [from]);
   await send("touchMove", [to]);
