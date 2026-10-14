@@ -113,6 +113,8 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
       return at ? Math.hypot(at.x - px, at.y - py) : Infinity;
     });
     if (hit) onUse(hit);
+    // While the mouse is captured, clicks reach the canvas rather than the prompt, so any click also releases it.
+    if (locked) document.exitPointerLock();
   };
   canvas.addEventListener("click", click);
   window.addEventListener("keydown", keydown);
