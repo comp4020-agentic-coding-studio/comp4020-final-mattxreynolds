@@ -5,7 +5,9 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createGuest, personForToken, renamePerson, type Person } from "./people.ts";
 import { sanitisePlayerName } from "./player-name.ts";
 import { logEvent } from "./events.ts";
-import { publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById } from "./lobby.ts";
+import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById } from "./lobby.ts";
+import { applyIntent } from "./intents.ts";
+import { withVoyage } from "./mutex.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
 
 const COOKIE = "session";
@@ -40,6 +42,9 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const person = personForToken(db, token);
     if (!person) {
       if (token) deleteCookie(c, COOKIE, { path: "/" });
+      if (c.req.method === "POST" && c.req.path.endsWith("/intents")) {
+        logEvent(db, { action: "intent.refused", detail: { reason: "no session", status: 401 } });
+      }
       return c.json({ error: "no session" }, 401);
     }
     issue(c, token!); // rolling: each visit renews the year
@@ -98,6 +103,31 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return c.json(result.voyage);
   });
 
+  api.post("/voyages/:id/intents", async (c) => {
+    const you = c.get("person");
+    const voyageId = c.req.param("id");
+    const raw = await c.req.json().catch(() => null);
+    const outcome = await withVoyage(voyageId, () => applyIntent(db, voyageId, you, raw));
+    const kind = typeof raw?.kind === "string" ? raw.kind.slice(0, 40) : null;
+    if (!outcome.ok) {
+      // a refusal for a Voyage the Person isn't seated in stays out of that Voyage's log
+      logEvent(db, {
+        ...(outcome.reason === "not seated" ? {} : { voyageId }),
+        actor: you.id,
+        actorName: you.name,
+        action: "intent.refused",
+        detail: { reason: outcome.reason, status: outcome.status, kind },
+      });
+      return c.json({ error: outcome.message, offer: outcome.offer }, outcome.status);
+    }
+    if (outcome.changed) {
+      logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
+      if (outcome.started) logEvent(db, { voyageId, action: "voyage.cast-off" });
+      publish(voyageId);
+    }
+    return c.json({ ok: true });
+  });
+
   api.get("/voyages/:id/events", (c) => {
     const you = c.get("person");
     const voyage = voyageById(db, c.req.param("id"));
@@ -109,6 +139,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const who = { voyageId: voyage.id, actor: you.id, actorName: you.name };
     return streamSSE(c, async (stream) => {
       logEvent(db, { ...who, action: "stream.connected" });
+      const disconnected = markConnected(voyage.id, you.id);
       const send = (): Promise<void> =>
         stream.writeSSE({ event: "snapshot", data: JSON.stringify(snapshotFor(db, voyage, you)) });
       await send(); // the first event on every connection is the full state
@@ -117,6 +148,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       await new Promise<void>((resolve) => stream.onAbort(resolve));
       clearInterval(beat);
       unsubscribe();
+      disconnected();
       logEvent(db, { ...who, action: "stream.closed" });
     });
   });

@@ -38,6 +38,13 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX event_voyage ON event (voyage_id, id);
    CREATE INDEX event_actor ON event (actor, id);`,
+  // Deck choice and Cast off. A Person has one seat row per Voyage, so one
+  // Deck; the partial unique index makes the first accepted choice win even
+  // if the application check is ever bypassed. seq counts accepted intents.
+  `ALTER TABLE voyage ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE voyage_person ADD COLUMN deck TEXT CHECK (deck IN ('Upper Deck', 'Lower Deck'));
+   ALTER TABLE voyage_person ADD COLUMN cast_off INTEGER NOT NULL DEFAULT 0;
+   CREATE UNIQUE INDEX voyage_deck ON voyage_person (voyage_id, deck) WHERE deck IS NOT NULL;`,
 ];
 
 function migrate(db: DatabaseSync): void {
