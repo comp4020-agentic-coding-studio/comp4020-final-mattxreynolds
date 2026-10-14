@@ -49,6 +49,7 @@ it("the Wheelhouse reads the mural, the Engine Room keys a code in: a wrong one 
   const announcement = await host.getByRole("status").innerText();
   for (const name of players) expect(announcement).not.toContain(name.replace(" (you)", ""));
 
+  await host.waitForTimeout(1100); // the answer throttle allows about one a second
   await keypad.getByLabel("Code").fill(code);
   await keypad.getByRole("button", { name: "Enter" }).click();
   await expect.poll(() => host.getByTestId("hatch").innerText()).toMatch(/open/i);

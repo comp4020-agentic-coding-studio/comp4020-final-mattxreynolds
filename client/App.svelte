@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ClockReadout from "./ClockReadout.svelte";
   import type { LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby";
@@ -47,8 +48,14 @@
       // either Player may end the Voyage, so the other's ship ends too
       if (next.ended) return void goHome();
       snapshot = next;
+      // the server's seconds are the truth; between snapshots the readout only counts down
+      clockAt = next.clock ? { left: next.clock.secondsLeft, at: Date.now() } : null;
+      tick();
     });
-    es.addEventListener("strike", () => (strikeNote = "A wrong answer. The ship groans."));
+    es.addEventListener("strike", () => {
+      strikeNote = "A wrong answer. The ship groans.";
+      cue(220);
+    });
     es.addEventListener("bell", () => (bellNote = "A bell rings. A hatch swings open."));
     es.onerror = () => {
       if (es.readyState !== EventSource.CLOSED) return;
@@ -186,6 +193,35 @@
     offer = res.ok ? null : res.data?.offer ?? null;
   }
 
+  // Clock readout: counts down locally from the last snapshot, so both Decks agree to the second.
+  let clockAt: { left: number; at: number } | null = null;
+  let secondsLeft: number | null = $state(null);
+  let fiveNote = $state("");
+  function tick(): void {
+    secondsLeft = clockAt ? Math.max(0, clockAt.left - Math.floor((Date.now() - clockAt.at) / 1000)) : null;
+    if (secondsLeft !== null && secondsLeft <= 300 && secondsLeft > 0 && !fiveNote) {
+      fiveNote = "Five minutes left.";
+      cue(440);
+    }
+  }
+  // the one audible cue: a short tone, quiet when the browser has no audio yet
+  function cue(hz: number): void {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      osc.frequency.value = hz;
+      osc.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {
+      // no audio is not an error
+    }
+  }
+  onMount(() => {
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  });
+
   let code4 = $state("");
   let strikeNote = $state("");
   let bellNote = $state("");
@@ -296,7 +332,9 @@
     {#if snapshot.started && snapshot.yourDeck}
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
-        <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0}</p>
+        {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
+        <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
+        {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
         {#if strikeNote}<p role="status">{strikeNote}</p>{/if}
         {#if bellNote}<p role="status">{bellNote}</p>{/if}
         {#each snapshot.draw?.puzzles ?? [] as p}
