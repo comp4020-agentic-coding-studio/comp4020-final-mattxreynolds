@@ -84,6 +84,10 @@ export interface Room {
   eyeHeight: number;
   blockers: Blocker[];
   things: Thing[];
+  /** The dark floor of the rotten-floor Puzzle (#54): `cols` by `rows` square tiles of side `tile` metres. A1 is the south-west corner; rows count north. Tiles are sized so a lit plate is at least 44 px at 390x844 from the floor view. */
+  floor?: { cols: number; rows: number; x0: number; z0: number; tile: number };
+  /** The trapdoor plan on a wall, read in the scene (#54): centre x and height, width and height in metres, on the north wall. */
+  planBoard?: { x: number; y: number; w: number; h: number };
   /** The finale's read-outs. */
   displays: Display[];
   /** Walkable floor, facing the east wall, from which every finale control and read-out is in reach and 44 px or more at 390x844. */
@@ -173,6 +177,7 @@ const WHEELHOUSE: Room = {
   deck: "Upper Deck",
   start: { x: 2, z: 5.5, yaw: 0 },
   blockers: [{ id: "helm", box: { minX: 3.2, maxX: 4.8, minZ: 2.8, maxZ: 3.6 }, height: 1.2 }, ...alcove("w")],
+  floor: { cols: 5, rows: 6, x0: 0.4, z0: 1.4, tile: 0.8 },
   things: [
     { id: "mural", kind: "station", slot: "opener", screen: "clue", x: 2, y: 1.6, z: 0.1, size: [2.4, 1.6, 0.1] },
     { id: "chart-table", kind: "station", slot: "middle", x: 1, y: 1, z: 4.2, size: [1, 1, 1.6] },
@@ -195,6 +200,7 @@ const ENGINE_ROOM: Room = {
   deck: "Lower Deck",
   start: { x: 2, z: 5.5, yaw: 0 },
   blockers: [{ id: "boiler", box: { minX: 2.8, maxX: 4.8, minZ: 2.6, maxZ: 3.8 }, height: 2 }, ...alcove("e")],
+  planBoard: { x: 3.7, y: 1.7, w: 2.8, h: 1.8 },
   things: [
     { id: "keypad", kind: "station", slot: "opener", screen: "code", x: 2, y: 2.75, z: 0.1, size: [1.35, 0.4, 0.1] },
     ...KEYPAD_BUTTONS,
@@ -322,6 +328,17 @@ export function examineText(thing: Thing, live: ReadonlySet<Slot>): string {
   if (thing.kind === "decoy") return thing.plaque ?? "Nothing of note.";
   if (thing.slot && live.has(thing.slot)) return "It answers to the controls on your Deck screen.";
   return "Rusted solid.";
+}
+
+/** The floor-plan centre of a tile named like "B3" (column letter, row number from the start row), or null off the floor. */
+export function tileCentre(room: Room, name: string): { x: number; z: number } | null {
+  const f = room.floor;
+  const m = /^([A-Z])(\d+)$/.exec(name);
+  if (!f || !m) return null;
+  const col = m[1].charCodeAt(0) - 65;
+  const row = Number(m[2]) - 1;
+  if (col < 0 || col >= f.cols || row < 0 || row >= f.rows) return null;
+  return { x: f.x0 + col * f.tile + f.tile / 2, z: f.z0 + (f.rows - 1 - row) * f.tile + f.tile / 2 };
 }
 
 /**

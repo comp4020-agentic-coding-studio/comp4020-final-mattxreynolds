@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { SLOTS, type Slot } from "../shared/draw.ts";
+  import { SLOTS, type Slot, type WalkView } from "../shared/draw.ts";
   import { controlLive, displayText, examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
   import type { InstrumentView } from "../shared/draw.ts";
   import type { DeckName, Pose } from "../shared/intents.ts";
@@ -10,7 +10,7 @@
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened, voyageId, pose, clue = null, code = "", control = "keypad", onKey = () => {}, instrument = null }: {
+  let { deck, opened, voyageId, pose, clue = null, code = "", control = "keypad", onKey = () => {}, instrument = null, walk = null, plan = null, onStep = () => {} }: {
     deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null;
     /** The mural's Clue, on the Deck that holds it. */
     clue?: string | null;
@@ -22,6 +22,11 @@
     onKey?: (key: string) => void;
     /** This Deck's half of the live finale's instrument, for the wall read-outs and the dial controls. */
     instrument?: InstrumentView | null;
+    /** The Walker's view of the rotten floor, while it is live (#54). */
+    walk?: WalkView | null;
+    /** The trapdoor plan, for the Player who holds it. */
+    plan?: string | null;
+    onStep?: (dir: string) => void;
   } = $props();
 
   const room = roomForDeck(deck);
@@ -134,6 +139,12 @@
     handle?.setScreen("order", code.padEnd(5, "_").split("").join(" "));
     if (clue) handle?.canvas.setAttribute("data-mural", clue);
     handle?.canvas.setAttribute("data-code", code);
+  });
+  $effect(() => {
+    handle?.setFloor(walk ? { at: walk.at, lit: walk.lit.map((l) => ({ ...l })) } : null, onStep);
+  });
+  $effect(() => {
+    handle?.setPlan(plan);
   });
 
   // The wall read-outs follow the Deck's view; the hold counts up between snapshots (#55).
