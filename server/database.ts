@@ -99,6 +99,28 @@ const MIGRATIONS: string[] = [
      trims TEXT NOT NULL CHECK (json_valid(trims)),
      in_band_since INTEGER
    );`,
+  // The Leaderboard (#67). An entry exists only once both Players consented;
+  // it holds just the names and the Score, copied at posting. hidden is set by
+  // the moderation script and nothing else.
+  `CREATE TABLE leaderboard_consent (
+     voyage_id TEXT NOT NULL REFERENCES voyage(id),
+     person_id TEXT NOT NULL REFERENCES person(id),
+     PRIMARY KEY (voyage_id, person_id)
+   );
+   CREATE TABLE leaderboard_entry (
+     voyage_id TEXT PRIMARY KEY REFERENCES voyage(id),
+     players TEXT NOT NULL,
+     score_ms INTEGER NOT NULL,
+     posted_at INTEGER NOT NULL,
+     hidden INTEGER NOT NULL DEFAULT 0
+   );`,
+  // Sail again (#61): the new Voyage a finished one led to, and who opened it.
+  // One row per finished Voyage, so both Players' taps land in the same lobby.
+  `CREATE TABLE sail_again (
+     from_voyage TEXT PRIMARY KEY REFERENCES voyage(id),
+     new_voyage TEXT NOT NULL REFERENCES voyage(id),
+     started_by TEXT NOT NULL REFERENCES person(id)
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {
