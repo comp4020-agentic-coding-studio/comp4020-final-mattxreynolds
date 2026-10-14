@@ -1,21 +1,35 @@
 import type { DatabaseSync } from "node:sqlite";
 import { DECKS, intentSchema, type DeckName, type Intent } from "../shared/intents.ts";
-import { judge, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
-import { hasStarted, isEnded, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
+import { judge, judgeStep, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
+import { settleClock } from "./clock.ts";
+import { hasStarted, isEnded, publish, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
 import { roomForDeck } from "../shared/rooms.ts";
 import type { Person } from "./people.ts";
 
 export type Outcome =
   | { ok: true; changed: boolean; started: boolean; ended?: boolean; examined?: string; result?: SubmitResult }
-  | { ok: false; status: 403 | 409 | 400; reason: string; message: string; offer?: DeckName };
+  | { ok: false; status: 403 | 409 | 400 | 429; reason: string; message: string; offer?: DeckName };
 
-const refuse = (status: 403 | 409 | 400, reason: string, message: string, offer?: DeckName): Outcome => ({
+const refuse = (status: 403 | 409 | 400 | 429, reason: string, message: string, offer?: DeckName): Outcome => ({
   ok: false,
   status,
   reason,
   message,
   offer,
 });
+
+// About one answer per second per Puzzle per Person (#11). performance.now()
+// is monotonic and real even under the fake clock, which freezes Date only.
+const ANSWER_GAP_MS = 1000;
+const lastAnswer = new Map<string, number>();
+function throttled(voyageId: string, personId: string, slot: string): boolean {
+  const k = `${voyageId}/${personId}/${slot}`;
+  const now = performance.now();
+  const last = lastAnswer.get(k);
+  if (last !== undefined && now - last < ANSWER_GAP_MS) return true;
+  lastAnswer.set(k, now);
+  return false;
+}
 
 const record = (raw: unknown): Record<string, unknown> => (typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {});
 
@@ -37,6 +51,8 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
     return refuse(403, "not your Deck", "that is not your Deck");
   }
 
+  // the Clock is compared lazily: a ship that is due to sink sinks as soon as anyone acts
+  if (settleClock(db, voyageId, Date.now())) publish(voyageId);
   if (isEnded(db, voyageId)) return refuse(409, "voyage ended", "this Voyage has ended");
 
   const parsed = intentSchema.safeParse(raw);
@@ -50,6 +66,10 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   if (!parsed.success) return refuse(400, "bad body", "that is not a valid intent");
 
   const intent = parsed.data;
+  // the throttle comes last in the refusal order, and a 429 is never a Strike (#23)
+  if (intent.kind === "submit" && throttled(voyageId, you.id, intent.slot)) {
+    return refuse(429, "throttled", "Easy. Give the lock a moment.");
+  }
   if (intent.kind === "choose-deck" && mine.deck === intent.deck) {
     return { ok: true, changed: false, started: hasStarted(seats) };
   }
@@ -68,9 +88,16 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
     db.prepare("UPDATE voyage_person SET deck = ? WHERE voyage_id = ? AND person_id = ?").run(intent.deck, voyageId, you.id);
   } else if (intent.kind === "cast-off") {
     db.prepare("UPDATE voyage_person SET cast_off = 1 WHERE voyage_id = ? AND person_id = ?").run(voyageId, you.id);
-    if (hasStarted(seatsOf(db, voyageId))) storeDraw(db, voyageId); // generated once, at Voyage start
+    if (hasStarted(seatsOf(db, voyageId))) {
+      storeDraw(db, voyageId); // generated once, at Voyage start
+      db.prepare("UPDATE voyage SET cast_off_at = ? WHERE id = ?").run(Date.now(), voyageId); // the Clock starts here
+    }
+  } else if (intent.kind === "walk-step") {
+    result = judgeStep(db, voyageId, intent.slot, intent.dir);
+    if (result.kind === "strike") settleClock(db, voyageId, Date.now());
   } else {
     result = judge(db, voyageId, intent.slot, intent.answer);
+    if (result.kind === "strike") settleClock(db, voyageId, Date.now()); // the third Strike, or a Strike that takes the Clock to zero, sinks the ship
   }
   // every accepted intent moves seq, so the same submission sent twice is a 409 the second time
   db.prepare("UPDATE voyage SET seq = seq + 1 WHERE id = ?").run(voyageId);
@@ -99,6 +126,10 @@ function conflictWith(
   if (mine.deck === null) return refuse(409, "no Deck chosen", "choose a Deck before casting off");
   if (intent.kind === "submit") {
     const why = submitConflict(db, voyageId, intent.deck, intent.slot);
+    return why ? refuse(409, why.reason, why.message) : null;
+  }
+  if (intent.kind === "walk-step") {
+    const why = submitConflict(db, voyageId, intent.deck, intent.slot, intent.dir);
     return why ? refuse(409, why.reason, why.message) : null;
   }
   return null;

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
   import { roomForDeck } from "../shared/rooms.ts";
   import type { LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
@@ -54,8 +55,14 @@
         code4 = next.drafts.opener ?? "";
       }
       snapshot = next;
+      // the server's seconds are the truth; between snapshots the readout only counts down
+      clockAt = next.clock ? { left: next.clock.secondsLeft, at: Date.now() } : null;
+      tick();
     });
-    es.addEventListener("strike", () => (strikeNote = "A wrong answer. The ship groans."));
+    es.addEventListener("strike", () => {
+      strikeNote = "A wrong answer. The ship groans.";
+      cue(220);
+    });
     es.addEventListener("bell", () => (bellNote = "A bell rings. A hatch swings open."));
     es.onerror = () => {
       if (es.readyState !== EventSource.CLOSED) return;
@@ -194,6 +201,35 @@
     offer = res.ok ? null : res.data?.offer ?? null;
   }
 
+  // Clock readout: counts down locally from the last snapshot, so both Decks agree to the second.
+  let clockAt: { left: number; at: number } | null = null;
+  let secondsLeft: number | null = $state(null);
+  let fiveNote = $state("");
+  function tick(): void {
+    secondsLeft = clockAt ? Math.max(0, clockAt.left - Math.floor((Date.now() - clockAt.at) / 1000)) : null;
+    if (secondsLeft !== null && secondsLeft <= 300 && secondsLeft > 0 && !fiveNote) {
+      fiveNote = "Five minutes left.";
+      cue(440);
+    }
+  }
+  // the one audible cue: a short tone, quiet when the browser has no audio yet
+  function cue(hz: number): void {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      osc.frequency.value = hz;
+      osc.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {
+      // no audio is not an error
+    }
+  }
+  onMount(() => {
+    const timer = setInterval(tick, 500);
+    return () => clearInterval(timer);
+  });
+
   let code4 = $state("");
   let draftRestored = false;
   let draftTimer: ReturnType<typeof setTimeout> | undefined;
@@ -224,6 +260,19 @@
       code4 = "";
       saveDraft();
     }
+  }
+
+  // One step; the server decides whether it was a trapdoor, and says so on the stream.
+  async function walkStep(dir: string): Promise<void> {
+    if (!snapshot?.yourDeck) return;
+    const res = await api<{ error: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, {
+      kind: "walk-step",
+      deck: snapshot.yourDeck,
+      slot: "middle",
+      dir,
+      seq: snapshot.seq,
+    });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
   }
 
   async function copy(text: string): Promise<void> {
@@ -319,8 +368,10 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene voyageId={snapshot.voyage.id} deck={snapshot.yourDeck} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
-        <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0}</p>
+        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
+        <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
+        {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
         {#if strikeNote}<p role="status">{strikeNote}</p>{/if}
         {#if bellNote}<p role="status">{bellNote}</p>{/if}
         {#each snapshot.draw?.puzzles ?? [] as p}
@@ -335,6 +386,20 @@
                 <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} oninput={saveDraft} disabled={p.status !== "live"} /></label>
                 <button type="submit" disabled={p.status !== "live"}>Enter</button>
               </form>
+            {/if}
+          {:else if p.slot === "middle" && p.status !== "dead"}
+            <article data-testid="far-hatch">
+              The far hatch: {p.status === "solved" ? "open" : "bolted"}
+            </article>
+            {#if p.role === "clue" && p.clue}
+              <pre data-testid="plan">{p.clue}</pre>
+            {:else if p.walk}
+              <section data-testid="floor">
+                <p>You stand on <span data-testid="walker-at">{p.walk.at}</span>. The lit tiles beside you:</p>
+                {#each p.walk.lit as l (l.dir)}
+                  <button onclick={() => walkStep(l.dir)}>{l.dir} to {l.tile}</button>
+                {/each}
+              </section>
             {/if}
           {:else}
             <p data-testid="dead-station">A {p.slot} station, dead for now.</p>

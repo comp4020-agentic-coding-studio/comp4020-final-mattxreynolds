@@ -6,6 +6,8 @@ export interface LogEvent {
   actor?: string;
   actorName?: string;
   action: string;
+  /** When it happened; the server's now() unless a caller holds the instant it acted on. */
+  at?: number;
   /** Safe fields only: never a token, password or Voyage code. */
   detail?: Record<string, string | number | boolean | null>;
 }
@@ -16,7 +18,7 @@ export interface LogEvent {
 export function logEvent(db: DatabaseSync, e: LogEvent): void {
   const detail = e.detail ?? {};
   db.prepare("INSERT INTO event (at, voyage_id, actor, action, detail) VALUES (?, ?, ?, ?, ?)").run(
-    Date.now(),
+    e.at ?? Date.now(),
     e.voyageId ?? null,
     e.actor ?? null,
     e.action,

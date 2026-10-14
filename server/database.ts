@@ -55,6 +55,9 @@ const MIGRATIONS: string[] = [
   // Player ends it. Later outcomes (launched, sank) widen the CHECK.
   `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
    ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
+  // Where the Walker stands in the live blind navigator Puzzle, as JSON [x, y];
+  // NULL means the start.
+  `ALTER TABLE voyage ADD COLUMN walk_pos TEXT CHECK (walk_pos IS NULL OR json_valid(walk_pos));`,
   // Credentials live apart from the Person (ADR 0002). username_key is the
   // lower-cased username; password_hash is "salt:scrypt" in hex.
   `CREATE TABLE account (
@@ -78,6 +81,16 @@ const MIGRATIONS: string[] = [
      text TEXT NOT NULL,
      PRIMARY KEY (voyage_id, person_id, slot)
    );`,
+  // The Clock (#23, #49). cast_off_at is when the Voyage started; the Clock is
+  // a pure function of it, strikes and now(). outcome widens to launched and
+  // sank (a CHECK can't be altered, so the column is replaced); score_ms is
+  // set only by the server at a launch, and no intent can reach it.
+  `ALTER TABLE voyage ADD COLUMN cast_off_at INTEGER;
+   ALTER TABLE voyage ADD COLUMN score_ms INTEGER;
+   ALTER TABLE voyage ADD COLUMN outcome2 TEXT CHECK (outcome2 IN ('abandoned', 'launched', 'sank'));
+   UPDATE voyage SET outcome2 = outcome;
+   ALTER TABLE voyage DROP COLUMN outcome;
+   ALTER TABLE voyage RENAME COLUMN outcome2 TO outcome;`,
 ];
 
 function migrate(db: DatabaseSync): void {

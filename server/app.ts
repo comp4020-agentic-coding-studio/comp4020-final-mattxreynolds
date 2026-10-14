@@ -220,7 +220,8 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       if (result) {
         // Strikes and solves belong to the Voyage: logged and announced with no actor (#46).
         if (result.kind === "solved") logEvent(db, { voyageId, action: "puzzle.solved", detail: { slot: result.slot } });
-        else logEvent(db, { voyageId, action: "strike", detail: { strikes: result.strikes } });
+        else if (result.kind === "strike") logEvent(db, { voyageId, action: "strike", detail: { strikes: result.strikes } });
+        // a safe step is movement, like pose: it stays out of the log
       } else {
         logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
       }
