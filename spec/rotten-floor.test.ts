@@ -155,10 +155,10 @@ it("a typed answer to the walking Puzzle is a 409, never a Strike", async () => 
   expect((await draw(voyage.id, host)).strikes).toBe(0);
 });
 
-it("the Draw now holds an opener and a middle, stored with their versions", async () => {
+it("the Draw holds an opener, a middle and a finale, stored with their versions", async () => {
   const { voyage } = await atTheFloor();
   const db = new DatabaseSync(join(server.dataDir, "game.db"), { readOnly: true });
   const row = db.prepare("SELECT draw FROM voyage WHERE id = ?").get(voyage.id) as { draw: string };
   db.close();
-  expect(JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key)).toEqual(["mural-keypad@1", "rotten-floor@1"]);
+  expect(JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key)).toEqual(["mural-keypad@1", "rotten-floor@1", "valves-gauges@1"]);
 });
