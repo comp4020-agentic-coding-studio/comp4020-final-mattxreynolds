@@ -9,7 +9,15 @@
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened, voyageId, pose }: { deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null } = $props();
+  let { deck, opened, voyageId, pose, clue = null, code = "", onKey = () => {} }: {
+    deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null;
+    /** The mural's Clue, on the Deck that holds it. */
+    clue?: string | null;
+    /** The code typed so far on the keypad. */
+    code?: string;
+    /** A keypad button pressed in the scene: a digit, "clear" or "enter". */
+    onKey?: (key: string) => void;
+  } = $props();
 
   const room = roomForDeck(deck);
   let host: HTMLDivElement;
@@ -59,6 +67,8 @@
 
   // Using a thing: show its text and log the examine through the intent pipeline. It is never a Strike (#52).
   function use(thing: Thing): void {
+    // A keypad button works the same keypad as the 2D view while the opener is live (#53).
+    if (thing.press && !opened.includes("opener")) return onKey(thing.press);
     const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
     seen = examineText(thing, live);
     void fetch(`/api/voyages/${voyageId}/intents`, {
@@ -99,6 +109,13 @@
 
   $effect(() => {
     handle?.setOpened(new Set(opened));
+    handle?.canvas.setAttribute("data-opened", opened.join(","));
+  });
+  $effect(() => {
+    handle?.setScreen("clue", clue ?? "");
+    handle?.setScreen("code", code.padEnd(4, "_").split("").join(" "));
+    if (clue) handle?.canvas.setAttribute("data-mural", clue);
+    handle?.canvas.setAttribute("data-code", code);
   });
 
   // Always visible, and the one way to capture or release the mouse.

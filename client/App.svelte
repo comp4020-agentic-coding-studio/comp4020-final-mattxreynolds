@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
-  import { roomForDeck } from "../shared/rooms.ts";
+  import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
   import type { Debrief, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief";
@@ -282,6 +282,13 @@
     }
   }
 
+  // A keypad button pressed in the 3D scene: the same keypad and the same submission as the 2D view.
+  function pressKey(key: string): void {
+    if (key === "enter") return void enterCode();
+    code4 = keypadAfter(code4, key);
+    saveDraft();
+  }
+
   // Dial turns carry no seq: both Decks turn at once and each turn is applied in server order.
   async function dial(kind: "turn-valve" | "turn-trim", index: number, by: 1 | -1): Promise<void> {
     if (!snapshot?.yourDeck) return;
@@ -402,7 +409,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
