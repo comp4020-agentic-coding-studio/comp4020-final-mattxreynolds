@@ -66,9 +66,9 @@ describe("lever order v1", () => {
 });
 
 describe("the opener slot's Draw", () => {
-  it("offers the mural keypad and the lever order, and one Puzzle in the other slots", () => {
+  it("offers two Puzzles in every slot", () => {
     expect(versionsFor("opener").map((v) => v.key).sort()).toEqual(["lever-order@1", "mural-keypad@1"]);
-    expect(versionsFor("middle")).toHaveLength(1);
+    expect(versionsFor("middle").map((v) => v.key).sort()).toEqual(["bilge-plates@1", "rotten-floor@1"]);
     expect(versionsFor("finale").map((v) => v.key).sort()).toEqual(["helm-telegraph@1", "valves-gauges@1"]);
   });
 
