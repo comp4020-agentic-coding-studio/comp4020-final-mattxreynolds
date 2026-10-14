@@ -15,6 +15,9 @@ export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("cast-off"), seq }),
   // An answer for one Puzzle's lock. The server checks it; the client never decides a solve.
   z.strictObject({ kind: z.literal("submit"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), answer: z.string().regex(/^\d{4}$/) }),
+  // Ending needs no seq: either Player may stop at any state, from the profile
+  // too, where no snapshot has been seen.
+  z.strictObject({ kind: z.literal("end-voyage"), seq: seq.optional() }),
 ]);
 
 export type Intent = z.infer<typeof intentSchema>;

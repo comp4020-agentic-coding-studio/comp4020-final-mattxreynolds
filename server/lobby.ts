@@ -3,7 +3,7 @@ import type { Person } from "./people.ts";
 import type { VoyageSummary } from "./voyages.ts";
 import { DECKS } from "../shared/intents.ts";
 import type { Notice } from "../shared/draw.ts";
-import type { LobbySnapshot } from "../shared/lobby.ts";
+import type { LobbySnapshot, ProfileVoyages } from "../shared/lobby.ts";
 import { publicDraw } from "./draw.ts";
 
 export type Snapshot = LobbySnapshot;
@@ -43,6 +43,21 @@ export function seatsOf(db: DatabaseSync, voyageId: string): Seat[] {
     .all(voyageId) as unknown as Seat[];
 }
 
+export function isEnded(db: DatabaseSync, voyageId: string): boolean {
+  return (db.prepare("SELECT outcome FROM voyage WHERE id = ?").get(voyageId) as { outcome: string | null }).outcome !== null;
+}
+
+/** Every Voyage the Person is seated in, newest first, split by whether it has finished. Nothing expires. */
+export function voyagesOf(db: DatabaseSync, personId: string): ProfileVoyages {
+  const rows = db
+    .prepare(
+      "SELECT v.id, v.code, v.link_key, v.ship_name, v.outcome FROM voyage v JOIN voyage_person vp ON vp.voyage_id = v.id WHERE vp.person_id = ? ORDER BY v.created_at DESC, v.id",
+    )
+    .all(personId) as { id: string; code: string; link_key: string; ship_name: string; outcome: "abandoned" | null }[];
+  const listings = rows.map((r) => ({ id: r.id, ship: r.ship_name, link: `/v/${r.link_key}`, code: r.code, outcome: r.outcome }));
+  return { unfinished: listings.filter((v) => v.outcome === null), finished: listings.filter((v) => v.outcome !== null) };
+}
+
 export function voyageSeq(db: DatabaseSync, voyageId: string): number {
   return (db.prepare("SELECT seq FROM voyage WHERE id = ?").get(voyageId) as { seq: number }).seq;
 }
@@ -72,6 +87,7 @@ export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person
     seq: voyageSeq(db, voyage.id),
     started: hasStarted(seats),
     draw: yourDeck ? publicDraw(db, voyage.id, yourDeck) : null,
+    ended: isEnded(db, voyage.id),
   };
 }
 

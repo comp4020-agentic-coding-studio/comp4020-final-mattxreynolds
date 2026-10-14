@@ -51,6 +51,10 @@ const MIGRATIONS: string[] = [
    ALTER TABLE voyage ADD COLUMN draw_version INTEGER;
    ALTER TABLE voyage ADD COLUMN solved INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE voyage ADD COLUMN strikes INTEGER NOT NULL DEFAULT 0;`,
+  // How a Voyage finished: NULL while unfinished, 'abandoned' once either
+  // Player ends it. Later outcomes (launched, sank) widen the CHECK.
+  `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
+   ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
 ];
 
 function migrate(db: DatabaseSync): void {

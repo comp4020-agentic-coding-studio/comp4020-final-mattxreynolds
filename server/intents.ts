@@ -1,11 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import { DECKS, intentSchema, type DeckName, type Intent } from "../shared/intents.ts";
 import { judge, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
-import { hasStarted, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
+import { hasStarted, isEnded, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
 import type { Person } from "./people.ts";
 
 export type Outcome =
-  | { ok: true; changed: boolean; started: boolean; result?: SubmitResult }
+  | { ok: true; changed: boolean; started: boolean; ended?: boolean; result?: SubmitResult }
   | { ok: false; status: 403 | 409 | 400; reason: string; message: string; offer?: DeckName };
 
 const refuse = (status: 403 | 409 | 400, reason: string, message: string, offer?: DeckName): Outcome => ({
@@ -36,6 +36,8 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
     return refuse(403, "not your Deck", "that is not your Deck");
   }
 
+  if (isEnded(db, voyageId)) return refuse(409, "voyage ended", "this Voyage has ended");
+
   const parsed = intentSchema.safeParse(raw);
   if (parsed.success) {
     const conflict = conflictWith(db, voyageId, parsed.data, mine, seats);
@@ -52,7 +54,9 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   }
   db.exec("BEGIN IMMEDIATE");
   let result: SubmitResult | undefined;
-  if (intent.kind === "choose-deck") {
+  if (intent.kind === "end-voyage") {
+    db.prepare("UPDATE voyage SET outcome = 'abandoned', ended_at = ? WHERE id = ?").run(Date.now(), voyageId);
+  } else if (intent.kind === "choose-deck") {
     db.prepare("UPDATE voyage_person SET deck = ? WHERE voyage_id = ? AND person_id = ?").run(intent.deck, voyageId, you.id);
   } else if (intent.kind === "cast-off") {
     db.prepare("UPDATE voyage_person SET cast_off = 1 WHERE voyage_id = ? AND person_id = ?").run(voyageId, you.id);
@@ -63,7 +67,8 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   // every accepted intent moves seq, so the same submission sent twice is a 409 the second time
   db.prepare("UPDATE voyage SET seq = seq + 1 WHERE id = ?").run(voyageId);
   db.exec("COMMIT");
-  return { ok: true, changed: true, started: hasStarted(seatsOf(db, voyageId)), result };
+  const ended = intent.kind === "end-voyage";
+  return { ok: true, changed: true, started: !ended && hasStarted(seatsOf(db, voyageId)), ended, result };
 }
 
 function conflictWith(
@@ -73,6 +78,7 @@ function conflictWith(
   mine: { deck: DeckName | null; cast_off: number },
   seats: { person_id: string; deck: DeckName | null }[],
 ): Outcome | null {
+  if (intent.kind === "end-voyage") return null;
   if (intent.kind === "choose-deck") {
     if (mine.cast_off === 1) return refuse(409, "already cast off", "you have already cast off");
     const holder = seats.find((s) => s.deck === intent.deck);
