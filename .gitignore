@@ -17,7 +17,10 @@ mise.local.toml
 *.pem
 
 # Track skill sources in .agents/skills/, skills-lock.json, and Claude's
-# skill shortcuts as project evidence. Keep other Claude files machine-local:
-# settings can contain API keys.
+# skill shortcuts as project evidence, plus the shared project settings and
+# their hooks (permissions and the deploy guard; no keys). Keep other Claude
+# files machine-local: settings.local.json can contain API keys.
 .claude/*
 !.claude/skills/
+!.claude/settings.json
+!.claude/hooks/
