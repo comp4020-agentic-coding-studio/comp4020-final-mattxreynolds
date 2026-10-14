@@ -83,6 +83,19 @@
     screen = "profile";
   }
 
+  let intentNote = $state("");
+  let offer: string | null = $state(null);
+  const mineCastOff = (s: LobbySnapshot): boolean => s.decks.some((d) => d.player?.id === s.you.id && d.castOff);
+
+  // The stream is the only source of state, so a refused intent changes
+  // nothing here but the note; the next snapshot has already arrived or will.
+  async function send(body: { kind: "choose-deck"; deck: string } | { kind: "cast-off" }): Promise<void> {
+    if (!snapshot) return;
+    const res = await api<{ error: string; offer?: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, { ...body, seq: snapshot.seq });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
+    offer = res.ok ? null : res.data?.offer ?? null;
+  }
+
   async function copy(text: string): Promise<void> {
     await navigator.clipboard?.writeText(text).catch(() => {});
     copied = true;
@@ -122,11 +135,35 @@
     {#if problem}<p role="alert">{problem}</p>{/if}
   {:else if screen === "lobby" && snapshot}
     <h1 data-testid="ship-name">{snapshot.voyage.ship}</h1>
+    {#if snapshot.started && snapshot.yourDeck}
+      <section data-testid="deck-view">
+        <h2>{snapshot.yourDeck}</h2>
+        <p>Nothing here yet.</p>
+      </section>
+    {:else}
     <section>
       {#each snapshot.decks as d}
-        <article data-testid="deck-card"><h2>{d.deck}</h2><p>Empty</p></article>
+        <article data-testid="deck-card">
+          <h2>{d.deck}</h2>
+          {#if d.player}
+            <p>Held by {d.player.id === snapshot.you.id ? "you" : d.player.name}, {d.connected ? "connected" : "not connected"}{d.castOff ? ", cast off" : ""}</p>
+          {:else}
+            <p>Empty</p>
+          {/if}
+          {#if d.player?.id !== snapshot.you.id && !d.player && !mineCastOff(snapshot)}
+            <button onclick={() => send({ kind: "choose-deck", deck: d.deck })}>Take</button>
+          {/if}
+        </article>
       {/each}
     </section>
+    {#if intentNote}<p role="status">{intentNote}{#if offer} <button onclick={() => send({ kind: "choose-deck", deck: offer! })}>Take the {offer}</button>{/if}</p>{/if}
+    {#if snapshot.yourDeck && !mineCastOff(snapshot)}
+      <button class="primary" onclick={() => send({ kind: "cast-off" })}>Cast off</button>
+    {:else if mineCastOff(snapshot)}
+      <p role="status">Waiting for your partner to cast off.</p>
+    {/if}
+    <p>Playing both Decks alone? Open a second Chrome profile or an incognito window for the other Deck.</p>
+    {/if}
     <p>Link: <code data-testid="voyage-link">{origin}{snapshot.voyage.link}</code>
       <button onclick={() => copy(origin + snapshot!.voyage.link)}>Copy link</button></p>
     <p>Code: <code data-testid="voyage-code">{snapshot.voyage.code}</code>

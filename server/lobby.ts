@@ -1,14 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Person } from "./people.ts";
 import type { VoyageSummary } from "./voyages.ts";
+import { DECKS } from "../shared/intents.ts";
+import type { LobbySnapshot } from "../shared/lobby.ts";
 
-export interface Snapshot {
-  voyage: VoyageSummary;
-  you: Person;
-  players: Person[];
-  /** Both Decks, empty until a Player chooses one. */
-  decks: { deck: "Upper Deck" | "Lower Deck"; player: string | null }[];
-}
+export type Snapshot = LobbySnapshot;
 
 export function seatedPlayers(db: DatabaseSync, voyageId: string): Person[] {
   return db
@@ -30,15 +26,70 @@ export function voyageById(db: DatabaseSync, voyageId: string): VoyageSummary | 
   return r ? { id: r.id, ship: r.ship_name, link: `/v/${r.link_key}`, code: r.code } : null;
 }
 
+interface Seat {
+  person_id: string;
+  name: string;
+  deck: (typeof DECKS)[number] | null;
+  cast_off: number;
+}
+
+export function seatsOf(db: DatabaseSync, voyageId: string): Seat[] {
+  return db
+    .prepare(
+      "SELECT vp.person_id, p.name, vp.deck, vp.cast_off FROM voyage_person vp JOIN person p ON p.id = vp.person_id WHERE vp.voyage_id = ? ORDER BY vp.joined_at, p.id",
+    )
+    .all(voyageId) as unknown as Seat[];
+}
+
+export function voyageSeq(db: DatabaseSync, voyageId: string): number {
+  return (db.prepare("SELECT seq FROM voyage WHERE id = ?").get(voyageId) as { seq: number }).seq;
+}
+
+/** The Voyage starts only once both Players hold a Deck and have pressed "Cast off". */
+export function hasStarted(seats: Seat[]): boolean {
+  return seats.length === 2 && seats.every((s) => s.deck !== null && s.cast_off === 1);
+}
+
 export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person): Snapshot {
+  const seats = seatsOf(db, voyage.id);
   return {
     voyage,
     you,
     players: seatedPlayers(db, voyage.id),
-    decks: [
-      { deck: "Upper Deck", player: null },
-      { deck: "Lower Deck", player: null },
-    ],
+    decks: DECKS.map((deck) => {
+      const holder = seats.find((s) => s.deck === deck);
+      return {
+        deck,
+        player: holder ? { id: holder.person_id, name: holder.name } : null,
+        connected: holder ? isConnected(voyage.id, holder.person_id) : false,
+        castOff: holder?.cast_off === 1,
+      };
+    }),
+    yourDeck: seats.find((s) => s.person_id === you.id)?.deck ?? null,
+    seq: voyageSeq(db, voyage.id),
+    started: hasStarted(seats),
+  };
+}
+
+// Open streams per Person per Voyage, so a Person in two tabs is connected
+// until the last one closes.
+const open = new Map<string, number>();
+const key = (voyageId: string, personId: string): string => `${voyageId}/${personId}`;
+
+export function isConnected(voyageId: string, personId: string): boolean {
+  return (open.get(key(voyageId, personId)) ?? 0) > 0;
+}
+
+/** Counts one more open stream and tells the Voyage; returns the call that undoes it. */
+export function markConnected(voyageId: string, personId: string): () => void {
+  const k = key(voyageId, personId);
+  open.set(k, (open.get(k) ?? 0) + 1);
+  publish(voyageId);
+  return () => {
+    const n = (open.get(k) ?? 1) - 1;
+    if (n <= 0) open.delete(k);
+    else open.set(k, n);
+    publish(voyageId);
   };
 }
 
