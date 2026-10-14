@@ -21,22 +21,52 @@ export const DRAW_VERSION = 1;
 
 const cryptoRng: Rng = () => randomInt(2 ** 32) / 2 ** 32;
 
-export function generateDraw(rng: Rng = cryptoRng): StoredDraw {
+const puzzleId = (key: string): string => key.split("@")[0];
+
+/**
+ * A fresh Draw. For a known Team, `previous` holds the Puzzle keys of their
+ * last Draw: all but one randomly chosen slot must change Puzzle, so the two
+ * Draws share at most one of three (#65). Strangers pass nothing and get a
+ * plain random pick per slot.
+ */
+export function generateDraw(rng: Rng = cryptoRng, previous: readonly string[] = []): StoredDraw {
+  const filled = SLOTS.filter((slot) => versionsFor(slot).length > 0);
+  const free = previous.length > 0 ? filled[Math.floor(rng() * filled.length)] : undefined;
   const puzzles: StoredDraw["puzzles"] = [];
   for (const slot of SLOTS) {
-    // a plain random pick among the slot's Puzzles; the freshness rule for a known Team is #65's
-    const options = versionsFor(slot);
+    let options = versionsFor(slot);
     if (options.length === 0) continue;
+    if (slot !== free) {
+      const fresh = options.filter((o) => !previous.some((k) => puzzleId(k) === puzzleId(o.key)));
+      if (fresh.length > 0) options = fresh; // a slot with nothing else to offer repeats
+    }
     const version = options[Math.floor(rng() * options.length)];
     puzzles.push({ slot, key: version.key, data: version.generate(rng) });
   }
   return { puzzles };
 }
 
+/** The Puzzle keys of the latest earlier Draw dealt to this Voyage's Team: the same two Persons, whichever Decks. */
+function lastDrawOfTeam(db: DatabaseSync, voyageId: string): string[] {
+  const seated = db.prepare("SELECT person_id FROM voyage_person WHERE voyage_id = ?").all(voyageId) as { person_id: string }[];
+  if (seated.length !== 2) return [];
+  const row = db
+    .prepare(
+      `SELECT v.draw FROM voyage v
+       WHERE v.id != ? AND v.draw IS NOT NULL
+         AND (SELECT COUNT(*) FROM voyage_person WHERE voyage_id = v.id) = 2
+         AND EXISTS (SELECT 1 FROM voyage_person WHERE voyage_id = v.id AND person_id = ?)
+         AND EXISTS (SELECT 1 FROM voyage_person WHERE voyage_id = v.id AND person_id = ?)
+       ORDER BY v.cast_off_at DESC, v.created_at DESC, v.rowid DESC LIMIT 1`,
+    )
+    .get(voyageId, seated[0].person_id, seated[1].person_id) as { draw: string } | undefined;
+  return row ? (JSON.parse(row.draw) as StoredDraw).puzzles.map((p) => p.key) : [];
+}
+
 /** Writes the Draw once; a Voyage that already has one keeps it. */
 export function storeDraw(db: DatabaseSync, voyageId: string): void {
   db.prepare("UPDATE voyage SET draw = ?, draw_version = ? WHERE id = ? AND draw IS NULL").run(
-    JSON.stringify(generateDraw()),
+    JSON.stringify(generateDraw(cryptoRng, lastDrawOfTeam(db, voyageId))),
     DRAW_VERSION,
     voyageId,
   );
