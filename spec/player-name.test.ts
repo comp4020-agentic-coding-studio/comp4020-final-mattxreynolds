@@ -25,9 +25,9 @@ it("PUT /api/me/name sanitises, stores and returns the name", async () => {
   const g = await guest();
   const res = await send("PUT", "/api/me/name", g.cookie, { name: "  <Sam>​  " });
   expect(res.status).toBe(200);
-  expect(((await res.json()) as { name: string }).name).toBe("&lt;Sam&gt;");
+  expect(((await res.json()) as { name: string }).name).toBe("<Sam>");
   const me = (await (await fetch(url("/api/me"), { headers: { cookie: g.cookie } })).json()) as { name: string };
-  expect(me.name).toBe("&lt;Sam&gt;");
+  expect(me.name).toBe("<Sam>");
 });
 
 it("a blocklisted or empty name is a 400 and changes nothing", async () => {

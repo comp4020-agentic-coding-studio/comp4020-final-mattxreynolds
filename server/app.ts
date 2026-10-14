@@ -5,6 +5,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createGuest, endSession, personForToken, recordSignInFailure, renamePerson, signIn, signInThrottled, upgradeToAccount, type Person } from "./people.ts";
 import { sanitisePlayerName } from "./player-name.ts";
 import type { Notice } from "../shared/draw.ts";
+import { DECKS, intentSchema } from "../shared/intents.ts";
 import { logEvent } from "./events.ts";
 import { settleClock } from "./clock.ts";
 import { debriefOf } from "./debrief.ts";
@@ -17,6 +18,18 @@ import { attachSession, offersFor } from "./rejoin.ts";
 import { bannersFor, publishProfile, sailAgain, watchProfile } from "./sail-again.ts";
 import { playerBack, playerDropped } from "./presence.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
+
+/** Who an event is logged against: the public id and the Player name, never a token. */
+const actorOf = (p: { id: string; name: string }): { actor: string; actorName: string } => ({ actor: p.id, actorName: p.name });
+
+// Client-supplied strings that reach the log are enumerated first, so a request
+// cannot write its own text into the events table or stdout (#11).
+const KINDS: readonly string[] = intentSchema.options.map((o) => o.shape.kind.value);
+const loggedKind = (raw: unknown): string | null => {
+  const kind = typeof raw === "object" && raw !== null ? (raw as { kind?: unknown }).kind : undefined;
+  return typeof kind === "string" ? (KINDS.includes(kind) ? kind : "unknown") : null;
+};
+const loggedDeck = (deck: unknown): string => (typeof deck === "string" && (DECKS as readonly string[]).includes(deck) ? deck : "unknown");
 
 const COOKIE = "session";
 const HEARTBEAT_MS = 15_000; // ADR 0004
@@ -37,10 +50,16 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     });
   };
 
+  // The same 403 for a Voyage that is not yours and one that does not exist, logged with its reason and no Voyage id.
+  const refuseNotSeated = (c: Context, you: Person, action: string) => {
+    logEvent(db, { ...actorOf(you), action, detail: { reason: "not seated", status: 403 } });
+    return c.json({ error: "not seated in this Voyage" }, 403);
+  };
+
   api.post("/guest", (c) => {
     const { person, token } = createGuest(db);
     issue(c, token);
-    logEvent(db, { actor: person.id, actorName: person.name, action: "guest.created" });
+    logEvent(db, { ...actorOf(person), action: "guest.created" });
     return c.json(person);
   });
 
@@ -61,7 +80,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return c.json({ error: "wrong username or password" }, 401);
     }
     issue(c, found.token);
-    logEvent(db, { actor: found.person.id, actorName: found.person.name, action: "signin.ok" });
+    logEvent(db, { ...actorOf(found.person), action: "signin.ok" });
     return c.json(found.person);
   });
 
@@ -105,10 +124,10 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const result = await upgradeToAccount(db, you, body?.username, body?.password);
     if (!result.ok) {
       const status = result.reason === "invalid" ? 400 : 409;
-      logEvent(db, { actor: you.id, actorName: you.name, action: "account.refused", detail: { reason: result.reason, status } });
+      logEvent(db, { ...actorOf(you), action: "account.refused", detail: { reason: result.reason, status } });
       return c.json({ error: `account refused: ${result.reason}` }, status);
     }
-    logEvent(db, { actor: you.id, actorName: you.name, action: "account.created" });
+    logEvent(db, { ...actorOf(you), action: "account.created" });
     return c.json(result.person);
   });
 
@@ -117,7 +136,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const you = c.get("person");
     endSession(db, getCookie(c, COOKIE)!);
     deleteCookie(c, COOKIE, { path: "/" });
-    logEvent(db, { actor: you.id, actorName: you.name, action: "signout" });
+    logEvent(db, { ...actorOf(you), action: "signout" });
     return c.json({ ok: true });
   });
 
@@ -126,7 +145,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const body = (await c.req.json().catch(() => null)) as { name?: unknown } | null;
     const result = sanitisePlayerName(body?.name);
     if (!result.ok) {
-      logEvent(db, { actor: you.id, actorName: you.name, action: "name.refused", detail: { reason: result.reason } });
+      logEvent(db, { ...actorOf(you), action: "name.refused", detail: { reason: result.reason } });
       return c.json({ error: `name refused: ${result.reason}` }, 400);
     }
     renamePerson(db, you.id, result.name);
@@ -140,7 +159,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
   api.post("/voyages", (c) => {
     const you = c.get("person");
     const voyage = startVoyage(db, you.id);
-    logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: "voyage.started", detail: { ship: voyage.ship } });
+    logEvent(db, { voyageId: voyage.id, ...actorOf(you), action: "voyage.started", detail: { ship: voyage.ship } });
     return c.json(voyage);
   });
 
@@ -149,7 +168,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const you = c.get("person");
     const fromId = c.req.param("id");
     const result = await withVoyage(fromId, () => sailAgain(db, you.id, fromId));
-    const who = { actor: you.id, actorName: you.name };
+    const who = actorOf(you);
     if (typeof result === "string") {
       const status = result === "not seated" ? 403 : 409;
       logEvent(db, { ...who, action: "sail-again.refused", detail: { reason: result, status } });
@@ -185,7 +204,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
 
   api.post("/join", async (c) => {
     const you = c.get("person");
-    const who = { actor: you.id, actorName: you.name };
+    const who = actorOf(you);
     const body = (await c.req.json().catch(() => null)) as { key?: unknown; code?: unknown } | null;
     const key = typeof body?.key === "string" ? body.key : undefined;
     const code = typeof body?.code === "string" ? body.code : undefined;
@@ -219,7 +238,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null;
     const found = typeof body?.code === "string" ? offersFor(db, you.id, body.code) : null;
     if (!found) {
-      logEvent(db, { actor: you.id, actorName: you.name, action: "rejoin.refused", detail: { stage: "offers", reason: "unknown voyage", status: 404 } });
+      logEvent(db, { ...actorOf(you), action: "rejoin.refused", detail: { stage: "offers", reason: "unknown voyage", status: 404 } });
       return c.json({ error: "no such Voyage" }, 404);
     }
     return c.json({ offers: found.offers.map(({ deck, playerName }) => ({ deck, playerName })) });
@@ -227,7 +246,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
 
   api.post("/rejoin", async (c) => {
     const you = c.get("person");
-    const who = { actor: you.id, actorName: you.name };
+    const who = actorOf(you);
     const body = (await c.req.json().catch(() => null)) as { code?: unknown; deck?: unknown } | null;
     if (typeof body?.code !== "string" || typeof body.deck !== "string") {
       logEvent(db, { ...who, action: "rejoin.refused", detail: { reason: "malformed", status: 400 } });
@@ -241,7 +260,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const offer = found.offers.find((o) => o.deck === body.deck);
     if (!offer || found.seated) {
       const reason = found.seated ? "already seated" : "deck not available";
-      logEvent(db, { ...who, voyageId: found.voyage.id, action: "rejoin.refused", detail: { reason, deck: String(body.deck).slice(0, 20), status: 409 } });
+      logEvent(db, { ...who, voyageId: found.voyage.id, action: "rejoin.refused", detail: { reason, deck: loggedDeck(body.deck), status: 409 } });
       return c.json({ error: "that Deck is not free to take" }, 409);
     }
     attachSession(db, getCookie(c, COOKIE)!, offer.personId);
@@ -260,7 +279,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return saved.ok ? c.json({ ok: true }) : c.json({ error: saved.status === 403 ? "not seated in this Voyage" : "that is not a valid intent" }, saved.status);
     }
     const outcome = await withVoyage(voyageId, () => applyIntent(db, voyageId, you, raw));
-    const kind = typeof raw?.kind === "string" ? raw.kind.slice(0, 40) : null;
+    const kind = loggedKind(raw);
     if (!outcome.ok) {
       // a refusal for a Voyage the Person isn't seated in stays out of that Voyage's log
       logEvent(db, {
@@ -273,7 +292,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return c.json({ error: outcome.message, offer: outcome.offer }, outcome.status);
     }
     if (outcome.examined) {
-      logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: "intent.examine", detail: { thing: outcome.examined } });
+      logEvent(db, { voyageId, ...actorOf(you), action: "intent.examine", detail: { thing: outcome.examined } });
     }
     if (outcome.changed) {
       const { result } = outcome;
@@ -283,9 +302,9 @@ export function createApi(db: DatabaseSync): Hono<Env> {
         else if (result.kind === "strike") logEvent(db, { voyageId, action: "strike", detail: { strikes: result.strikes } });
         // a safe step is movement, like pose: it stays out of the log
       } else {
-        logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
+        logEvent(db, { voyageId, ...actorOf(you), action: `intent.${kind}`, detail: { deck: loggedDeck(raw.deck) } });
       }
-      if (outcome.ended) logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: "voyage.ended", detail: { outcome: "abandoned" } });
+      if (outcome.ended) logEvent(db, { voyageId, ...actorOf(you), action: "voyage.ended", detail: { outcome: "abandoned" } });
       if (outcome.started && kind === "cast-off") logEvent(db, { voyageId, action: "voyage.cast-off" });
       publish(
         voyageId,
@@ -305,13 +324,12 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const you = c.get("person");
     const voyage = voyageById(db, c.req.param("id"));
     if (!voyage || !seatedPlayers(db, voyage.id).some((p) => p.id === you.id)) {
-      logEvent(db, { actor: you.id, actorName: you.name, action: "debrief.refused", detail: { reason: "not seated", status: 403 } });
-      return c.json({ error: "not seated in this Voyage" }, 403);
+      return refuseNotSeated(c, you, "debrief.refused");
     }
     settleClock(db, voyage.id, Date.now());
     const debrief = debriefOf(db, voyage.id);
     if (!debrief) {
-      logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: "debrief.refused", detail: { reason: "voyage live", status: 409 } });
+      logEvent(db, { voyageId: voyage.id, ...actorOf(you), action: "debrief.refused", detail: { reason: "voyage live", status: 409 } });
       return c.json({ error: "the debrief opens once the Voyage is over" }, 409);
     }
     return c.json(debrief);
@@ -323,8 +341,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const you = c.get("person");
     const voyage = voyageById(db, c.req.param("id"));
     if (!voyage || !seatedPlayers(db, voyage.id).some((p) => p.id === you.id)) {
-      logEvent(db, { actor: you.id, actorName: you.name, action: "post-score.refused", detail: { reason: "not seated", status: 403 } });
-      return c.json({ error: "not seated in this Voyage" }, 403);
+      return refuseNotSeated(c, you, "post-score.refused");
     }
     const body = (await c.req.json().catch(() => null)) as { consent?: unknown } | null;
     if (typeof body?.consent !== "boolean") return c.json({ error: "say whether you consent" }, 400);
@@ -333,10 +350,10 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return setConsent(db, voyage.id, you.id, body.consent as boolean);
     });
     if (result !== "ok") {
-      logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: "post-score.refused", detail: { reason: result, status: 409 } });
+      logEvent(db, { voyageId: voyage.id, ...actorOf(you), action: "post-score.refused", detail: { reason: result, status: 409 } });
       return c.json({ error: result === "posted" ? "the Score is already posted" : "only a launched Voyage has a Score to post" }, 409);
     }
-    logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: body.consent ? "post-score.consented" : "post-score.withdrawn" });
+    logEvent(db, { voyageId: voyage.id, ...actorOf(you), action: body.consent ? "post-score.consented" : "post-score.withdrawn" });
     publish(voyage.id);
     publishLeaderboard();
     return c.json({ ok: true });
@@ -347,10 +364,9 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     const voyage = voyageById(db, c.req.param("id"));
     // 403 (not seated) for a Voyage that doesn't exist too, so ids can't be probed
     if (!voyage || !seatedPlayers(db, voyage.id).some((p) => p.id === you.id)) {
-      logEvent(db, { actor: you.id, actorName: you.name, action: "stream.refused", detail: { reason: "not seated" } });
-      return c.json({ error: "not seated in this Voyage" }, 403);
+      return refuseNotSeated(c, you, "stream.refused");
     }
-    const who = { voyageId: voyage.id, actor: you.id, actorName: you.name };
+    const who = { voyageId: voyage.id, ...actorOf(you) };
     return streamSSE(c, async (stream) => {
       logEvent(db, { ...who, action: "stream.connected" });
       const disconnected = markConnected(voyage.id, you.id);

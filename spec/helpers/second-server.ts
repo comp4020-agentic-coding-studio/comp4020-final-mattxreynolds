@@ -12,6 +12,13 @@ export interface SecondServer {
   stop(): Promise<number | null>;
 }
 
+// Servers still running. A worker that exits without its afterAll (a timeout, a crash)
+// still takes them down with it.
+const live = new Set<ChildProcess>();
+process.on("exit", () => {
+  for (const child of live) child.kill("SIGKILL");
+});
+
 // Starts the server from source, as the image runs it, on a port the OS picks
 // (PORT=0) with its own DATA_DIR and an optional frozen clock. Restart, Clock
 // and Away checks use this because the CI container's /data is a tmpfs.
@@ -25,8 +32,12 @@ export async function startSecondServer(
   const child: ChildProcess = spawn(
     process.execPath,
     ["--import", "./spec/fake-clock.ts", "server/index.ts"],
-    { env, stdio: ["ignore", "pipe", "inherit"] },
+    // the fourth stdio is an IPC channel: spec/fake-clock.ts exits the server when it closes,
+    // so a worker that dies or is terminated mid-spec cannot leave a server behind
+    { env, stdio: ["ignore", "pipe", "inherit", "ipc"] },
   );
+  live.add(child);
+  child.once("exit", () => live.delete(child));
   const exited = new Promise<number | null>((resolve) => child.once("exit", (code) => resolve(code)));
 
   let out = "";
@@ -45,7 +56,13 @@ export async function startSecondServer(
     dataDir,
     async stop() {
       child.kill("SIGTERM");
-      return exited;
+      // the server's own shutdown closes connections; if it still has not gone in 5 s, force it
+      const forced = setTimeout(() => child.kill("SIGKILL"), 5_000);
+      try {
+        return await exited;
+      } finally {
+        clearTimeout(forced);
+      }
     },
   };
 }
