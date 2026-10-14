@@ -8,11 +8,6 @@ on:
   # itself triggers no push event.
   workflow_dispatch:
 
-# One deploy at a time, and never cancel one mid-flight.
-concurrency:
-  group: deploy
-  cancel-in-progress: false
-
 jobs:
   check:
     # Runs once the repo is public; until then `pnpm check` is the same
@@ -78,6 +73,13 @@ jobs:
     if: ${{ !github.event.repository.private && !github.event.repository.is_template && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # One deploy at a time, and never cancel one mid-flight. The lock sits on
+    # this job alone: on the whole workflow it queued every PR's checks behind
+    # one another, and a newer pending run cancels an older one, so parallel
+    # PRs lost their checks.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
     permissions:
       contents: read
     # Registers the GitHub Deployment with the live URL. The app is named
