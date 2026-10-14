@@ -51,8 +51,12 @@ Where every Voyage is heading: launching it with both Players aboard is the only
 _Avoid_: Exit, goal, escape hatch
 
 **Clock**:
-The time a Voyage has left before the ship goes down, running only while both Players are present and shown the same on both Decks.
+The time a Voyage has left before the ship goes down, running while neither Player is Away and shown the same on both Decks.
 _Avoid_: Timer, countdown, stopwatch
+
+**Away**:
+A Player whose connection has stayed closed for 8 seconds. While either Player is away the Voyage is frozen, with a paused screen on the Deck still connected, and it resumes by itself when both are back. A shorter drop, such as a reload, never freezes anything.
+_Avoid_: Offline, disconnected, AFK, idle
 
 **Strike**:
 A wrong answer the server rejects, which takes time off the Clock and brings the ship nearer to going down. It belongs to the Voyage, never to the Player who gave it.
