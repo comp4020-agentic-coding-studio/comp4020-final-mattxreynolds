@@ -5,7 +5,7 @@
 // A Room declares geometry, what blocks walking (including areas a Puzzle
 // opens later) and the usable things. It never declares a cue field: nothing
 // marks a thing as usable (#33).
-import type { Slot } from "./draw.ts";
+import type { InstrumentView, Slot } from "./draw.ts";
 import type { DeckName } from "./intents.ts";
 
 /** Floor-plan box in metres: x east, z south, y up. */
@@ -25,6 +25,25 @@ export interface Blocker {
   opensWith?: Slot;
 }
 
+/** What pressing a finale control does: one notch on one dial of the finale's split instrument (#55). */
+export interface Control {
+  kind: "turn-valve" | "turn-trim";
+  index: number;
+  by: 1 | -1;
+}
+
+/** A read-out on the east wall: this Deck's half of the instrument. It is never pressed (#55). */
+export interface Display {
+  id: string;
+  show: "valve" | "gauge" | "hold";
+  index: number;
+  x: number;
+  y: number;
+  z: number;
+  /** Drawn width, height, depth in metres. */
+  size: [number, number, number];
+}
+
 export interface Thing {
   id: string;
   /** A Puzzle station works only while its Puzzle is live; a decoy examines to a plaque. */
@@ -33,6 +52,8 @@ export interface Thing {
   /** Only worth reaching once this Puzzle has opened the way. */
   behind?: Slot;
   plaque?: string;
+  /** A station that turns one dial of the finale while that Puzzle is live. */
+  control?: Control;
   /** A keypad button: the key it presses (a digit, "clear" or "enter"). */
   press?: string;
   /** A face the scene draws text on: the Clue on the mural, or the code typed so far. */
@@ -61,6 +82,10 @@ export interface Room {
   eyeHeight: number;
   blockers: Blocker[];
   things: Thing[];
+  /** The finale's read-outs. */
+  displays: Display[];
+  /** Walkable floor, facing the east wall, from which every finale control and read-out is in reach and 44 px or more at 390x844. */
+  finaleStand: Stance;
 }
 
 const COMMON = { width: 8, depth: 7, wallHeight: 3, reach: 2, hitRadiusPx: 22, radius: 0.3, eyeHeight: 1.6 } as const;
@@ -75,6 +100,32 @@ function alcove(prefix: string): Blocker[] {
   ];
 }
 
+const WALL = 7.9; // the east wall plates sit on
+const PLATE = 0.1;
+const BUTTON = 0.4; // a control is 0.4 m square: 44 px or more out to 1.9 m, at 390x844
+const ROW_Y = [2.25, 1.8, 1.35]; // clear of the joystick at the bottom left of a phone
+const STAND_Z = 4.8;
+
+function dialControls(kind: Control["kind"], prefix: string, offset: number): Thing[] {
+  return [0, 1, 2].flatMap((index) =>
+    ([-1, 1] as const).map((by): Thing => ({
+      id: `${prefix}-${index}-${by < 0 ? "down" : "up"}`,
+      kind: "station",
+      slot: "finale",
+      control: { kind, index, by },
+      x: WALL,
+      y: ROW_Y[index],
+      z: STAND_Z + by * offset,
+      size: [PLATE, BUTTON, BUTTON],
+    })),
+  );
+}
+
+const display = (id: string, show: Display["show"], index: number, y: number, width: number, height = 0.4): Display => ({
+  id, show, index, x: WALL, y, z: STAND_Z, size: [PLATE, height, width],
+});
+
+const FINALE_STAND: Stance = { x: 6.2, z: STAND_Z, yaw: -Math.PI / 2 };
 // The mural keypad's buttons (#53): a 3 by 4 grid on the north wall, each 0.4 m
 // square so it measures 44 px on a 390 px wide phone from the edge of reach.
 const KEYPAD_ROWS = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["clear", "0", "enter"]];
@@ -100,10 +151,17 @@ const WHEELHOUSE: Room = {
   things: [
     { id: "mural", kind: "station", slot: "opener", screen: "clue", x: 2, y: 1.6, z: 0.1, size: [2.4, 1.6, 0.1] },
     { id: "chart-table", kind: "station", slot: "middle", x: 1, y: 1, z: 4.2, size: [1, 1, 1.6] },
-    { id: "speaking-tube", kind: "station", slot: "finale", x: 7.9, y: 1.4, z: 5, size: [0.2, 0.2, 0.2] },
+    ...dialControls("turn-trim", "trim", 0.9),
     { id: "brass-barometer", kind: "decoy", plaque: "A brass barometer. It reads STORMY.", x: 0.1, y: 1.7, z: 2.5, size: [0.1, 0.4, 0.4] },
     { id: "chart-locker", kind: "decoy", behind: "opener", plaque: "A chart locker, empty but for salt.", x: 7.5, y: 0.6, z: 0.5, size: [0.8, 1.2, 0.8] },
   ],
+  displays: [
+    display("gauge-0", "gauge", 0, ROW_Y[0], 1.0),
+    display("gauge-1", "gauge", 1, ROW_Y[1], 1.0),
+    display("gauge-2", "gauge", 2, ROW_Y[2], 1.0),
+    display("hold", "hold", 0, 2.65, 1.6, 0.35),
+  ],
+  finaleStand: FINALE_STAND,
 };
 
 const ENGINE_ROOM: Room = {
@@ -116,10 +174,16 @@ const ENGINE_ROOM: Room = {
     { id: "keypad", kind: "station", slot: "opener", screen: "code", x: 2, y: 2.75, z: 0.1, size: [1.35, 0.4, 0.1] },
     ...KEYPAD_BUTTONS,
     { id: "valve-bank", kind: "station", slot: "middle", x: 0.1, y: 1.2, z: 4.5, size: [0.2, 1.2, 1.6] },
-    { id: "steam-gauges", kind: "station", slot: "finale", x: 7.9, y: 1.5, z: 5, size: [0.2, 0.8, 1.2] },
+    ...dialControls("turn-valve", "valve", 0.6),
     { id: "coal-crate", kind: "decoy", plaque: "A crate of coal, stencilled GLASGOW.", x: 6.5, y: 0.4, z: 6.4, size: [1, 0.8, 0.8] },
     { id: "spare-parts", kind: "decoy", behind: "opener", plaque: "Spare pistons, greased and wrapped.", x: 7.5, y: 0.5, z: 0.5, size: [0.8, 1, 0.8] },
   ],
+  displays: [
+    display("valve-0", "valve", 0, ROW_Y[0], 0.6),
+    display("valve-1", "valve", 1, ROW_Y[1], 0.6),
+    display("valve-2", "valve", 2, ROW_Y[2], 0.6),
+  ],
+  finaleStand: FINALE_STAND,
 };
 
 export const ROOMS: readonly Room[] = [WHEELHOUSE, ENGINE_ROOM];
@@ -231,6 +295,38 @@ export function examineText(thing: Thing, live: ReadonlySet<Slot>): string {
   if (thing.kind === "decoy") return thing.plaque ?? "Nothing of note.";
   if (thing.slot && live.has(thing.slot)) return "It answers to the controls on your Deck screen.";
   return "Rusted solid.";
+}
+
+/**
+ * How big a plate looks on screen, in CSS px, from where the Player stands
+ * (#18: controls and standing spots are sized together for 44 px at 390x844).
+ * It mirrors the scene's camera: horizontal view held near 75 degrees, the
+ * vertical one capped at 100. The plate is measured at its centre.
+ */
+export function projectedSize(
+  _room: Room,
+  me: Stance,
+  thing: Pick<Thing, "x" | "z" | "size">,
+  view: { width: number; height: number },
+): { width: number; height: number } {
+  const fovY = Math.min(2 * Math.atan(Math.tan((75 * Math.PI) / 360) / (view.width / view.height)), (100 * Math.PI) / 180);
+  const focal = view.height / 2 / Math.tan(fovY / 2);
+  const dx = thing.x - me.x;
+  const dz = thing.z - me.z;
+  const ahead = dx * -Math.sin(me.yaw) + dz * -Math.cos(me.yaw);
+  const [sx, sy, sz] = thing.size;
+  const across = Math.abs(sx * Math.cos(me.yaw)) + Math.abs(sz * Math.sin(me.yaw));
+  return { width: (across * focal) / ahead, height: (sy * focal) / ahead };
+}
+
+/** The words a read-out shows: Wheelhouse gauges with their trims and the hold, Engine Room valve levels. `sinceMs` is how old the view is. */
+export function displayText(d: Display, view: InstrumentView | null, sinceMs = 0, launched = false): string {
+  if (launched) return d.show === "hold" ? "Lifeboat away" : "Launched";
+  if (!view) return "";
+  if (d.show === "valve") return String(view.valves?.[d.index] ?? "");
+  if (d.show === "gauge") return view.readings && view.trims ? `${view.readings[d.index]}  trim ${view.trims[d.index]}` : "";
+  if (view.holdMs == null) return "Out of band";
+  return `In band ${Math.floor(Math.min(10_000, view.holdMs + sinceMs) / 1000)} s of 10`;
 }
 
 /** The code on the keypad after a key: digits build it up to four, clear empties it, enter leaves it. */

@@ -472,7 +472,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} instrument={snapshot.draw?.puzzles.find((q) => q.slot === "finale" && q.status === "live")?.instrument ?? null} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
