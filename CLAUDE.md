@@ -26,6 +26,14 @@ the deploy guard hook (`.claude/hooks/deploy-guard.ts`) asks before each one.
 - `pnpm check`: typecheck, then every test, including the app tests at
   `APP_URL` (default `http://localhost:8080`). Point it at a local app only;
   the live Fly app's log and Leaderboard are public.
+- One port per checkout, so parallel worktrees never test each other's app.
+  Port 8080 belongs to the main checkout. A worktree for issue #N starts its
+  app on port 9000 + N and runs its checks against that port. For #46: start
+  the app with `PORT=9046` (or `docker run -p 9046:8080 …`), then
+  `APP_URL=http://localhost:9046 pnpm check`. A worktree that hasn't started
+  its own app sticks to `pnpm test:unit` and leaves the app tests to CI.
+  A test helper that starts its own server (the second-server seam) binds
+  port 0 and reads back the port it got.
 - `pnpm exec playwright install --only-shell chromium` once before browser tests.
 
 Coding rules for review live in `CODING_STANDARDS.md`.
