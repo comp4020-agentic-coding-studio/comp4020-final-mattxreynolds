@@ -160,5 +160,7 @@ it("the Draw holds an opener, a middle and a finale, stored with their versions"
   const db = new DatabaseSync(join(server.dataDir, "game.db"), { readOnly: true });
   const row = db.prepare("SELECT draw FROM voyage WHERE id = ?").get(voyage.id) as { draw: string };
   db.close();
-  expect(JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key)).toEqual(["mural-keypad@1", "rotten-floor@1", "valves-gauges@1"]);
+  const keys = JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key) as string[];
+  expect(keys.slice(0, 2)).toEqual(["mural-keypad@1", "rotten-floor@1"]);
+  expect(["valves-gauges@1", "helm-telegraph@1"]).toContain(keys[2]);
 });

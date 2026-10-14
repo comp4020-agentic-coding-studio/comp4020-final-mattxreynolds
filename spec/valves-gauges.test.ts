@@ -45,8 +45,13 @@ function events(voyageId: string): { action: string; actor: string | null; detai
 }
 
 /** A Voyage with the opener and the middle solved from the Clues alone, so the finale is live. Host walks, partner keys and holds the plan. */
-async function atFinale() {
+async function atFinale(): Promise<Awaited<ReturnType<typeof underway>>> {
+  // the finale slot draws one of two Puzzles (#64); these specs are about valves and gauges, so redraw until it comes up
   const l = await underway(server.url);
+  const db = new DatabaseSync(join(server.dataDir, "game.db"), { readOnly: true });
+  const row = db.prepare("SELECT draw FROM voyage WHERE id = ?").get(l.voyage.id) as { draw: string };
+  db.close();
+  if (!row.draw.includes("valves-gauges@1")) return atFinale();
   const opener = (await snap(l.voyage.id, l.host)).draw!.puzzles[0];
   const keyed = await intent(server.url, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener.clue!) });
   expect(keyed.status).toBe(200);

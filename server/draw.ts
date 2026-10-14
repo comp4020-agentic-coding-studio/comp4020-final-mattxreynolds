@@ -3,7 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { SLOTS, type PublicDraw, type PublicPuzzle, type Slot } from "../shared/draw.ts";
 import type { DeckName, WalkDir } from "../shared/intents.ts";
-import { currentFor, puzzle } from "./puzzles/index.ts";
+import { candidatesFor, puzzle } from "./puzzles/index.ts";
 import { instrumentView } from "./instrument.ts";
 import type { Pos, PuzzleVersion, Rng } from "./puzzles/types.ts";
 
@@ -24,7 +24,8 @@ const cryptoRng: Rng = () => randomInt(2 ** 32) / 2 ** 32;
 export function generateDraw(rng: Rng = cryptoRng): StoredDraw {
   const puzzles: StoredDraw["puzzles"] = [];
   for (const slot of SLOTS) {
-    const version = currentFor(slot);
+    const choices = candidatesFor(slot);
+    const version = choices[Math.floor(rng() * choices.length)];
     if (version) puzzles.push({ slot, key: version.key, data: version.generate(rng) });
   }
   return { puzzles };

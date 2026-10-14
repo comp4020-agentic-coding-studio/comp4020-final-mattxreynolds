@@ -42,12 +42,13 @@ export function instrumentView(
   now: number,
 ): InstrumentView {
   const live = liveOf(db, voyageId, version, data);
-  const { limits, readings } = version.instrument!;
-  if (role === "lock") return { range: limits.valves, valves: live.valves };
+  const { limits, readings, names } = version.instrument!;
+  if (role === "lock") return { range: limits.valves, valves: live.valves, ...(names ? { names: { dial: names.valves } } : {}) };
   return {
     range: limits.trims,
     trims: live.trims,
     readings: readings(data, live),
     holdMs: live.since === null ? null : Math.min(HOLD_MS, now - live.since),
+    ...(names ? { names: { dial: names.trims, gauges: names.gauges } } : {}),
   };
 }

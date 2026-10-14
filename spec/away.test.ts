@@ -121,7 +121,7 @@ it("the finale hold continues within grace", async () => {
 }, SLOW);
 
 it("the finale hold resets on a freeze, and starts afresh when both are back", async () => {
-  const l = await atFinale(server.url);
+  const l = await atFinale(server.url, "valves-gauges"); // turns valve 1, which only that finale has
   const { voyage, host, partner } = l;
   current = voyage.id;
   const on = { host: l.streams[0], partner: l.streams[1] };
