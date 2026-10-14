@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Scene from "./Scene.svelte";
+  import { roomForDeck } from "../shared/rooms.ts";
   import type { LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby";
@@ -235,6 +237,8 @@
     {#if snapshot.started && snapshot.yourDeck}
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
+        <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
+        <Scene deck={snapshot.yourDeck} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0}</p>
         {#if strikeNote}<p role="status">{strikeNote}</p>{/if}
         {#if bellNote}<p role="status">{bellNote}</p>{/if}
