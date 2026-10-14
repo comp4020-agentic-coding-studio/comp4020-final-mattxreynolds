@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE – From the URL into a Voyage (throwaway)</title>
+<!--
+  PROTOTYPE · THROWAWAY · never merged.
+  Question (wayfinder ticket "How does a stranger get from the URL into a Voyage with a partner, and back into an
+  unfinished one?"): the first screen, choosing a Deck, pairing, the Player name, the private profile screen, the ends
+  (end card, both-Decks debrief, Leaderboard opt-in) and which of these ship at C10.
+
+  Two Chrome profiles side by side, one at 1920x1080 and one at 390x844, share one in-memory fake server, so you can
+  play both Players yourself the way the marker will. "+ Fresh browser" adds a third profile with no cookie (the marker
+  coming back the next day in incognito). Each pane has an address bar: type /v/<code> or paste a copied link.
+
+  Three flows, switchable with ?variant=A|B|C, the bottom bar, or [ and ]:
+    A  Harbour office   hub first: the profile screen is home; start a Voyage, then both pick a Deck on two cards
+    B  Straight aboard  Voyage first: "Play as guest" drops you straight into a new Voyage's manifest; auto-start
+    C  Boarding pass    Deck first: pick your Deck on the first screen; your partner gets the other one
+  ?scope=final adds the final-only screens (Leaderboard opt-in, Accounts stub). Nothing persists: reload wipes it.
+  The paused screen is a stub here; it's decided in "When does a dropped Player count as away...".
+-->
+<style>
+  :root { --bg:#0f0d0b; --panel:#1b1612; --line:#3a2f24; --ink:#efe6d6; --dim:#a8998a; --brass:#c9a050; --brass2:#8a6428; --ok:#7bbf8a; --bad:#e07a5f; --up:#8da6d4; --low:#e0915a; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:#08070a; color:var(--ink); font:14px/1.4 system-ui, sans-serif; }
+  #top { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 12px; background:#111; border-bottom:1px solid #222; }
+  #top b { color:var(--brass); } #top .sp { flex:1; }
+  #top button, #top select { font:inherit; font-size:12px; background:#2a2a2a; color:#eee; border:1px solid #444; border-radius:6px; padding:4px 9px; cursor:pointer; }
+  #top button.on { background:var(--brass); color:#1a120a; border-color:var(--brass); }
+  #stage { display:flex; gap:16px; padding:12px; align-items:flex-start; overflow-x:auto; }
+  .pane { flex:none; display:flex; flex-direction:column; gap:4px; }
+  .pane .chrome { display:flex; gap:4px; align-items:center; font-size:11px; color:#bbb; }
+  .pane .chrome .who { flex:none; font-weight:600; color:#ddd; }
+  .pane .chrome input { flex:1; min-width:60px; font:11px ui-monospace, monospace; background:#1d1d1d; color:#ddd; border:1px solid #333; border-radius:10px; padding:3px 8px; }
+  .pane .chrome button { font-size:11px; background:#262626; color:#ccc; border:1px solid #3a3a3a; border-radius:5px; padding:2px 6px; cursor:pointer; white-space:nowrap; }
+  .pane .frame { position:relative; overflow:hidden; border:1px solid #333; border-radius:4px; background:var(--bg); }
+  .pane .frame > .app { position:absolute; left:0; top:0; transform-origin:0 0; overflow:auto; }
+  .pane.closed .frame > .app { display:none; }
+  .pane .closedmsg { position:absolute; inset:0; display:none; place-items:center; color:#777; text-align:center; padding:12px; }
+  .pane.closed .closedmsg { display:grid; }
+
+  /* ---------- the game's own UI (inside each pane) ---------- */
+  .app { container-type:inline-size; background:var(--bg); color:var(--ink); }
+  .app button { font:inherit; cursor:pointer; touch-action:manipulation; }
+  .wrap { max-width:1040px; margin:0 auto; padding:40px 32px 60px; }
+  @container (max-width:600px) { .wrap { padding:20px 16px 40px; } }
+  .serif { font-family:Georgia, 'Palatino Linotype', serif; }
+  h1.title { font-family:Georgia, serif; font-variant:small-caps; letter-spacing:.06em; font-size:56px; margin:0 0 6px; color:#f1d9a0; }
+  @container (max-width:600px) { h1.title { font-size:34px; } }
+  h2 { font-family:Georgia, serif; font-weight:normal; color:#f1d9a0; margin:28px 0 10px; font-size:22px; }
+  .lede { font-size:18px; color:var(--dim); max-width:640px; margin:0 0 20px; }
+  .talk { display:flex; gap:12px; align-items:flex-start; border:1px solid var(--brass2); background:#21190f; border-radius:10px; padding:12px 14px; margin:18px 0; max-width:640px; }
+  .talk .ic { font-size:26px; line-height:1; } .talk b { color:#f1d9a0; }
+  .btn { background:var(--brass); color:#1a120a; border:0; border-radius:8px; padding:14px 26px; font-weight:700; letter-spacing:.04em; font-size:17px; min-height:48px; }
+  .btn.big { font-size:20px; padding:18px 36px; }
+  .btn.ghost { background:transparent; color:var(--brass); border:2px solid var(--brass2); }
+  .btn.small { font-size:14px; padding:8px 14px; min-height:44px; }
+  .btn.danger { background:transparent; color:var(--bad); border:1px solid #6b3a2e; font-weight:600; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  .muted { color:var(--dim); } .small { font-size:13px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .codebox { font:700 26px ui-monospace, Menlo, monospace; letter-spacing:.06em; color:#f1d9a0; background:#0b0907; border:1px dashed var(--brass2); border-radius:8px; padding:10px 14px; display:inline-block; }
+  @container (max-width:600px) { .codebox { font-size:19px; } }
+  .codein { font:600 18px ui-monospace, monospace; text-transform:uppercase; background:#0b0907; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:12px; min-height:48px; width:260px; max-width:100%; }
+  .namein { font:inherit; font-size:17px; background:#0b0907; color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-height:44px; width:220px; max-width:100%; }
+  .decks { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @container (max-width:600px) { .decks { grid-template-columns:1fr; gap:12px; } }
+  .deck { border-radius:14px; padding:20px; border:2px solid var(--line); background:var(--panel); display:flex; flex-direction:column; gap:8px; min-height:200px; }
+  @container (max-width:600px) { .deck { min-height:0; padding:14px; } }
+  .deck.upper { background:linear-gradient(160deg,#1d2533,#12161e); border-color:#3d4a63; }
+  .deck.lower { background:linear-gradient(160deg,#33201a,#1c120d); border-color:#6a3d24; }
+  .deck.mine { box-shadow:0 0 0 3px var(--brass); }
+  .deck .dn { font-family:Georgia, serif; font-size:26px; color:#f1d9a0; } .deck .rn { color:var(--dim); }
+  .deck .holder { margin-top:auto; font-size:15px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#2c241c; color:var(--dim); }
+  .pill.ok { background:#1e3324; color:var(--ok); } .pill.up { color:var(--up); background:#1a2130; } .pill.low { color:var(--low); background:#2e1d13; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#555; margin-right:5px; } .dot.on { background:var(--ok); }
+  .list { display:flex; flex-direction:column; gap:10px; }
+  .vrow { display:grid; grid-template-columns:1.4fr 1fr 1fr auto; gap:12px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  @container (max-width:600px) { .vrow { grid-template-columns:1fr; gap:6px; } }
+  .vrow .ship { font-family:Georgia, serif; font-variant:small-caps; font-size:19px; color:#f1d9a0; }
+  .bar { display:flex; justify-content:space-between; align-items:center; padding:10px 32px; border-bottom:1px solid var(--line); background:#140f0c; gap:10px; }
+  @container (max-width:600px) { .bar { padding:10px 16px; } }
+  .bar .brand { font-family:Georgia, serif; font-variant:small-caps; color:#f1d9a0; font-size:18px; }
+  .linkbtn { background:none; border:0; color:var(--brass); text-decoration:underline; padding:6px 0; font-size:14px; min-height:36px; }
+  .toast { position:sticky; top:0; z-index:5; background:#5a2a1e; color:#ffd8cc; padding:10px 16px; font-size:14px; }
+  .toast.info { background:#23331f; color:#d4f0c8; }
+  .banner { background:#21190f; border:1px solid var(--brass2); border-radius:10px; padding:12px 14px; margin:12px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .scene { height:440px; border-radius:12px; display:grid; place-items:center; text-align:center; color:var(--dim); font-size:15px; border:1px dashed var(--line); }
+  @container (max-width:600px) { .scene { height:300px; } }
+  .scene.upper { background:radial-gradient(circle at 50% 30%,#2a3650,#0c1018); } .scene.lower { background:radial-gradient(circle at 50% 70%,#5a2c14,#140a06); }
+  .hud { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin:10px 0; font-size:15px; } .hud b { color:#f1d9a0; }
+  .plate { max-width:520px; margin:40px auto; padding:26px 22px; text-align:center; background:linear-gradient(160deg,#2a211a,#15100c); color:#f1d9a0; border:3px solid #b8863b; box-shadow:inset 0 0 0 5px #15100c, inset 0 0 0 7px #8a6428, 0 20px 50px #000; font-family:Georgia, serif; border-radius:4px; }
+  .plate .kick { font-size:13px; letter-spacing:.32em; text-transform:uppercase; color:#d9a94a; } .plate .ship { font-size:36px; font-variant:small-caps; margin:8px 0; }
+  .plate .stats { font-size:15px; opacity:.85; margin:10px 0 18px; }
+  .debrief { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @container (max-width:600px) { .debrief { grid-template-columns:1fr; } }
+  .tl { font:13px ui-monospace, monospace; color:var(--dim); line-height:1.7; } .tl .u { color:var(--up); } .tl .l { color:var(--low); }
+  .manifest { width:100%; border-collapse:collapse; font-size:16px; } .manifest td { padding:14px 10px; border-top:1px solid var(--line); vertical-align:middle; }
+  .manifest .dn { font-family:Georgia, serif; font-size:20px; color:#f1d9a0; }
+  @container (max-width:600px) { .manifest td { display:block; padding:4px 0; border:0; } .manifest tr { display:block; border-top:1px solid var(--line); padding:10px 0; } }
+  .pass { display:grid; grid-template-columns:1fr 220px; background:#efe3c4; color:#2a1d0e; border-radius:14px; overflow:hidden; max-width:720px; font-family:Georgia, serif; box-shadow:0 14px 40px #000; }
+  .pass .main { padding:22px; } .pass .stub { border-left:3px dashed #a58f60; padding:22px 18px; background:#e6d6af; }
+  .pass .lbl { font:600 11px system-ui; letter-spacing:.14em; text-transform:uppercase; color:#7a6438; } .pass .val { font-size:22px; margin-bottom:10px; }
+  .pass .namein, .pass .codein { background:#fff8e6; color:#2a1d0e; border-color:#a58f60; }
+  @container (max-width:600px) { .pass { grid-template-columns:1fr; } .pass .stub { border-left:0; border-top:3px dashed #a58f60; } }
+  .doors { display:grid; grid-template-columns:1fr 1fr; gap:18px; } @container (max-width:600px) { .doors { grid-template-columns:1fr; gap:12px; } }
+  .door { text-align:left; border-radius:16px; padding:26px 22px; border:2px solid var(--line); color:var(--ink); min-height:200px; display:flex; flex-direction:column; gap:6px; }
+  @container (max-width:600px) { .door { min-height:120px; padding:16px; } }
+  .door.upper { background:linear-gradient(160deg,#1d2533,#12161e); border-color:#3d4a63; } .door.lower { background:linear-gradient(160deg,#33201a,#1c120d); border-color:#6a3d24; }
+  .door .dn { font-family:Georgia, serif; font-size:28px; color:#f1d9a0; } .door .go { margin-top:auto; color:var(--brass); font-weight:700; }
+
+  /* ---------- prototype furniture ---------- */
+  #state { margin:0 12px 70px; display:none; grid-template-columns:1fr 1fr; gap:12px; font:12px ui-monospace, monospace; color:#bbb; }
+  #state.open { display:grid; }
+  #state section { background:#141414; border:1px solid #2a2a2a; border-radius:8px; padding:10px; overflow:auto; max-height:320px; }
+  #state h4 { margin:0 0 6px; color:#ddd; font:600 12px system-ui; }
+  #state table { border-collapse:collapse; width:100%; } #state td { padding:2px 6px; border-top:1px solid #222; vertical-align:top; }
+  #state .new { background:#2b2a14; }
+  #switcher { position:fixed; left:50%; bottom:12px; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:4px; background:#0f172a; color:#fff; padding:5px; border-radius:999px; box-shadow:0 6px 20px rgba(0,0,0,.6); font-size:13px; white-space:nowrap; }
+  #switcher button { border:0; background:#334155; color:#fff; min-width:34px; height:34px; border-radius:17px; cursor:pointer; font-size:15px; }
+  #switcher span { padding:0 10px; }
+</style>
+</head>
+<body>
+<div id="top">
+  <b>PROTOTYPE</b><span>From the URL into a Voyage · throwaway</span>
+  <span class="sp"></span>
+  <span>Scope:</span><button data-scope="c10">C10</button><button data-scope="final">Final</button>
+  <button id="addDesk">+ Fresh browser (1920×1080)</button>
+  <button id="addPhone">+ Fresh browser (390×844)</button>
+  <button id="race" title="Both open panes pick the Upper Deck in the same instant">Race: both pick Upper</button>
+  <button id="stateBtn">Server state</button>
+  <button id="reset">Reset all</button>
+</div>
+<div id="stage"></div>
+<div id="state"></div>
+<div id="switcher"><button id="prev" title="previous ([)">‹</button><span id="vlabel"></span><button id="next" title="next (])">›</button></div>
+
+<script>
+// ===================================================================================================
+// Fake server: in memory, shared by every pane. Mirrors decisions already made on the map:
+// Guest behind a cookie token (ADR 0002), one Deck per Person per Voyage, Voyage code as a bearer secret
+// that rejoins a Deck whose Player isn't connected, any number of unfinished Voyages, "end the Voyage".
+// ===================================================================================================
+const ADJ = ['Amber','Coral','Slate','Ochre','Russet','Ivory','Cobalt','Moss','Ember','Pewter','Saffron','Teal'];
+const BIRD = ['Heron','Finch','Plover','Tern','Kestrel','Wren','Petrel','Curlew','Gannet','Lark','Shrike','Avocet'];
+const SHIPS = ['Marguerite','Kestrel','Halcyon','Persephone','Corisande','Albatross','Oriel','Isolde','Meridian','Wayfarer'];
+const DECKS = { upper: { name:'Upper Deck', room:'the Wheelhouse', blurb:'Storm-lit, cold. Helm, telegraph, chart table.' },
+                lower: { name:'Lower Deck', room:'the Engine Room', blurb:'Furnace-lit, hot. Valves, gauges, the bilge.' } };
+const PUZZLES = [['Mural keypad','Lever order'],['Rotten floor','Bilge plates'],['Valves and gauges','Helm and telegraph']];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const hex = n => Math.random().toString(16).slice(2, 2 + n);
+const other = d => d === 'upper' ? 'lower' : 'upper';
+
+let S; // server
+function freshServer() { return { persons:{}, tokens:{}, voyages:{}, log:[], day:1 }; }
+function logEv(v, pid, what) {
+  const p = pid && S.persons[pid]; const seat = v && pid ? deckOf(v, pid) : null;
+  S.log.push({ t: S.log.length, vid: v ? v.id : null,
+    line: `${v ? `[voyage ${v.id}] ` : ''}${p ? `${p.id} "${p.name}"${seat ? ` (${DECKS[seat].name})` : ''} ` : ''}${what}` });
+}
+function newGuest() {
+  const id = 'p_' + hex(4); const token = 'tok_' + hex(12);
+  S.persons[id] = { id, name: `${pick(ADJ)} ${pick(BIRD)}`, kind:'Guest' };
+  S.tokens[token] = id; logEv(null, id, 'guest created'); return token;
+}
+function newVoyage(pid) {
+  const ship = pick(SHIPS); const id = hex(3);
+  const v = { id, ship, code: `SS-${ship.toUpperCase()}-${1000 + Math.floor(Math.random() * 9000)}`,
+    seats:{ upper:null, lower:null }, ready:{}, status:'lobby', creator: pid, day:S.day, solved:0, strikes:0,
+    draw: PUZZLES.map(pick), consents:{}, countdown:null, invites:[] };
+  S.voyages[id] = v; logEv(v, pid, `new Voyage, SS ${ship}`); return v;
+}
+const deckOf = (v, pid) => !pid ? null : v.seats.upper === pid ? 'upper' : v.seats.lower === pid ? 'lower' : null;
+const partnerOf = (v, pid) => { const d = deckOf(v, pid); return d ? v.seats[other(d)] : null; };
+const byCode = code => Object.values(S.voyages).find(v => v.code === (code || '').trim().toUpperCase());
+const pname = pid => pid ? S.persons[pid].name : null;
+const finished = v => ['launched','sank','ended'].includes(v.status);
+const clock = v => { const m = 30 - v.solved * 7 - v.strikes * 3; return `${Math.max(m, 0)}:${v.solved ? '12' : '00'}`; };
+// present = some open pane whose cookie is this Person is on this Voyage's page
+function present(v, pid) {
+  return panes.some(p => p.open && S.tokens[p.cookie] === pid && route(p).code === v.code && !route(p).debrief);
+}
+
+function chooseDeck(v, pid, d) {
+  if (v.status !== 'lobby') return 'The Voyage has already cast off.';
+  if (v.seats[d] && v.seats[d] !== pid) { logEv(v, pid, `choose ${DECKS[d].name} → 409 taken`); return `${pname(v.seats[d])} took the ${DECKS[d].name} a moment before you. The ${DECKS[other(d)].name} is yours if you want it.`; }
+  const had = deckOf(v, pid); if (had) v.seats[had] = null;
+  v.seats[d] = pid; v.ready = {}; logEv(v, pid, `choose ${DECKS[d].name}`); return null;
+}
+function castOff(v) { v.status = 'sailing'; v.countdown = null; logEv(v, null, 'cast off: Clock starts'); }
+function endVoyage(v, pid, status) { v.status = status; v.endDay = S.day; logEv(v, pid, `Voyage ends: ${status}`); }
+
+// ===================================================================================================
+// Panes: each is one Chrome profile with its own cookie jar and address bar.
+// ===================================================================================================
+let panes = [], VARIANT, SCOPE, clip = '';
+function newPane(label, w, h) { return { id: 'p' + hex(4), label, w, h, cookie:null, url:'/', open:true, toast:null, ui:{} }; }
+function route(p) {
+  const m = p.url.match(/^\/v\/([A-Za-z0-9-]+)(\/debrief)?/);
+  if (m) return { name:'voyage', code: m[1].toUpperCase(), debrief: !!m[2] };
+  if (p.url.startsWith('/voyages')) return { name:'home' };
+  if (p.url.startsWith('/leaderboard')) return { name:'leaderboard' };
+  return { name:'landing' };
+}
+const me = p => S.tokens[p.cookie] || null;
+function ensureGuest(p) { if (!me(p)) p.cookie = newGuest(); return me(p); }
+function go(p, url) { p.url = url; p.ui = {}; }
+
+// ===================================================================================================
+// Shared screens (same in every variant)
+// ===================================================================================================
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const talkBox = (extra = '') => `<div class="talk"><div class="ic">🗣️</div><div><b>Talk out loud. That's the whole game.</b>
+  Each of you is sealed on a different Deck holding the other's clues. There is no chat: sit side by side, or call each other.${extra}</div></div>`;
+const aloneHint = `<div class="small muted" style="margin-top:8px">Playing alone? Open the link in a <b>second Chrome profile</b> or an incognito window. Each browser is its own Player.</div>`;
+function nameEditor(p, label = 'Your Player name') {
+  const pid = me(p); if (!pid) return '';
+  if (p.ui.editName) return `<span class="row" style="gap:6px"><input class="namein" id="${p.id}-name" maxlength="20" value="${esc(pname(pid))}">
+    <button class="btn small" data-act="saveName">Save</button></span>`;
+  return `<span>${label}: <b>${esc(pname(pid))}</b> <button class="linkbtn" data-act="editName">change</button></span>`;
+}
+function topBar(p, right = '') {
+  const pid = me(p);
+  return `<div class="bar"><span class="brand">Voice Pipe</span><span class="row" style="gap:14px">${right}
+    ${pid && route(p).name !== 'home' ? `<button class="linkbtn" data-act="go" data-url="/voyages">Your Voyages</button>` : ''}
+    ${SCOPE === 'final' && route(p).name !== 'leaderboard' ? `<button class="linkbtn" data-act="go" data-url="/leaderboard">Leaderboard</button>` : ''}</span></div>`;
+}
+function inviteBox(p, v, big) {
+  const link = `${location.host || 'voicepipe.fly.dev'}/v/${v.code}`;
+  return `<div class="${big ? '' : 'card'}" style="${big ? '' : 'max-width:640px'}">
+    <div class="small muted" style="margin-bottom:6px">Your partner joins with this code, or the link</div>
+    <div class="row"><span class="codebox">${v.code}</span><button class="btn small ghost" data-act="copy" data-text="/v/${v.code}">Copy link</button></div>
+    <div class="small muted" style="margin-top:6px">${esc(link)} · Keep the code: it gets you back aboard from any browser.</div>${aloneHint}</div>`;
+}
+function rejoinOffers(p, v) {
+  // seats held by a Person who isn't the viewer and isn't connected right now
+  const pid = me(p);
+  const offers = ['upper','lower'].filter(d => v.seats[d] && v.seats[d] !== pid && !present(v, v.seats[d]));
+  if (!offers.length) return '';
+  return `<div class="card" style="max-width:640px;margin-top:16px"><div style="margin-bottom:8px"><b>Coming back from another browser?</b>
+    <span class="muted">This takes over that Player and their Voyages from here.</span></div><div class="row">${offers.map(d =>
+    `<button class="btn small ghost" data-act="rejoin" data-deck="${d}">Rejoin as ${esc(pname(v.seats[d]))} (${DECKS[d].name})</button>`).join('')}</div></div>`;
+}
+function voyageRows(p, list, fin) {
+  const pid = me(p);
+  if (!list.length) return `<div class="muted">${fin ? 'No finished Voyages yet.' : 'Nothing unfinished.'}</div>`;
+  return `<div class="list">${list.map(v => {
+    const d = deckOf(v, pid); const pt = partnerOf(v, pid);
+    const status = fin ? { launched:'<span class="pill ok">Lifeboat launched</span>', sank:'<span class="pill">Went down</span>', ended:'<span class="pill">Ended</span>' }[v.status]
+      : v.status === 'lobby' ? '<span class="pill">In port</span>' : `<span class="pill">Puzzle ${v.solved + 1} of 3 · ${clock(v)} left</span>`;
+    const confirm = p.ui.confirmEnd === v.id;
+    return `<div class="vrow"><div><div class="ship">SS ${v.ship}</div><div class="small muted">Day ${fin ? v.endDay : v.day}${fin ? '' : ` · code <b style="font-family:monospace">${v.code}</b>`}</div></div>
+      <div>${d ? `<span class="pill ${d === 'upper' ? 'up' : 'low'}">${DECKS[d].name}</span>` : '<span class="pill">no Deck yet</span>'}<div class="small">with ${pt ? esc(pname(pt)) : '<i class="muted">no partner yet</i>'}</div></div>
+      <div>${status}${fin && v.status === 'launched' ? `<div class="small muted">Score ${clock(v)}</div>` : ''}</div>
+      <div class="row" style="gap:8px">${fin ? `<button class="btn small ghost" data-act="go" data-url="/v/${v.code}/debrief">Both Decks</button>`
+        : confirm ? `<span class="small">End the SS ${v.ship} for both of you?</span><button class="btn small danger" data-act="endFromProfile" data-vid="${v.id}">End it</button><button class="btn small ghost" data-act="cancelEnd">Keep</button>`
+        : `<button class="btn small" data-act="go" data-url="/v/${v.code}">${v.status === 'lobby' ? 'Open' : 'Resume'}</button><button class="btn small danger" data-act="askEnd" data-vid="${v.id}">End the Voyage</button>`}</div></div>`;
+  }).join('')}</div>`;
+}
+function profile(p, header) {
+  const pid = me(p); const mine = Object.values(S.voyages).filter(v => deckOf(v, pid) || (v.creator === pid && !v.seats.upper && !v.seats.lower));
+  const unf = mine.filter(v => !finished(v)).reverse(), fin = mine.filter(finished).reverse();
+  return `${header || ''}
+    ${SCOPE === 'final' && S.persons[pid].kind === 'Guest' ? `<div class="banner"><span>You're a Guest: your Voyages live in this browser. <b>Make an Account</b> to keep them anywhere.</span><button class="btn small ghost" data-act="stub" data-what="Upgrade to an Account (final scope): username + password, same history">Make an Account</button></div>` : ''}
+    <h2>Unfinished</h2>${voyageRows(p, unf, false)}<h2>Finished</h2>${voyageRows(p, fin, true)}`;
+}
+function invitesFor(p) {
+  const pid = me(p); if (!pid) return '';
+  return Object.values(S.voyages).filter(v => v.invites.includes(pid) && v.status === 'lobby' && !deckOf(v, pid)).map(v =>
+    `<div class="banner"><span>🔔 <b>${esc(pname(v.creator))}</b> started a new Voyage with you: the SS ${v.ship}.</span><button class="btn small" data-act="go" data-url="/v/${v.code}">Join them</button></div>`).join('');
+}
+function voyageScreen(p, v) {
+  const pid = me(p); const d = deckOf(v, pid); const pt = partnerOf(v, pid);
+  const away = !present(v, pt);
+  return `${topBar(p, `<span class="pill ${d === 'upper' ? 'up' : 'low'}">${DECKS[d].name}</span>`)}<div class="wrap">
+    <div class="hud"><span>SS <b>${v.ship}</b></span><span>Clock <b>${clock(v)}</b></span><span>Strikes <b>${v.strikes}/3</b></span><span>Puzzle <b>${Math.min(v.solved + 1, 3)} of 3</b></span>
+      <span class="small muted">with ${esc(pname(pt))} <span class="dot ${away ? '' : 'on'}"></span></span></div>
+    ${away ? `<div class="card" style="margin-bottom:12px"><b>Paused.</b> ${esc(pname(pt))} isn't aboard. The ship waits for both of you. <span class="muted">(The paused screen is decided in another ticket; this is a stub.)</span><div style="margin-top:8px">${inviteBox(p, v, true)}</div></div>` : ''}
+    <div class="scene ${d}"><div>3D scene: ${DECKS[d].room}<br><span class="small">${v.draw[Math.min(v.solved, 2)]} · stand-in for the real Deck</span></div></div>
+    <div class="row" style="margin-top:12px">
+      ${v.solved < 2 ? `<button class="btn small" data-act="solve" ${away ? 'disabled' : ''}>Solve this Puzzle</button>` : `<button class="btn small" data-act="launch" ${away ? 'disabled' : ''}>Hold the finale 10 s → launch the Lifeboat</button>`}
+      <button class="btn small ghost" data-act="strike" ${away ? 'disabled' : ''}>Give a wrong answer</button>
+      ${p.ui.confirmEnd === v.id ? `<span>End the SS ${v.ship} for both of you?</span><button class="btn small danger" data-act="endHere">End it</button><button class="btn small ghost" data-act="cancelEnd">Keep sailing</button>`
+        : `<button class="btn small danger" data-act="askEnd" data-vid="${v.id}">End the Voyage</button>`}
+    </div><div class="small muted" style="margin-top:8px">Voyage code ${v.code} · in the real game this sits in a menu</div></div>`;
+}
+function endCard(p, v) {
+  const k = { launched:['Lifeboat launched','All hands off. The SS ' + v.ship + ' goes down without you.'], sank:['The ship went down','The water won this time.'], ended:['Voyage ended','One of you called it.'] }[v.status];
+  return `${topBar(p)}<div class="wrap"><div class="plate"><div class="kick">${k[0]}</div><div class="ship">SS ${v.ship}</div><div>${k[1]}</div>
+    <div class="stats">${v.status === 'launched' ? `Score ${clock(v)} left · ` : ''}${v.strikes} Strike${v.strikes === 1 ? '' : 's'} · ${v.solved} of 3 Puzzles</div>
+    <div class="row" style="justify-content:center"><button class="btn" data-act="go" data-url="/v/${v.code}/debrief">See both Decks</button></div></div></div>`;
+}
+function debrief(p, v) {
+  const pid = me(p); const pt = partnerOf(v, pid);
+  const tl = S.log.filter(e => e.vid === v.id && /solve|Strike|launch|reveal/.test(e.line)).map(e =>
+    `<div class="${e.line.includes('Upper') ? 'u' : e.line.includes('Lower') ? 'l' : ''}">${esc(e.line.replace(/^\[voyage \w+\] /, ''))}</div>`).join('') || '<div>(no events)</div>';
+  const deckCol = d => `<div class="card"><div class="serif" style="font-size:20px;color:#f1d9a0">${DECKS[d].name} · ${esc(pname(v.seats[d]))}</div>
+    <div class="small muted" style="margin:4px 0 8px">${DECKS[d].room}</div>${v.draw.map((pz, i) => `<div>${i < v.solved ? '✓' : '·'} ${pz}: <span class="muted">${d === (i % 2 ? 'lower' : 'upper') ? 'worked here' : 'clues held here'}</span></div>`).join('')}</div>`;
+  const c = v.consents; const both = c[v.seats.upper] && c[v.seats.lower];
+  const lb = SCOPE !== 'final' || v.status !== 'launched' ? '' : `<div class="card" style="margin-top:16px"><b>Leaderboard</b>
+    <div class="small muted" style="margin:4px 0 10px">Posts "${esc(pname(v.seats.upper))} + ${esc(pname(v.seats.lower))}" with Score ${clock(v)}. Both of you have to agree.</div>
+    ${both ? '<span class="pill ok">Posted</span>' : c[pid] ? `<span class="pill">Waiting for ${esc(pname(pt))} to agree</span>` : `<button class="btn small" data-act="consent">Post our Score</button>${c[pt] ? ` <span class="small">${esc(pname(pt))} has agreed</span>` : ''}`}</div>`;
+  return `${topBar(p)}<div class="wrap"><h1 class="title" style="font-size:34px">SS ${v.ship}: both Decks</h1>
+    <div class="muted" style="margin-bottom:14px">${{ launched:'Lifeboat launched', sank:'Went down', ended:'Ended' }[v.status]} · ${v.strikes} Strikes · only the two of you can see this</div>
+    <div class="debrief">${deckCol('upper')}${deckCol('lower')}</div>
+    <h2>Who did what</h2><div class="card tl">${tl}</div>${lb}
+    <div class="row" style="margin-top:18px"><button class="btn" data-act="again">Sail again with ${esc(pname(pt))}</button><button class="btn ghost" data-act="go" data-url="/voyages">Your Voyages</button></div></div>`;
+}
+function fullOrGone(p, v) {
+  return `${topBar(p)}<div class="wrap"><h1 class="title" style="font-size:34px">SS ${v.ship}</h1>
+    <p class="lede">${finished(v) ? 'This Voyage is over.' : 'Both Players are aboard this Voyage already.'}</p>${rejoinOffers(p, v)}
+    <div style="margin-top:16px"><button class="btn ghost" data-act="go" data-url="/">Start your own</button></div></div>`;
+}
+function leaderboard(p) {
+  const rows = Object.values(S.voyages).filter(v => v.status === 'launched' && v.consents[v.seats.upper] && v.consents[v.seats.lower]);
+  return `${topBar(p)}<div class="wrap"><h1 class="title" style="font-size:34px">Leaderboard</h1><div class="list">${rows.map((v, i) =>
+    `<div class="vrow"><div class="ship">${i + 1}. ${esc(pname(v.seats.upper))} + ${esc(pname(v.seats.lower))}</div><div>SS ${v.ship}</div><div>${clock(v)} left</div><div></div></div>`).join('') || '<div class="muted">No Teams have posted yet.</div>'}</div></div>`;
+}
+function joinByCodeForm(p, label = 'Have a Voyage code?') {
+  return `<div class="row" style="gap:8px"><input class="codein" id="${p.id}-code" placeholder="SS-KESTREL-4821" value="${esc(p.ui.code || '')}">
+    <button class="btn small ghost" data-act="enterCode">${label === 'Have a Voyage code?' ? 'Join' : label}</button></div>
+    ${p.ui.codeErr ? `<div class="small" style="color:var(--bad);margin-top:6px">${p.ui.codeErr}</div>` : ''}`;
+}
+
+// ===================================================================================================
+// Variant A — Harbour office: hub first. Profile is home; lobby has two Deck cards; both press Ready.
+// ===================================================================================================
+const A = {
+  name: 'Harbour office',
+  landing: p => `${topBar(p)}<div class="wrap"><h1 class="title">Voice Pipe</h1>
+    <p class="lede">A steamship is sinking. Two of you, two sealed Decks, one brass voice pipe between you. Reach the Lifeboat together. 15–30 minutes.</p>
+    ${talkBox()}<div class="row" style="margin:22px 0"><button class="btn big" data-act="guest">Play as guest</button>
+    ${SCOPE === 'final' ? `<button class="linkbtn" data-act="stub" data-what="Sign in (final scope)">Sign in</button>` : ''}</div>
+    <div class="card" style="max-width:640px"><div style="margin-bottom:8px">Partner already started? Coming back to a Voyage from a new browser?</div>${joinByCodeForm(p)}</div></div>`,
+  home: p => `${topBar(p)}<div class="wrap">${invitesFor(p)}<div class="row" style="justify-content:space-between">
+    <div><h1 class="title" style="font-size:38px">Your Voyages</h1><div>${nameEditor(p)}</div></div>
+    <button class="btn big" data-act="newVoyage">Start a new Voyage</button></div>
+    <div class="card" style="margin-top:16px;max-width:640px"><div style="margin-bottom:8px">Joining a partner?</div>${joinByCodeForm(p, 'Join')}</div>
+    ${profile(p)}<p class="small muted" style="margin-top:24px">Only you can see this page.</p></div>`,
+  lobby: (p, v) => {
+    const pid = me(p); const md = deckOf(v, pid); const pt = partnerOf(v, pid); const full = v.seats.upper && v.seats.lower;
+    const deckCard = d => { const h = v.seats[d]; const mine = !!h && h === pid;
+      return `<div class="deck ${d} ${mine ? 'mine' : ''}"><div class="dn">${DECKS[d].name}</div><div class="rn">${DECKS[d].room} · ${DECKS[d].blurb}</div>
+        <div class="holder">${h ? `<span class="dot ${present(v, h) ? 'on' : ''}"></span>${mine ? '<b>You</b>' : esc(pname(h))}${v.ready[h] ? ' <span class="pill ok">ready</span>' : ''}` : '<span class="muted">Empty</span>'}</div>
+        ${mine ? '' : h ? `<button class="btn small" disabled>Taken by ${esc(pname(h))}</button>` : `<button class="btn small" data-act="choose" data-deck="${d}">${md ? 'Switch to this Deck' : 'Take this Deck'}</button>`}</div>`; };
+    return `${topBar(p)}<div class="wrap"><div class="small muted">In port</div><h1 class="title" style="font-size:40px">SS ${v.ship}</h1>
+      <div style="margin-bottom:14px">${nameEditor(p)}</div>
+      <h2>Choose your Deck</h2><div class="decks">${deckCard('upper')}${deckCard('lower')}</div>
+      ${!pt ? `<h2>Waiting for your partner</h2>${inviteBox(p, v)}` : ''}
+      ${full && md ? `<div class="row" style="margin-top:20px">${v.ready[pid] ? `<span class="pill ok">You're ready</span><span class="muted">Waiting for ${esc(pname(pt))}…</span><button class="btn small ghost" data-act="unready">Not yet</button>`
+        : `<button class="btn big" data-act="ready">Cast off</button><span class="muted small">Both of you press it. The Clock starts when you're both aboard.</span>`}</div>` : ''}
+      ${talkBox()}${rejoinOffers(p, v)}</div>`;
+  },
+};
+
+// ===================================================================================================
+// Variant B — Straight aboard: Voyage first. "Play as guest" creates a Voyage at once; manifest table;
+// starts automatically 5 s after both Decks are taken. Profile is secondary.
+// ===================================================================================================
+const B = {
+  name: 'Straight aboard',
+  landing: p => `<div class="wrap" style="text-align:center;padding-top:70px"><h1 class="title">Voice Pipe</h1>
+    <p class="lede" style="margin:0 auto 20px">Two players. Two sealed Decks of a sinking steamship. Talk your way to the Lifeboat.</p>
+    <button class="btn big" data-act="guestVoyage">Play as guest</button>
+    <div class="muted small" style="margin:10px 0 30px">No sign-up. You'll get a code to send your partner.</div>
+    <div style="display:inline-block;text-align:left">${joinByCodeForm(p, 'Join')}</div>
+    ${me(p) ? `<div style="margin-top:20px"><button class="linkbtn" data-act="go" data-url="/voyages">Your Voyages</button></div>` : ''}
+    ${SCOPE === 'final' ? `<div><button class="linkbtn" data-act="stub" data-what="Sign in (final scope)">Sign in</button></div>` : ''}</div>`,
+  home: p => `${topBar(p)}<div class="wrap">${invitesFor(p)}<h1 class="title" style="font-size:34px">Your Voyages</h1><div>${nameEditor(p)}</div>
+    <div class="row" style="margin-top:14px"><button class="btn" data-act="newVoyage">New Voyage</button>${joinByCodeForm(p, 'Join')}</div>${profile(p)}</div>`,
+  lobby: (p, v) => {
+    const pid = me(p); const md = deckOf(v, pid); const pt = partnerOf(v, pid);
+    const row = d => { const h = v.seats[d]; const mine = !!h && h === pid;
+      return `<tr><td><div class="dn">${DECKS[d].name}</div><div class="small muted">${DECKS[d].room}</div></td>
+        <td>${h ? `<span class="dot ${present(v, h) ? 'on' : ''}"></span>${mine ? `<b>${esc(pname(h))}</b> (you)` : esc(pname(h))}` : '<span class="muted">nobody yet</span>'}</td>
+        <td style="text-align:right">${mine ? (p.ui.editName ? '' : `<button class="linkbtn" data-act="editName">change my name</button>`) : h ? '' : `<button class="btn small" data-act="choose" data-deck="${d}">${md ? 'Move here' : 'Take'}</button>`}</td></tr>`; };
+    const both = v.seats.upper && v.seats.lower && present(v, v.seats.upper) && present(v, v.seats.lower);
+    return `${topBar(p)}<div class="wrap" style="max-width:760px"><div class="small muted">SS ${v.ship} · in port</div>
+      ${!pt ? `<h1 class="title" style="font-size:30px">Send this to your partner</h1><div style="margin:10px 0 20px">${inviteBox(p, v, true)}</div>` : `<h1 class="title" style="font-size:30px">All aboard the SS ${v.ship}</h1>`}
+      ${p.ui.editName ? `<div style="margin-bottom:10px">${nameEditor(p)}</div>` : ''}
+      <table class="manifest">${row('upper')}${row('lower')}</table>
+      ${both ? `<div class="banner" style="margin-top:18px"><b>Casting off in ${v.countdown ?? 5}…</b><span class="muted">Swap Decks now if you want to.</span>${md ? `<button class="btn small ghost" data-act="swap">Swap Decks</button>` : ''}</div>`
+        : md && pt ? `<div class="muted" style="margin-top:14px">Waiting for ${esc(pname(pt))} to be here.</div>` : ''}
+      ${talkBox()}${rejoinOffers(p, v)}</div>`;
+  },
+};
+
+// ===================================================================================================
+// Variant C — Boarding pass: Deck first. Pick a Deck on the first screen (creates the Voyage with you on it).
+// The partner's link boards them on the other Deck; either may swap; the first Player casts off.
+// ===================================================================================================
+const C = {
+  name: 'Boarding pass',
+  landing: p => `${topBar(p)}<div class="wrap"><h1 class="title">Voice Pipe</h1>
+    <p class="lede">A sinking steamship. You take one Deck, your partner the other, and only your voices cross between them.</p>${talkBox()}
+    <h2>Play as guest: pick your Deck</h2><div class="doors">${['upper','lower'].map(d =>
+      `<button class="door ${d}" data-act="boardNew" data-deck="${d}"><span class="dn">${DECKS[d].name}</span><span class="muted">${DECKS[d].room} · ${DECKS[d].blurb}</span><span class="go">Board here →</span></button>`).join('')}</div>
+    <h2>Got a code from your partner?</h2>${joinByCodeForm(p, 'Board')}
+    ${me(p) ? `<div style="margin-top:20px"><button class="linkbtn" data-act="go" data-url="/voyages">Your Voyages</button></div>` : ''}
+    ${SCOPE === 'final' ? `<div><button class="linkbtn" data-act="stub" data-what="Sign in (final scope)">Sign in</button></div>` : ''}</div>`,
+  home: p => `${topBar(p)}<div class="wrap">${invitesFor(p)}<h1 class="title" style="font-size:34px">Your Voyages</h1><div>${nameEditor(p)}</div>
+    <div class="row" style="margin-top:14px">${['upper','lower'].map(d => `<button class="btn small ${d === 'lower' ? 'ghost' : ''}" data-act="boardNew" data-deck="${d}">New Voyage on the ${DECKS[d].name}</button>`).join('')}</div>${profile(p)}</div>`,
+  lobby: (p, v) => {
+    const pid = me(p); const md = deckOf(v, pid); const pt = partnerOf(v, pid);
+    const free = !v.seats.upper ? 'upper' : !v.seats.lower ? 'lower' : null;
+    if (!md) { // a visitor holding the link: the pass is already filled in with the free Deck
+      return `${topBar(p)}<div class="wrap"><div class="pass"><div class="main"><div class="lbl">Steamship</div><div class="val">SS ${v.ship}</div>
+        <div class="lbl">Your Deck</div><div class="val">${free ? `${DECKS[free].name} · ${DECKS[free].room}` : '—'}</div>
+        <div class="lbl">Sailing with</div><div class="val">${esc(pname(v.seats[other(free || 'upper')]) || '—')}</div>
+        ${free ? `<button class="btn" data-act="choose" data-deck="${free}">Board the ${DECKS[free].name}</button><div class="small" style="margin-top:6px;color:#7a6438">Want the other Deck? Board, then ask to swap.</div>` : '<div>Both Decks are taken.</div>'}</div>
+        <div class="stub"><div class="lbl">Code</div><div style="font:700 16px monospace">${v.code}</div></div></div>${talkBox()}${rejoinOffers(p, v)}</div>`;
+    }
+    const host = v.creator === pid;
+    return `${topBar(p)}<div class="wrap"><div class="pass"><div class="main"><div class="lbl">Steamship</div><div class="val">SS ${v.ship}</div>
+      <div class="lbl">Passenger</div><div class="val">${p.ui.editName ? nameEditor(p, '') : `${esc(pname(pid))} <button class="linkbtn" style="color:#7a4a10" data-act="editName">change</button>`}</div>
+      <div class="lbl">Your Deck</div><div class="val">${DECKS[md].name} · ${DECKS[md].room}</div>
+      <div class="lbl">Sailing with</div><div class="val">${pt ? `<span class="dot ${present(v, pt) ? 'on' : ''}"></span>${esc(pname(pt))} on the ${DECKS[other(md)].name}` : '<i>waiting…</i>'}</div>
+      <div class="row">${pt ? `<button class="btn small ghost" style="color:#5a3a10;border-color:#a58f60" data-act="swap">Swap Decks</button>` : ''}
+      ${pt && host ? `<button class="btn" data-act="castOff" ${present(v, pt) ? '' : 'disabled'}>Cast off</button>` : pt ? `<span style="color:#7a6438">${esc(pname(v.creator))} casts off when you're both ready.</span>` : ''}</div></div>
+      <div class="stub"><div class="lbl">Boarding code</div><div style="font:700 17px monospace;margin-bottom:10px">${v.code}</div>
+      <button class="btn small" data-act="copy" data-text="/v/${v.code}">Copy link</button><div class="small" style="margin-top:10px;color:#7a6438">Your partner boards the other Deck with this. Keep it to come back aboard.</div></div></div>
+      ${!pt ? aloneHint : ''}${talkBox()}${rejoinOffers(p, v)}</div>`;
+  },
+};
+const VARIANTS = { A, B, C };
+
+// ===================================================================================================
+// Render
+// ===================================================================================================
+function screen(p) {
+  const V = VARIANTS[VARIANT]; const r = route(p); const pid = me(p);
+  const toast = p.toast ? `<div class="toast ${p.toast.info ? 'info' : ''}">${p.toast.msg}</div>` : '';
+  let body;
+  if (r.name === 'leaderboard') body = leaderboard(p);
+  else if (r.name === 'home') body = pid ? V.home(p) : V.landing(p);
+  else if (r.name === 'voyage') {
+    const v = byCode(r.code);
+    if (!v) body = `${topBar(p)}<div class="wrap"><p class="lede">No Voyage has that code.</p><button class="btn" data-act="go" data-url="/">Home</button></div>`;
+    else if (r.debrief) body = deckOf(v, pid) && finished(v) ? debrief(p, v) : fullOrGone(p, v);
+    else if (finished(v)) body = deckOf(v, pid) ? endCard(p, v) : fullOrGone(p, v);
+    else if (v.status === 'lobby') body = deckOf(v, pid) || !(v.seats.upper && v.seats.lower) ? V.lobby(p, v) : fullOrGone(p, v);
+    else body = deckOf(v, pid) ? voyageScreen(p, v) : fullOrGone(p, v);
+  } else body = pid && VARIANT === 'A' ? V.home(p) : V.landing(p);
+  return toast + body;
+}
+function layout() {
+  const avail = window.innerWidth - 24 - 16 * (panes.length - 1);
+  let H = Math.min(window.innerHeight - 130, 760);
+  const widthAt = H => panes.reduce((s, p) => s + p.w * (H / p.h), 0);
+  if (widthAt(H) > avail && panes.length <= 2) H = Math.max(360, avail / widthAt(1));
+  panes.forEach(p => p.scale = H / p.h);
+}
+function renderAll() {
+  const focus = document.activeElement; const fid = focus && focus.id; const sel = fid && focus.selectionStart;
+  layout();
+  const stage = document.getElementById('stage');
+  panes.forEach(p => {
+    let el = document.getElementById(p.id);
+    if (!el) { el = document.createElement('div'); el.className = 'pane'; el.id = p.id; stage.appendChild(el);
+      el.innerHTML = `<div class="chrome"><span class="who"></span><input class="url"><button data-pane="close"></button><button data-pane="clear">Clear cookies</button>${p.extra ? '<button data-pane="remove">✕</button>' : ''}</div>
+        <div class="frame"><div class="app"></div><div class="closedmsg"></div></div>`;
+      wirePane(p, el); }
+    el.classList.toggle('closed', !p.open);
+    el.querySelector('.who').textContent = `${p.label} · ${p.w}×${p.h}`;
+    const url = el.querySelector('.url'); if (document.activeElement !== url) url.value = p.url;
+    el.querySelector('[data-pane=close]').textContent = p.open ? 'Close tab' : 'Reopen tab';
+    el.querySelector('.closedmsg').innerHTML = `Tab closed.<br>Cookie ${p.cookie ? 'kept' : 'none'}. Reopen to go back to ${esc(p.url)}.`;
+    const frame = el.querySelector('.frame'); frame.style.width = p.w * p.scale + 'px'; frame.style.height = p.h * p.scale + 'px';
+    const app = el.querySelector('.app'); app.style.width = p.w + 'px'; app.style.height = p.h + 'px'; app.style.transform = `scale(${p.scale})`;
+    if (p.open) app.innerHTML = screen(p);
+  });
+  [...stage.children].forEach(c => { if (!panes.find(p => p.id === c.id)) c.remove(); });
+  if (fid) { const f = document.getElementById(fid); if (f && f !== document.activeElement) { f.focus(); try { f.setSelectionRange(sel, sel); } catch {} } }
+  renderState(); tick();
+  document.getElementById('vlabel').textContent = `${VARIANT} (${VARIANTS[VARIANT].name})`;
+  document.querySelectorAll('[data-scope]').forEach(b => b.classList.toggle('on', b.dataset.scope === SCOPE));
+}
+let lastLogLen = 0;
+function renderState() {
+  const el = document.getElementById('state'); if (!el.classList.contains('open')) return;
+  const ppl = Object.values(S.persons).map(x => `<tr><td>${x.id}</td><td>${esc(x.name)}</td><td>${x.kind}</td><td>${panes.filter(p => me(p) === x.id).map(p => p.label).join(', ') || '—'}</td></tr>`).join('');
+  const vs = Object.values(S.voyages).map(v => `<tr><td>${v.id}</td><td>${v.code}</td><td>${v.status}</td><td>U: ${esc(pname(v.seats.upper) || '—')}${v.seats.upper && present(v, v.seats.upper) ? ' ●' : ''}<br>L: ${esc(pname(v.seats.lower) || '—')}${v.seats.lower && present(v, v.seats.lower) ? ' ●' : ''}</td></tr>`).join('');
+  const log = S.log.slice().reverse().map(e => `<div class="${e.t >= lastLogLen ? 'new' : ''}">${esc(e.line)}</div>`).join('');
+  lastLogLen = S.log.length;
+  el.innerHTML = `<section><h4>Persons (a cookie maps a browser to one)</h4><table>${ppl}</table><h4 style="margin-top:10px">Voyages (● = connected)</h4><table>${vs}</table></section>
+    <section><h4>Event log (newest first; never a token or code)</h4>${log}</section>`;
+}
+// B's auto-start countdown
+function tick() {
+  if (VARIANT !== 'B') return;
+  Object.values(S.voyages).forEach(v => {
+    const ready = v.status === 'lobby' && v.seats.upper && v.seats.lower && present(v, v.seats.upper) && present(v, v.seats.lower);
+    if (!ready) { v.countdown = null; return; }
+    if (v.countdown == null) { v.countdown = 5; setTimeout(() => step(v), 1000); }
+  });
+}
+function step(v) {
+  if (v.countdown == null) return;
+  v.countdown--; if (v.countdown <= 0) castOff(v); else setTimeout(() => step(v), 1000);
+  renderAll();
+}
+
+// ===================================================================================================
+// Actions
+// ===================================================================================================
+function flash(p, msg, info) { p.toast = { msg, info }; setTimeout(() => { if (p.toast && p.toast.msg === msg) { p.toast = null; renderAll(); } }, 4500); }
+function curVoyage(p) { const r = route(p); return r.name === 'voyage' ? byCode(r.code) : null; }
+const ACT = {
+  go: (p, d) => go(p, d.url),
+  guest: p => { ensureGuest(p); go(p, '/voyages'); },
+  guestVoyage: p => { const pid = ensureGuest(p); go(p, '/v/' + newVoyage(pid).code); },
+  newVoyage: p => go(p, '/v/' + newVoyage(me(p)).code),
+  boardNew: (p, d) => { const pid = ensureGuest(p); const v = newVoyage(pid); chooseDeck(v, pid, d.deck); go(p, '/v/' + v.code); },
+  editName: p => p.ui.editName = true,
+  saveName: p => { const i = document.getElementById(p.id + '-name'); const n = i.value.trim().slice(0, 20);
+    if (n) { S.persons[me(p)].name = n; logEv(null, me(p), 'renamed'); } p.ui.editName = false; },
+  enterCode: p => { const i = document.getElementById(p.id + '-code'); const code = i.value; p.ui.code = code;
+    const v = byCode(code); if (!v) { p.ui.codeErr = 'No Voyage has that code. Check it with your partner.'; logEv(null, me(p), 'code entered → 404'); return; }
+    ensureGuest(p); go(p, '/v/' + v.code); },
+  choose: (p, d) => { const v = curVoyage(p); const pid = ensureGuest(p); const err = chooseDeck(v, pid, d.deck); if (err) flash(p, err); },
+  swap: p => { const v = curVoyage(p); [v.seats.upper, v.seats.lower] = [v.seats.lower, v.seats.upper]; v.ready = {}; logEv(v, me(p), 'swap Decks');
+    if (v.countdown != null) v.countdown = 5;
+    panes.filter(q => q !== p && route(q).code === v.code).forEach(q => flash(q, `${esc(pname(me(p)))} swapped Decks. You're now on the ${DECKS[deckOf(v, me(q))]?.name}.`, true)); },
+  ready: p => { const v = curVoyage(p); v.ready[me(p)] = true; logEv(v, me(p), 'ready');
+    if (v.ready[v.seats.upper] && v.ready[v.seats.lower]) castOff(v); },
+  unready: p => { const v = curVoyage(p); delete v.ready[me(p)]; },
+  castOff: p => castOff(curVoyage(p)),
+  rejoin: (p, d) => { const v = curVoyage(p); const pid = v.seats[d.deck]; const tok = 'tok_' + hex(12); S.tokens[tok] = pid; p.cookie = tok;
+    logEv(v, pid, 'rejoined from a new browser with the Voyage code'); },
+  solve: p => { const v = curVoyage(p); logEv(v, me(p), `solve ${v.draw[v.solved]}`); v.solved++; },
+  strike: p => { const v = curVoyage(p); v.strikes++; logEv(v, me(p), `wrong answer → Strike ${v.strikes}`); if (v.strikes >= 3) endVoyage(v, null, 'sank'); },
+  launch: p => { const v = curVoyage(p); v.solved = 3; logEv(v, me(p), 'launch the Lifeboat'); endVoyage(v, me(p), 'launched'); },
+  askEnd: (p, d) => p.ui.confirmEnd = d.vid,
+  cancelEnd: p => p.ui.confirmEnd = null,
+  endHere: p => { endVoyage(curVoyage(p), me(p), 'ended'); p.ui.confirmEnd = null; },
+  endFromProfile: (p, d) => { endVoyage(S.voyages[d.vid], me(p), 'ended'); p.ui.confirmEnd = null; },
+  consent: p => { const v = curVoyage(p); v.consents[me(p)] = true; logEv(v, me(p), 'agrees to post to the Leaderboard'); },
+  again: p => { const v = curVoyage(p); const pid = me(p); const nv = newVoyage(pid); nv.invites = [partnerOf(v, pid)];
+    if (VARIANT === 'C') chooseDeck(nv, pid, deckOf(v, pid)); go(p, '/v/' + nv.code); },
+  copy: (p, d) => { clip = d.text; try { navigator.clipboard.writeText(location.origin + d.text); } catch {} flash(p, 'Link copied. Paste it into the other browser’s address bar (or press its Paste button).', true); },
+  stub: (p, d) => flash(p, `Stub: ${d.what}`, true),
+};
+function wirePane(p, el) {
+  el.addEventListener('click', e => {
+    const pb = e.target.closest('[data-pane]');
+    if (pb) { const a = pb.dataset.pane;
+      if (a === 'close') { p.open = !p.open; if (p.open) p.ui = {}; }
+      if (a === 'clear') { p.cookie = null; p.url = '/'; p.ui = {}; }
+      if (a === 'remove') panes = panes.filter(q => q !== p);
+      renderAll(); return; }
+    const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+    p.toast = null; ACT[b.dataset.act](p, b.dataset); renderAll();
+  });
+  el.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    if (e.target.classList.contains('url')) { let u = e.target.value.trim(); u = u.replace(/^https?:\/\/[^/]+/, '').replace(/^[^/]*\.dev/, '') || '/'; go(p, u); p.open = true; e.target.blur(); renderAll(); }
+    else if (e.target.id === p.id + '-code') { ACT.enterCode(p); renderAll(); }
+    else if (e.target.id === p.id + '-name') { ACT.saveName(p); renderAll(); }
+  });
+  el.addEventListener('focusin', e => { if (e.target.classList.contains('url') && clip && e.target.value !== clip) { e.target.placeholder = 'Enter, or paste ' + clip; } });
+  el.addEventListener('paste', e => { if (e.target.classList.contains('url') && clip) { e.preventDefault(); e.target.value = clip; } });
+}
+
+// ===================================================================================================
+// Boot, switcher, toolbar
+// ===================================================================================================
+function boot() {
+  S = freshServer(); panes = [newPane('Chrome profile 1', 1920, 1080), newPane('Chrome profile 2', 390, 844)];
+  document.getElementById('stage').innerHTML = ''; renderAll();
+}
+const q = new URLSearchParams(location.search);
+VARIANT = VARIANTS[q.get('variant')] ? q.get('variant') : 'A';
+SCOPE = q.get('scope') === 'final' ? 'final' : 'c10';
+function setParam(k, v) { const u = new URL(location); u.searchParams.set(k, v); history.replaceState(null, '', u); }
+function cycle(n) { const ks = Object.keys(VARIANTS); VARIANT = ks[(ks.indexOf(VARIANT) + n + ks.length) % ks.length]; setParam('variant', VARIANT); boot(); }
+document.getElementById('prev').onclick = () => cycle(-1);
+document.getElementById('next').onclick = () => cycle(1);
+addEventListener('keydown', e => { if (e.target.closest('input,textarea,[contenteditable]')) return; if (e.key === '[') cycle(-1); if (e.key === ']') cycle(1); });
+document.querySelectorAll('[data-scope]').forEach(b => b.onclick = () => { SCOPE = b.dataset.scope; setParam('scope', SCOPE); renderAll(); });
+document.getElementById('reset').onclick = boot;
+document.getElementById('stateBtn').onclick = () => { document.getElementById('state').classList.toggle('open'); renderAll(); };
+const addFresh = (w, h) => { S.day++; const p = newPane(`Fresh browser ${panes.length + 1}`, w, h); p.extra = true; panes.push(p); renderAll(); };
+document.getElementById('addDesk').onclick = () => addFresh(1920, 1080);
+document.getElementById('addPhone').onclick = () => addFresh(390, 844);
+document.getElementById('race').onclick = () => {
+  const open = panes.filter(p => p.open && curVoyage(p) && curVoyage(p).status === 'lobby');
+  const v = open[0] && curVoyage(open[0]); const two = open.filter(p => curVoyage(p) === v).slice(0, 2);
+  if (two.length < 2) { alert('Put two panes on the same Voyage in port first.'); return; }
+  two.forEach(p => { const pid = ensureGuest(p); if (deckOf(v, pid)) v.seats[deckOf(v, pid)] = null; });
+  two.forEach(p => { p.toast = null; const err = chooseDeck(v, me(p), 'upper'); if (err) flash(p, err); });
+  renderAll();
+};
+addEventListener('resize', renderAll);
+boot();
+</script>
+</body>
+</html>
