@@ -4,6 +4,7 @@ import { streamSSE } from "hono/streaming";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createGuest, personForToken, renamePerson, type Person } from "./people.ts";
 import { sanitisePlayerName } from "./player-name.ts";
+import type { Notice } from "../shared/draw.ts";
 import { logEvent } from "./events.ts";
 import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
@@ -162,10 +163,24 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return c.json({ error: outcome.message, offer: outcome.offer }, outcome.status);
     }
     if (outcome.changed) {
-      logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
+      const { result } = outcome;
+      if (result) {
+        // Strikes and solves belong to the Voyage: logged and announced with no actor (#46).
+        if (result.kind === "solved") logEvent(db, { voyageId, action: "puzzle.solved", detail: { slot: result.slot } });
+        else logEvent(db, { voyageId, action: "strike", detail: { strikes: result.strikes } });
+      } else {
+        logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
+      }
       if (outcome.ended) logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: "voyage.ended", detail: { outcome: "abandoned" } });
-      if (outcome.started) logEvent(db, { voyageId, action: "voyage.cast-off" });
-      publish(voyageId);
+      if (outcome.started && kind === "cast-off") logEvent(db, { voyageId, action: "voyage.cast-off" });
+      publish(
+        voyageId,
+        result?.kind === "solved"
+          ? { event: "bell", data: { slot: result.slot } }
+          : result?.kind === "strike"
+            ? { event: "strike", data: { strikes: result.strikes } }
+            : undefined,
+      );
     }
     return c.json({ ok: true });
   });
@@ -182,10 +197,13 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return streamSSE(c, async (stream) => {
       logEvent(db, { ...who, action: "stream.connected" });
       const disconnected = markConnected(voyage.id, you.id);
-      const send = (): Promise<void> =>
-        stream.writeSSE({ event: "snapshot", data: JSON.stringify(snapshotFor(db, voyage, you)) });
+      const send = async (notice?: Notice): Promise<void> => {
+        await stream.writeSSE({ event: "snapshot", data: JSON.stringify(snapshotFor(db, voyage, you)) });
+        // a notice carries no Clue, no answer and no Player, so both Decks get the same one
+        if (notice) await stream.writeSSE({ event: notice.event, data: JSON.stringify(notice.data) });
+      };
       await send(); // the first event on every connection is the full state
-      const unsubscribe = subscribe(voyage.id, () => void send());
+      const unsubscribe = subscribe(voyage.id, (notice) => void send(notice));
       const beat = setInterval(() => void stream.write(": heartbeat\n\n"), HEARTBEAT_MS);
       await new Promise<void>((resolve) => stream.onAbort(resolve));
       clearInterval(beat);

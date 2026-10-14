@@ -1,4 +1,5 @@
 // Wire types for the lobby (ADR 0007: shared holds types only).
+import type { PublicDraw } from "./draw.ts";
 import type { DeckName } from "./intents.ts";
 
 export interface PersonView {
@@ -35,6 +36,8 @@ export interface LobbySnapshot {
   seq: number;
   /** True once both Players have pressed "Cast off". */
   started: boolean;
+  /** Your Deck's view of the Draw, or null until the Voyage has started. */
+  draw: PublicDraw | null;
   /** True once either Player has ended the Voyage. */
   ended: boolean;
 }
