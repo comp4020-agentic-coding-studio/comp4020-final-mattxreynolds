@@ -10,12 +10,14 @@
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened, voyageId, pose, clue = null, code = "", onKey = () => {}, instrument = null }: {
+  let { deck, opened, voyageId, pose, clue = null, code = "", control = "keypad", onKey = () => {}, instrument = null }: {
     deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null;
     /** The mural's Clue, on the Deck that holds it. */
     clue?: string | null;
     /** The code typed so far on the keypad. */
     code?: string;
+    /** Which controls the live opener takes: the keypad's digits or the lever bank. */
+    control?: "keypad" | "levers";
     /** A keypad button pressed in the scene: a digit, "clear" or "enter". */
     onKey?: (key: string) => void;
     /** This Deck's half of the live finale's instrument, for the wall read-outs and the dial controls. */
@@ -71,7 +73,8 @@
   // Using a thing: show its text and log the examine through the intent pipeline. It is never a Strike (#52).
   function use(thing: Thing): void {
     // A keypad button works the same keypad as the 2D view while the opener is live (#53).
-    if (thing.press && !opened.includes("opener")) return onKey(thing.press);
+    // Only the live opener's own controls work; the other opener's buttons are just furniture.
+    if (thing.press && thing.bank === control && !opened.includes("opener")) return onKey(thing.press);
     const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
     // a live finale's valve and trim controls turn their dial, the same intent as the 2D view (#55)
     if (thing.control && instrument) {
@@ -127,6 +130,7 @@
   $effect(() => {
     handle?.setScreen("clue", clue ?? "");
     handle?.setScreen("code", code.padEnd(4, "_").split("").join(" "));
+    handle?.setScreen("order", code.padEnd(5, "_").split("").join(" "));
     if (clue) handle?.canvas.setAttribute("data-mural", clue);
     handle?.canvas.setAttribute("data-code", code);
   });

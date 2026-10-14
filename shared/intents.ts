@@ -17,7 +17,7 @@ export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("choose-deck"), seq, deck: z.enum(DECKS) }),
   z.strictObject({ kind: z.literal("cast-off"), seq }),
   // An answer for one Puzzle's lock. The server checks it; the client never decides a solve.
-  z.strictObject({ kind: z.literal("submit"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), answer: z.string().regex(/^\d{4}$/) }),
+  z.strictObject({ kind: z.literal("submit"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), answer: z.string().regex(/^\d{4,5}$/) }),
   // The finale's live dials (#48). Each Deck turns only its own. They carry an
   // optional seq the server ignores, so turns from both Decks inside the same
   // second are all applied in server order rather than refused as a lost race.
@@ -53,7 +53,7 @@ export const keypadDraftSchema = z.strictObject({
   kind: z.literal("keypad-draft"),
   seq: seq.optional(),
   slot: z.enum(SLOTS),
-  text: z.string().regex(/^\d{0,4}$/),
+  text: z.string().regex(/^\d{0,5}$/),
 });
 export const lowTrustSchema = z.discriminatedUnion("kind", [poseSchema, keypadDraftSchema]);
 export type Pose = Omit<z.infer<typeof poseSchema>, "kind" | "seq">;

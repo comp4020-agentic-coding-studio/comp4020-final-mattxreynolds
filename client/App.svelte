@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
-  import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
+  import { keypadAfter, leverAfter, roomForDeck } from "../shared/rooms.ts";
   import type { Banner, Debrief, LeaderboardView, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief" | "leaderboard";
@@ -320,9 +320,12 @@
   // A keypad button pressed in the 3D scene: the same keypad and the same submission as the 2D view.
   function pressKey(key: string): void {
     if (key === "enter") return void enterCode();
-    code4 = keypadAfter(code4, key);
+    code4 = opener?.control === "levers" ? leverAfter(code4, key) : keypadAfter(code4, key);
     saveDraft();
   }
+
+  // The opener's lock controls: a keypad of digits, or the lever bank (#62).
+  const opener = $derived(snapshot?.draw?.puzzles.find((p) => p.slot === "opener"));
 
   // Dial turns carry no seq: both Decks turn at once and each turn is applied in server order.
   async function dial(kind: "turn-valve" | "turn-trim", index: number, by: 1 | -1): Promise<void> {
@@ -478,7 +481,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} instrument={snapshot.draw?.puzzles.find((q) => q.slot === "finale" && q.status === "live")?.instrument ?? null} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} control={opener?.control ?? "keypad"} onKey={pressKey} instrument={snapshot.draw?.puzzles.find((q) => q.slot === "finale" && q.status === "live")?.instrument ?? null} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
@@ -491,6 +494,15 @@
             </article>
             {#if p.role === "clue" && p.clue}
               <pre data-testid="mural">{p.clue}</pre>
+            {:else if p.role === "lock" && p.control === "levers"}
+              <section data-testid="levers">
+                <p>Order so far: <output data-testid="lever-order">{code4 || "none"}</output></p>
+                {#each [1, 2, 3, 4, 5] as n}
+                  <button style="min-width:44px;min-height:44px" aria-label="Lever {n}" disabled={p.status !== "live"} onclick={() => pressKey(`lever-${n}`)}>{n}</button>
+                {/each}
+                <button style="min-width:44px;min-height:44px" disabled={p.status !== "live"} onclick={() => pressKey("clear")}>Clear</button>
+                <button style="min-width:44px;min-height:44px" disabled={p.status !== "live"} onclick={() => pressKey("enter")}>Set</button>
+              </section>
             {:else if p.role === "lock"}
               <form data-testid="keypad" onsubmit={(e) => { e.preventDefault(); void enterCode(); }}>
                 <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} oninput={saveDraft} disabled={p.status !== "live"} /></label>

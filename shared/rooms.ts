@@ -56,8 +56,10 @@ export interface Thing {
   control?: Control;
   /** A keypad button: the key it presses (a digit, "clear" or "enter"). */
   press?: string;
-  /** A face the scene draws text on: the Clue on the mural, or the code typed so far. */
-  screen?: "clue" | "code";
+  /** Which opener's controls a button belongs to: the keypad's digits or the lever bank. Buttons of the other opener stay dead. */
+  bank?: "keypad" | "levers";
+  /** A face the scene draws text on: the Clue on the mural or wiring card, the code typed so far, or the lever order so far. */
+  screen?: "clue" | "code" | "order";
   x: number;
   y: number;
   z: number;
@@ -135,11 +137,34 @@ const KEYPAD_BUTTONS: Thing[] = KEYPAD_ROWS.flatMap((row, r) =>
     kind: "station",
     slot: "opener",
     press: key,
+    bank: "keypad",
     x: 2 + (c - 1) * 0.45,
     y: 2.25 - r * 0.45,
     z: 0.2,
     size: [0.4, 0.4, 0.1],
   })),
+);
+
+// The lever bank (#62), east of the keypad on the same wall: a 3 by 3 grid of
+// levers 1 to 5, clear and set, each 0.4 m square for the same 44 px at reach.
+// Narrow on purpose, so the whole bank fits the view from within reach.
+const LEVER_ROWS = [["lever-1", "lever-2", "lever-3"], ["lever-4", "lever-5", "clear"], ["", "enter", ""]];
+const LEVER_BUTTONS: Thing[] = LEVER_ROWS.flatMap((row, r) =>
+  row.flatMap((key, c): Thing[] =>
+    key === ""
+      ? []
+      : [{
+          id: key === "clear" ? "lever-clear" : key === "enter" ? "lever-set" : key,
+          kind: "station",
+          slot: "opener",
+          bank: "levers",
+          press: key,
+          x: 4.1 + (c - 1) * 0.45,
+          y: 1.8 - r * 0.45,
+          z: 0.2,
+          size: [0.4, 0.4, 0.1],
+        }],
+  ),
 );
 
 const WHEELHOUSE: Room = {
@@ -173,6 +198,8 @@ const ENGINE_ROOM: Room = {
   things: [
     { id: "keypad", kind: "station", slot: "opener", screen: "code", x: 2, y: 2.75, z: 0.1, size: [1.35, 0.4, 0.1] },
     ...KEYPAD_BUTTONS,
+    { id: "lever-order", kind: "station", slot: "opener", screen: "order", x: 4.1, y: 2.4, z: 0.1, size: [1.35, 0.4, 0.1] },
+    ...LEVER_BUTTONS,
     { id: "valve-bank", kind: "station", slot: "middle", x: 0.1, y: 1.2, z: 4.5, size: [0.2, 1.2, 1.6] },
     ...dialControls("turn-valve", "valve", 0.6),
     { id: "coal-crate", kind: "decoy", plaque: "A crate of coal, stencilled GLASGOW.", x: 6.5, y: 0.4, z: 6.4, size: [1, 0.8, 0.8] },
@@ -334,4 +361,12 @@ export function keypadAfter(code: string, key: string): string {
   if (key === "clear") return "";
   if (/^\d$/.test(key) && code.length < 4) return code + key;
   return code;
+}
+
+/** The lever order after a control: a lever not yet pulled joins the order (up to five), clear empties it, set leaves it. */
+export function leverAfter(order: string, key: string): string {
+  if (key === "clear") return "";
+  const lever = /^lever-([1-5])$/.exec(key)?.[1];
+  if (lever && !order.includes(lever)) return order + lever;
+  return order;
 }
