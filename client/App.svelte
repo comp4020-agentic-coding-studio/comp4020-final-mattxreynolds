@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { LobbySnapshot, PersonView, VoyageView } from "../shared/lobby.ts";
+  import type { LobbySnapshot, RejoinOffer, PersonView, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby";
   let screen: Screen = $state("loading");
@@ -79,8 +79,32 @@
     problem = "";
     const res = await api<VoyageView>("/api/join", by);
     if (res.ok) return enter(res.data);
-    problem = res.status === 404 ? "No Voyage has that code." : res.status === 409 ? "That Voyage already has two Players." : "Could not join.";
     screen = "profile";
+    if (res.status === 409 && "code" in by) {
+      // a full Voyage: a fresh browser may take over a Deck whose Player isn't connected
+      const found = await api<{ offers: RejoinOffer[] }>("/api/rejoin/offers", by);
+      if (found.ok && found.data.offers.length > 0) {
+        offers = found.data.offers;
+        offerCode = by.code;
+        return;
+      }
+    }
+    problem = res.status === 404 ? "No Voyage has that code." : res.status === 409 ? "That Voyage already has two Players." : "Could not join.";
+  }
+
+  let offers: RejoinOffer[] = $state([]);
+  let offerCode = "";
+
+  async function rejoin(deck: string): Promise<void> {
+    const res = await api<{ voyage: VoyageView; person: PersonView }>("/api/rejoin", { code: offerCode, deck });
+    offers = [];
+    if (!res.ok) {
+      problem = "That Deck is no longer free to take.";
+      return;
+    }
+    person = res.data.person;
+    nameDraft = person.name;
+    enter(res.data.voyage);
   }
 
   let intentNote = $state("");
@@ -133,6 +157,9 @@
       <button type="submit">Join</button>
     </form>
     {#if problem}<p role="alert">{problem}</p>{/if}
+    {#each offers as o}
+      <button class="primary" onclick={() => rejoin(o.deck)}>Rejoin as {o.playerName} ({o.deck})</button>
+    {/each}
   {:else if screen === "lobby" && snapshot}
     <h1 data-testid="ship-name">{snapshot.voyage.ship}</h1>
     {#if snapshot.started && snapshot.yourDeck}

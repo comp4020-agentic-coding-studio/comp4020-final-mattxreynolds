@@ -36,3 +36,9 @@ export interface LobbySnapshot {
   /** True once both Players have pressed "Cast off". */
   started: boolean;
 }
+
+/** A Deck a fresh browser may take over: its Player isn't connected. */
+export interface RejoinOffer {
+  deck: DeckName;
+  playerName: string;
+}

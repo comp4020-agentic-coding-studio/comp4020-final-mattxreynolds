@@ -8,6 +8,7 @@ import { logEvent } from "./events.ts";
 import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
 import { withVoyage } from "./mutex.ts";
+import { attachSession, offersFor } from "./rejoin.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
 
 const COOKIE = "session";
@@ -101,6 +102,44 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       publish(result.voyage.id);
     }
     return c.json(result.voyage);
+  });
+
+  // Rejoin by Voyage code in a fresh browser. The code and the token are
+  // secrets, so no log line here ever carries either.
+  api.post("/rejoin/offers", async (c) => {
+    const you = c.get("person");
+    const body = (await c.req.json().catch(() => null)) as { code?: unknown } | null;
+    const found = typeof body?.code === "string" ? offersFor(db, you.id, body.code) : null;
+    if (!found) {
+      logEvent(db, { actor: you.id, actorName: you.name, action: "rejoin.refused", detail: { stage: "offers", reason: "unknown voyage", status: 404 } });
+      return c.json({ error: "no such Voyage" }, 404);
+    }
+    return c.json({ offers: found.offers.map(({ deck, playerName }) => ({ deck, playerName })) });
+  });
+
+  api.post("/rejoin", async (c) => {
+    const you = c.get("person");
+    const who = { actor: you.id, actorName: you.name };
+    const body = (await c.req.json().catch(() => null)) as { code?: unknown; deck?: unknown } | null;
+    if (typeof body?.code !== "string" || typeof body.deck !== "string") {
+      logEvent(db, { ...who, action: "rejoin.refused", detail: { reason: "malformed", status: 400 } });
+      return c.json({ error: "give a code and a Deck" }, 400);
+    }
+    const found = offersFor(db, you.id, body.code);
+    if (!found) {
+      logEvent(db, { ...who, action: "rejoin.refused", detail: { reason: "unknown voyage", status: 404 } });
+      return c.json({ error: "no such Voyage" }, 404);
+    }
+    const offer = found.offers.find((o) => o.deck === body.deck);
+    if (!offer || found.seated) {
+      const reason = found.seated ? "already seated" : "deck not available";
+      logEvent(db, { ...who, voyageId: found.voyage.id, action: "rejoin.refused", detail: { reason, deck: String(body.deck).slice(0, 20), status: 409 } });
+      return c.json({ error: "that Deck is not free to take" }, 409);
+    }
+    attachSession(db, getCookie(c, COOKIE)!, offer.personId);
+    logEvent(db, { voyageId: found.voyage.id, actor: offer.personId, actorName: offer.playerName, action: "voyage.rejoined", detail: { deck: offer.deck } });
+    publish(found.voyage.id);
+    return c.json({ voyage: found.voyage, person: { id: offer.personId, name: offer.playerName } });
   });
 
   api.post("/voyages/:id/intents", async (c) => {
