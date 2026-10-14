@@ -1,6 +1,6 @@
 import type { ZodType } from "zod";
-import type { DeckName } from "../../shared/intents.ts";
-import type { Slot } from "../../shared/draw.ts";
+import type { DeckName, WalkDir } from "../../shared/intents.ts";
+import type { Slot, WalkView } from "../../shared/draw.ts";
 
 /** Random numbers in [0, 1). Generators take one so a spec can replay a Draw. */
 export type Rng = () => number;
@@ -45,4 +45,21 @@ export interface PuzzleVersion<D = unknown> {
   minActions(data: D): number;
   /** Present only on a split instrument, which takes live settings, not a typed answer. */
   readonly instrument?: Instrument<D>;
+  /** Present on blind navigator Puzzles: the Walker's rules, in place of a submitted answer. */
+  readonly walk?: WalkRules<D>;
+}
+
+export type Pos = [number, number];
+
+/** Where a step lands: "edge" is no step at all, "trapdoor" returns `pos` to the start. */
+export interface StepResult {
+  kind: "moved" | "far-side" | "trapdoor" | "edge";
+  pos: Pos;
+}
+
+export interface WalkRules<D> {
+  start(data: D): Pos;
+  step(data: D, pos: Pos, dir: WalkDir): StepResult;
+  /** What the Walker sees at `pos`: never which tiles are trapdoors. */
+  view(data: D, pos: Pos): WalkView;
 }

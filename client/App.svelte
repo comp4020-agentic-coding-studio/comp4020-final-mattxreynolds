@@ -275,6 +275,19 @@
     intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
   }
 
+  // One step; the server decides whether it was a trapdoor, and says so on the stream.
+  async function walkStep(dir: string): Promise<void> {
+    if (!snapshot?.yourDeck) return;
+    const res = await api<{ error: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, {
+      kind: "walk-step",
+      deck: snapshot.yourDeck,
+      slot: "middle",
+      dir,
+      seq: snapshot.seq,
+    });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
+  }
+
   async function copy(text: string): Promise<void> {
     await navigator.clipboard?.writeText(text).catch(() => {});
     copied = true;
@@ -386,6 +399,20 @@
                 <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} oninput={saveDraft} disabled={p.status !== "live"} /></label>
                 <button type="submit" disabled={p.status !== "live"}>Enter</button>
               </form>
+            {/if}
+          {:else if p.slot === "middle" && p.status !== "dead"}
+            <article data-testid="far-hatch">
+              The far hatch: {p.status === "solved" ? "open" : "bolted"}
+            </article>
+            {#if p.role === "clue" && p.clue}
+              <pre data-testid="plan">{p.clue}</pre>
+            {:else if p.walk}
+              <section data-testid="floor">
+                <p>You stand on <span data-testid="walker-at">{p.walk.at}</span>. The lit tiles beside you:</p>
+                {#each p.walk.lit as l (l.dir)}
+                  <button onclick={() => walkStep(l.dir)}>{l.dir} to {l.tile}</button>
+                {/each}
+              </section>
             {/if}
           {:else if p.slot === "finale" && p.status === "live" && p.instrument}
             <section data-testid="instrument">

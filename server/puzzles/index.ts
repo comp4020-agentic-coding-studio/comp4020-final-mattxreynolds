@@ -1,5 +1,6 @@
 import type { Slot } from "../../shared/draw.ts";
 import { muralKeypadV1 } from "./mural-keypad/v1.ts";
+import { rottenFloorV1 } from "./rotten-floor/v1.ts";
 import { valvesGaugesV1 } from "./valves-gauges/v1.ts";
 import type { PuzzleVersion } from "./types.ts";
 
@@ -8,7 +9,7 @@ import type { PuzzleVersion } from "./types.ts";
 // here. Never remove a version an unfinished Voyage may still reference.
 // The `any` is only this list's element type: callers get a PuzzleVersion<unknown>.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const VERSIONS: PuzzleVersion<any>[] = [muralKeypadV1, valvesGaugesV1];
+const VERSIONS: PuzzleVersion<any>[] = [muralKeypadV1, rottenFloorV1, valvesGaugesV1];
 
 const registry = new Map<string, PuzzleVersion>(VERSIONS.map((v) => [v.key, v]));
 

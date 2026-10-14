@@ -8,6 +8,9 @@ import { SLOTS } from "./draw.ts";
 export const DECKS = ["Upper Deck", "Lower Deck"] as const;
 export type DeckName = (typeof DECKS)[number];
 
+export const WALK_DIRS = ["north", "south", "east", "west"] as const;
+export type WalkDir = (typeof WALK_DIRS)[number];
+
 const seq = z.number().int().nonnegative();
 
 export const intentSchema = z.discriminatedUnion("kind", [
@@ -22,6 +25,8 @@ export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("turn-trim"), seq: seq.optional(), deck: z.enum(DECKS), index: z.number().int().min(0).max(9), by: z.union([z.literal(1), z.literal(-1)]) }),
   // An explicit "lock in" on the instrument: off target it is a Strike.
   z.strictObject({ kind: z.literal("lock-in"), seq, deck: z.enum(DECKS) }),
+  // One step of the Walker (blind navigator Puzzles). The server decides what the step does.
+  z.strictObject({ kind: z.literal("walk-step"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), dir: z.enum(WALK_DIRS) }),
   // Ending needs no seq: either Player may stop at any state, from the profile
   // too, where no snapshot has been seen.
   z.strictObject({ kind: z.literal("end-voyage"), seq: seq.optional() }),

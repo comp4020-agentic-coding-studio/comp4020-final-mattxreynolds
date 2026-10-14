@@ -1,7 +1,7 @@
 // Wire types for a Draw (ADR 0001, ADR 0007). This is the PublicDraw side of
 // the split: what one Deck may see. The stored shape, with answers, is
 // StoredDraw under server/ and cannot be imported from here.
-import type { DeckName } from "./intents.ts";
+import type { DeckName, WalkDir } from "./intents.ts";
 
 export const SLOTS = ["opener", "middle", "finale"] as const;
 export type Slot = (typeof SLOTS)[number];
@@ -18,6 +18,8 @@ export interface PublicPuzzle {
   clue?: string;
   /** Present on a split-instrument finale once it is live: only the dials this Deck may see (#48). */
   instrument?: InstrumentView;
+  /** The Walker's view, on the walking Deck only, while the Puzzle is live: where they stand and the lit tiles beside them. */
+  walk?: WalkView;
 }
 
 /**
@@ -33,6 +35,11 @@ export interface InstrumentView {
   readings?: number[];
   /** Milliseconds the gauges have sat in band as of this snapshot, or null while out of band. */
   holdMs?: number | null;
+}
+
+export interface WalkView {
+  at: string;
+  lit: { dir: WalkDir; tile: string }[];
 }
 
 export interface PublicDraw {

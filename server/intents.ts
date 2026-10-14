@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { DECKS, intentSchema, type DeckName, type Intent } from "../shared/intents.ts";
-import { judge, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
+import { judge, judgeStep, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
 import { settleClock } from "./clock.ts";
 import { armFinale, finaleConflict, lockIn, settleFinale, turnDial } from "./finale.ts";
 import { hasStarted, isEnded, publish, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
@@ -101,6 +101,9 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
       storeDraw(db, voyageId); // generated once, at Voyage start
       db.prepare("UPDATE voyage SET cast_off_at = ? WHERE id = ?").run(Date.now(), voyageId); // the Clock starts here
     }
+  } else if (intent.kind === "walk-step") {
+    result = judgeStep(db, voyageId, intent.slot, intent.dir);
+    if (result.kind === "strike") settleClock(db, voyageId, Date.now());
   } else {
     result = judge(db, voyageId, intent.slot, intent.answer);
     if (result.kind === "strike") settleClock(db, voyageId, Date.now()); // the third Strike, or a Strike that takes the Clock to zero, sinks the ship
@@ -132,6 +135,10 @@ function conflictWith(
   if (mine.deck === null) return refuse(409, "no Deck chosen", "choose a Deck before casting off");
   if (intent.kind === "submit") {
     const why = submitConflict(db, voyageId, intent.deck, intent.slot);
+    return why ? refuse(409, why.reason, why.message) : null;
+  }
+  if (intent.kind === "walk-step") {
+    const why = submitConflict(db, voyageId, intent.deck, intent.slot, intent.dir);
     return why ? refuse(409, why.reason, why.message) : null;
   }
   if (intent.kind === "turn-valve" || intent.kind === "turn-trim" || intent.kind === "lock-in") {

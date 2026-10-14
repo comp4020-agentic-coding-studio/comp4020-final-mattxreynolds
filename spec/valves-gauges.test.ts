@@ -4,6 +4,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import type { LobbySnapshot } from "../shared/lobby.ts";
 import { settingsFromClue } from "./helpers/finale.ts";
 import { codeFromClue } from "./helpers/mural.ts";
+import { parsePlan, routes } from "./helpers/rotten-floor.ts";
 import { type SecondServer, startSecondServer } from "./helpers/second-server.ts";
 import { openSse, parseFrame } from "./helpers/sse.ts";
 import { intent, post, snapshot, underway } from "./helpers/voyage.ts";
@@ -43,19 +44,17 @@ function events(voyageId: string): { action: string; actor: string | null; detai
   return rows;
 }
 
-/** A Voyage with the opener solved from the mural Clue alone, so the finale is live. */
+/** A Voyage with the opener and the middle solved from the Clues alone, so the finale is live. Host walks, partner keys and holds the plan. */
 async function atFinale() {
   const l = await underway(server.url);
   const opener = (await snap(l.voyage.id, l.host)).draw!.puzzles[0];
-  const res = await intent(server.url, l.voyage.id, l.partner, {
-    kind: "submit",
-    deck: "Lower Deck",
-    slot: "opener",
-    answer: codeFromClue(opener.clue!),
-  });
-  expect(res.status).toBe(200);
-  const finale = (await snap(l.voyage.id, l.host)).draw!.puzzles[2];
-  if (finale.status !== "live") throw new Error("the finale is not live after the opener: a middle Puzzle now sits between them and this helper must solve it");
+  const keyed = await intent(server.url, l.voyage.id, l.partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener.clue!) });
+  expect(keyed.status).toBe(200);
+  const plan = parsePlan((await snap(l.voyage.id, l.partner)).draw!.puzzles[1].clue!);
+  for (const dir of routes(plan)[0]) {
+    expect((await intent(server.url, l.voyage.id, l.host, { kind: "walk-step", deck: "Upper Deck", slot: "middle", dir })).status).toBe(200);
+  }
+  expect((await finaleOf(l.voyage.id, l.host)).status).toBe("live");
   return l;
 }
 
