@@ -9,8 +9,12 @@
   let code = $state("");
   let problem = $state("");
   let copied = $state(false);
+  let nameDraft = $state("");
+  let nameProblem = $state("");
 
-  const origin = location.origin;
+  $effect(() => { if (person && !nameDraft) nameDraft = person.name; });
+
+  const origin =location.origin;
   let source: EventSource | null = null;
   let retry = 0;
 
@@ -51,7 +55,22 @@
     screen = "profile";
   }
 
-  async function start(): Promise<void> {
+  async function rename(): Promise<void> {
+    nameProblem = "";
+    const res = await fetch("/api/me/name", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: nameDraft }),
+    });
+    if (!res.ok) {
+      nameProblem = res.status === 400 ? "That name won't do. Try another." : "Could not save the name.";
+      return;
+    }
+    person = (await res.json()) as PersonView;
+    nameDraft = person.name;
+  }
+
+  async function start():Promise<void> {
     const res = await api<VoyageView>("/api/voyages", {});
     if (res.ok) enter(res.data);
   }
@@ -89,8 +108,12 @@
     <p>Two of you, sealed on separate Decks. Each Deck holds the Clues for the other's Puzzles, and talking out loud is the only channel between you.</p>
     <button class="primary" onclick={playAsGuest}>Play as guest</button>
   {:else if screen === "profile" && person}
-    <h1>{person.name}</h1>
-    <p>Your Player name. Bring a partner aboard: start a Voyage and share its link or code.</p>
+    <form onsubmit={(e) => { e.preventDefault(); void rename(); }}>
+      <label>Player name <input data-testid="player-name" bind:value={nameDraft} maxlength="20" /></label>
+      <button type="submit">Save</button>
+    </form>
+    {#if nameProblem}<p role="alert">{nameProblem}</p>{/if}
+    <p>Bring a partner aboard: start a Voyage and share its link or code.</p>
     <button class="primary" onclick={start}>Start a Voyage</button>
     <form onsubmit={(e) => { e.preventDefault(); void join({ code }); }}>
       <label>Voyage code <input bind:value={code} placeholder="SS-KESTREL-4821" autocapitalize="characters" /></label>

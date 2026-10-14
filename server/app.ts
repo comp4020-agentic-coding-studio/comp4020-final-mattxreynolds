@@ -2,9 +2,10 @@ import type { DatabaseSync } from "node:sqlite";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { createGuest, personForToken, type Person } from "./people.ts";
+import { createGuest, personForToken, renamePerson, type Person } from "./people.ts";
+import { sanitisePlayerName } from "./player-name.ts";
 import { logEvent } from "./events.ts";
-import { publish, seatedPlayers, snapshotFor, subscribe, voyageById } from "./lobby.ts";
+import { publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById } from "./lobby.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
 
 const COOKIE = "session";
@@ -47,6 +48,20 @@ export function createApi(db: DatabaseSync): Hono<Env> {
   });
 
   api.get("/me", (c) => c.json(c.get("person")));
+
+  api.put("/me/name", async (c) => {
+    const you = c.get("person");
+    const body = (await c.req.json().catch(() => null)) as { name?: unknown } | null;
+    const result = sanitisePlayerName(body?.name);
+    if (!result.ok) {
+      logEvent(db, { actor: you.id, actorName: you.name, action: "name.refused", detail: { reason: result.reason } });
+      return c.json({ error: `name refused: ${result.reason}` }, 400);
+    }
+    renamePerson(db, you.id, result.name);
+    logEvent(db, { actor: you.id, actorName: result.name, action: "name.changed" });
+    for (const id of voyageIdsFor(db, you.id)) publish(id); // lobbies update live
+    return c.json({ id: you.id, name: result.name });
+  });
 
   api.post("/voyages", (c) => {
     const you = c.get("person");

@@ -18,6 +18,11 @@ export function seatedPlayers(db: DatabaseSync, voyageId: string): Person[] {
     .all(voyageId) as unknown as Person[];
 }
 
+export function voyageIdsFor(db: DatabaseSync, personId: string): string[] {
+  const rows = db.prepare("SELECT voyage_id FROM voyage_person WHERE person_id = ?").all(personId) as { voyage_id: string }[];
+  return rows.map((r) => r.voyage_id);
+}
+
 export function voyageById(db: DatabaseSync, voyageId: string): VoyageSummary | null {
   const r = db.prepare("SELECT id, code, link_key, ship_name FROM voyage WHERE id = ?").get(voyageId) as
     | { id: string; code: string; link_key: string; ship_name: string }

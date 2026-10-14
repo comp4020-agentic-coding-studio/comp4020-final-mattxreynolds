@@ -22,6 +22,10 @@ export function createGuest(db: DatabaseSync): { person: Person; token: string }
   return { person, token };
 }
 
+export function renamePerson(db: DatabaseSync, id: string, name: string): void {
+  db.prepare("UPDATE person SET name = ? WHERE id = ?").run(name, id);
+}
+
 export function personForToken(db: DatabaseSync, token: string | undefined): Person | null {
   if (!token) return null;
   const row = db
