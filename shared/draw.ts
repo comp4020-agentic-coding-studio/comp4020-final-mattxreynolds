@@ -14,6 +14,8 @@ export interface PublicPuzzle {
   status: PuzzleStatus;
   /** "clue" on the Deck that holds the Clue, "lock" on the Deck that takes the answer, null while the slot has no Puzzle yet. */
   role: "clue" | "lock" | null;
+  /** On the lock Deck of an opener: which controls it takes, a digit keypad or a bank of levers. */
+  control?: "keypad" | "levers";
   /** The rendered Clue; present only on the Clue Deck, and only once the Puzzle is live or solved. */
   clue?: string;
   /** Present on a split-instrument finale once it is live: only the dials this Deck may see (#48). */

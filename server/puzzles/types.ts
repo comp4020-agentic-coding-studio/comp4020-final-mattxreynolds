@@ -34,6 +34,8 @@ export interface PuzzleVersion<D = unknown> {
   /** `"id@v"`, the registry key. */
   readonly key: string;
   readonly slot: Slot;
+  /** The opener's lock controls, for the Deck views: a keypad of digits or a bank of levers. */
+  readonly control?: "keypad" | "levers";
   /** Which Deck holds the Clue and which takes the answer. */
   readonly decks: { clue: DeckName; lock: DeckName };
   /** Validates data read back from storage. */

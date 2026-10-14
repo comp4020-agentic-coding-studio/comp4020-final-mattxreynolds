@@ -24,6 +24,7 @@ const answerOf = (d: Data): string => {
 
 export const muralKeypadV1: PuzzleVersion<Data> = {
   key: "mural-keypad@1",
+  control: "keypad",
   slot: "opener",
   decks: { clue: "Upper Deck", lock: "Lower Deck" },
   schema,

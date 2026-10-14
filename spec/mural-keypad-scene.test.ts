@@ -1,6 +1,8 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { codeFromClue } from "./helpers/mural.ts";
+import { pageFor } from "./helpers/browser.ts";
+import { underwayWith } from "./helpers/voyage.ts";
 
 // The mural keypad worked in place (#53): the Wheelhouse reads the mural on the
 // wall, the Engine Room presses the 3D buttons, and the hatch opens on both Decks.
@@ -14,25 +16,10 @@ afterAll(async () => {
   await browser.close();
 });
 
-async function sailor(link?: string): Promise<Page> {
-  const page = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
-  await page.goto(link ?? baseUrl);
-  if (!link) await page.getByRole("button", { name: "Play as guest" }).click();
-  return page;
-}
-
 async function castOff(): Promise<{ host: Page; partner: Page }> {
-  const host = await sailor();
-  await host.getByRole("button", { name: "Start a Voyage" }).click();
-  await host.getByTestId("voyage-link").waitFor();
-  const partner = await sailor((await host.getByTestId("voyage-link").innerText()).trim());
-  await expect.poll(() => host.getByTestId("player").count()).toBe(2);
-  await host.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => partner.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).innerText()).toMatch(/held by/i);
-  await partner.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => host.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).innerText()).toMatch(/held by/i);
-  await host.getByRole("button", { name: "Cast off" }).click();
-  await partner.getByRole("button", { name: "Cast off" }).click();
+  const l = await underwayWith(baseUrl, "mural"); // the Draw picks the opener at random
+  const host = await pageFor(browser, baseUrl, l.voyage, l.host, { width: 390, height: 844 });
+  const partner = await pageFor(browser, baseUrl, l.voyage, l.partner, { width: 390, height: 844 });
   for (const p of [host, partner]) {
     await p.getByTestId("scene").waitFor();
     await expect.poll(async () => Number(await p.getByTestId("scene").getAttribute("data-frames"))).toBeGreaterThan(2);

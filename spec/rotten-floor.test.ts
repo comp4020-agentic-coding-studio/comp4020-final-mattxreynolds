@@ -161,6 +161,7 @@ it("the Draw holds an opener, a middle and a finale, stored with their versions"
   const row = db.prepare("SELECT draw FROM voyage WHERE id = ?").get(voyage.id) as { draw: string };
   db.close();
   const keys = JSON.parse(row.draw).puzzles.map((p: { key: string }) => p.key) as string[];
-  expect(keys.slice(0, 2)).toEqual(["mural-keypad@1", "rotten-floor@1"]);
+  expect(["mural-keypad@1", "lever-order@1"]).toContain(keys[0]);
+  expect(keys[1]).toBe("rotten-floor@1");
   expect(["valves-gauges@1", "helm-telegraph@1"]).toContain(keys[2]);
 });

@@ -18,7 +18,7 @@ export interface SceneHandle {
   /** "tap" turns a tap or click on the floor into a walk there; "direct" leaves walking to keys and the stick. */
   setMode(mode: ControlsMode): void;
   /** Text for a thing's face: the Clue on the mural, the code typed so far on the keypad display. */
-  setScreen(which: "clue" | "code", text: string): void;
+  setScreen(which: "clue" | "code" | "order", text: string): void;
   dispose(): void;
 }
 
@@ -44,16 +44,17 @@ function face(t: Thing, text: string): { mesh: THREE.Mesh; draw: (text: string) 
   const ctx = cv.getContext("2d")!;
   const texture = new THREE.CanvasTexture(cv);
   texture.colorSpace = THREE.SRGBColorSpace;
+  const typed = t.screen === "code" || t.screen === "order";
   const draw = (words: string): void => {
     ctx.fillStyle = t.press ? "#e9dcc0" : "#f2ead6";
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.fillStyle = "#1b1b1b";
-    ctx.textAlign = t.press || t.screen === "code" ? "center" : "left";
+    ctx.textAlign = t.press || typed ? "center" : "left";
     ctx.textBaseline = "middle";
-    const lines = t.press || t.screen === "code" ? [words] : words.split("\n");
-    const size = t.press || t.screen === "code" ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
+    const lines = t.press || typed ? [words] : words.split("\n");
+    const size = t.press || typed ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
     ctx.font = `bold ${size}px monospace`;
-    const x = t.press || t.screen === "code" ? cv.width / 2 : 12;
+    const x = t.press || typed ? cv.width / 2 : 12;
     lines.forEach((line, i) => ctx.fillText(line, x, ((i + 0.5) * cv.height) / lines.length, cv.width - 24));
     texture.needsUpdate = true;
   };
@@ -87,7 +88,8 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   const screens = new Map<string, (text: string) => void>();
   for (const t of room.things) {
     if (!t.press && !t.screen) continue;
-    const f = face(t, t.press ? t.press.toUpperCase() : "");
+    const label = t.press === "enter" && t.bank === "levers" ? "SET" : t.press?.replace(/^lever-/, "").toUpperCase();
+    const f = face(t, label ?? "");
     scene.add(f.mesh);
     if (t.screen) screens.set(t.screen, f.draw);
   }
