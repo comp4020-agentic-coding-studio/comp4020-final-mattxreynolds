@@ -6,6 +6,7 @@ import type { Notice } from "../shared/draw.ts";
 import type { LobbySnapshot, ProfileVoyages } from "../shared/lobby.ts";
 import { publicDraw } from "./draw.ts";
 import { clockView, settleClock } from "./clock.ts";
+import { endCard } from "./debrief.ts";
 import { draftsOf, poseOf } from "./low-trust.ts";
 
 export type Snapshot = LobbySnapshot;
@@ -93,6 +94,7 @@ export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person
     draw: yourDeck ? publicDraw(db, voyage.id, yourDeck) : null,
     clock: clockView(db, voyage.id, now),
     ended: isEnded(db, voyage.id),
+    end: endCard(db, voyage.id),
     pose: poseOf(db, voyage.id, you.id),
     drafts: draftsOf(db, voyage.id, you.id),
   };
