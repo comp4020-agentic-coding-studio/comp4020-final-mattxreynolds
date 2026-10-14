@@ -5,7 +5,7 @@ The brief lets the app decide what counts as a person, and the marker plays alon
 ## Considered Options
 
 - **Header token from `localStorage`** (Dead Air's `x-player`): rejected because `EventSource` cannot set request headers, so SSE would need the token in the URL, where it leaks into logs and history.
-- **Guests only**: enough for C10, but the user wants Persons who can return from any browser. Guests ship at C10 and Accounts for the final, with the person table keyed by public id from the start so Accounts only add a credentials table.
+- **Guests only**: rejected because the user wants Persons who can return from any browser. Guests and Accounts both ship at C10, with the person table keyed by public id so Accounts only add a credentials table.
 - **Accounts only**: rejected because a showcase stranger or a marker with only the URL must be playing within a minute.
 
 ## Consequences
