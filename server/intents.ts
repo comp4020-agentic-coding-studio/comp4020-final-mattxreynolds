@@ -4,6 +4,7 @@ import { judge, judgeStep, storeDraw, submitConflict, type SubmitResult } from "
 import { settleClock } from "./clock.ts";
 import { armFinale, finaleConflict, lockIn, settleFinale, turnDial } from "./finale.ts";
 import { hasStarted, isEnded, publish, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
+import { isFrozen } from "./presence.ts";
 import { roomForDeck } from "../shared/rooms.ts";
 import type { Person } from "./people.ts";
 
@@ -59,6 +60,8 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   if (late?.kind === "launched") publish(voyageId, { event: "bell", data: { slot: "finale" } });
   else if (late) publish(voyageId);
   if (isEnded(db, voyageId)) return refuse(409, "voyage ended", "this Voyage has ended");
+  // a frozen Voyage (a Player is Away, #56) takes no moves until both are back; walking away is still allowed
+  if (body.kind !== "end-voyage" && isFrozen(db, voyageId)) return refuse(409, "voyage frozen", "the Voyage is paused until both Players are back");
 
   const parsed = intentSchema.safeParse(raw);
   if (parsed.success) {

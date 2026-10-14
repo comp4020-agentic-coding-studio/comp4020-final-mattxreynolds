@@ -471,7 +471,13 @@
     {/each}
   {:else if screen === "lobby" && snapshot}
     <h1 data-testid="ship-name">{snapshot.voyage.ship}</h1>
-    {#if snapshot.started && snapshot.yourDeck}
+    {#if snapshot.paused}
+      <section data-testid="paused">
+        <h2>Paused</h2>
+        <p>Your partner has been away for a while. The Clock has stopped and the Voyage resumes by itself when you are both back.</p>
+        <p>Voyage code: <code data-testid="paused-code">{snapshot.voyage.code}</code></p>
+      </section>
+    {:else if snapshot.started && snapshot.yourDeck}
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>

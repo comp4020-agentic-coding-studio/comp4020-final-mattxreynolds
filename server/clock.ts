@@ -8,11 +8,16 @@ export interface ClockState {
   /** When the Voyage cast off (ms since epoch). */
   startedAt: number;
   strikes: number;
+  /** Time spent frozen on earlier Away spells (#56), given back to the Clock. */
+  pausedMs?: number;
+  /** When the current freeze began, or null/absent while the Voyage runs. */
+  frozenAt?: number | null;
 }
 
 /** Time left in ms; negative once the Clock has run past zero. */
 export function timeLeftMs(state: ClockState, now: number): number {
-  return CLOCK_MS - state.strikes * STRIKE_MS - (now - state.startedAt);
+  const until = state.frozenAt ?? now;
+  return CLOCK_MS - state.strikes * STRIKE_MS - (until - state.startedAt - (state.pausedMs ?? 0));
 }
 
 import type { DatabaseSync } from "node:sqlite";
@@ -22,15 +27,19 @@ interface Row {
   cast_off_at: number | null;
   strikes: number;
   outcome: string | null;
+  froze_at: number | null;
+  paused_ms: number;
 }
 
+const stateOf = (row: Row): ClockState => ({ startedAt: row.cast_off_at!, strikes: row.strikes, pausedMs: row.paused_ms, frozenAt: row.froze_at });
+
 const rowOf = (db: DatabaseSync, voyageId: string): Row =>
-  db.prepare("SELECT cast_off_at, strikes, outcome FROM voyage WHERE id = ?").get(voyageId) as unknown as Row;
+  db.prepare("SELECT cast_off_at, strikes, outcome, froze_at, paused_ms FROM voyage WHERE id = ?").get(voyageId) as unknown as Row;
 
 /** Time left on a started, unfinished Voyage's Clock in ms, or null before cast off. */
 export function clockLeftMs(db: DatabaseSync, voyageId: string, now: number): number | null {
   const row = rowOf(db, voyageId);
-  return row.cast_off_at === null ? null : timeLeftMs({ startedAt: row.cast_off_at, strikes: row.strikes }, now);
+  return row.cast_off_at === null ? null : timeLeftMs(stateOf(row), now);
 }
 
 function sink(db: DatabaseSync, voyageId: string, now: number, reason: "strikes" | "clock"): void {
@@ -43,7 +52,7 @@ export function settleClock(db: DatabaseSync, voyageId: string, now: number): bo
   const row = rowOf(db, voyageId);
   if (row.outcome !== null || row.cast_off_at === null) return false;
   if (row.strikes >= MAX_STRIKES) return sink(db, voyageId, now, "strikes"), true;
-  if (timeLeftMs({ startedAt: row.cast_off_at, strikes: row.strikes }, now) <= 0) return sink(db, voyageId, now, "clock"), true;
+  if (timeLeftMs(stateOf(row), now) <= 0) return sink(db, voyageId, now, "clock"), true;
   return false;
 }
 
@@ -58,7 +67,7 @@ export function launch(db: DatabaseSync, voyageId: string, now: number): LaunchR
   const row = rowOf(db, voyageId);
   if (row.outcome !== null || row.cast_off_at === null) return { kind: "refused" };
   if (settleClock(db, voyageId, now)) return { kind: "sank" };
-  const scoreMs = timeLeftMs({ startedAt: row.cast_off_at, strikes: row.strikes }, now);
+  const scoreMs = timeLeftMs(stateOf(row), now);
   db.prepare("UPDATE voyage SET outcome = 'launched', score_ms = ?, ended_at = ? WHERE id = ?").run(scoreMs, now, voyageId);
   logEvent(db, { voyageId, at: now, action: "voyage.launched", detail: { score_ms: scoreMs, strikes: row.strikes } });
   return { kind: "launched", scoreMs };
