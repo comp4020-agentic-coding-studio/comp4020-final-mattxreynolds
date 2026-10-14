@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import type { Slot } from "../shared/draw.ts";
 import type { Pose } from "../shared/intents.ts";
-import { moveInRoom, pickThing, type Room, type Thing } from "../shared/rooms.ts";
+import type { WalkView } from "../shared/draw.ts";
+import { moveInRoom, pickThing, tileCentre, type Room, type Thing } from "../shared/rooms.ts";
 import { walkTowards, type ControlsMode, type Walk } from "./controls.ts";
 
 export interface SceneHandle {
@@ -15,6 +16,13 @@ export interface SceneHandle {
   setStick(walk: Walk): void;
   /** "tap" turns a tap or click on the floor into a walk there; "direct" leaves walking to keys and the stick. */
   setMode(mode: ControlsMode): void;
+  /**
+   * The Walker's floor (#54): with a view, the camera hangs over the Walker's tile and only the tile and the lit
+   * plates beside it are drawn; a tap on a plate calls onStep with its direction. null returns to the Room.
+   */
+  setFloor(view: WalkView | null, onStep?: (dir: string) => void): void;
+  /** The trapdoor plan, written on the Room's plan board; null clears it. */
+  setPlan(text: string | null): void;
   dispose(): void;
 }
 
@@ -51,7 +59,6 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   scene.add(box(0.1, wallHeight, depth, 0x73777d, width + 0.05, wallHeight / 2, depth / 2));
 
   // Nothing marks a usable thing as usable (#33): stations and decoys are drawn alike.
-  for (const t of room.things) scene.add(box(...t.size, 0x8a6a3a, t.x, t.y, t.z));
 
   const blockerMeshes = room.blockers.map((b) => {
     const w = b.box.maxX - b.box.minX;
@@ -61,10 +68,32 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     return { blocker: b, mesh };
   });
 
+  // The rotten floor (#54): seen from straight above, a 0.8 m tile is far over 44 px at 390 px wide.
+  const FLOOR_CAMERA_HEIGHT = 2.8;
+  const PLATE = 0.9;
+  const floorGroup = new THREE.Group();
+  floorGroup.visible = false;
+  scene.add(floorGroup);
+  let floorView: WalkView | null = null;
+  let onStep: (dir: string) => void = () => {};
+  let plates: { dir: string; mesh: THREE.Mesh }[] = [];
+  let plateRects: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  let floorCentre = { x: room.start.x, z: room.start.z };
+
+  let planMesh: THREE.Mesh | null = null;
+  if (room.planBoard) {
+    const b = room.planBoard;
+    planMesh = box(b.w, b.h, 0.06, 0x20262b, b.x, b.y, 0.03);
+    planMesh.visible = false;
+    scene.add(planMesh);
+  }
+
   let open: ReadonlySet<Slot> = opened;
   const showOpened = (): void => {
-    for (const { blocker, mesh } of blockerMeshes) mesh.visible = !(blocker.opensWith && open.has(blocker.opensWith));
+    for (const { blocker, mesh } of blockerMeshes) mesh.visible = !floorView && !(blocker.opensWith && open.has(blocker.opensWith));
   };
+  const thingMeshes = room.things.map((t) => box(...t.size, 0x8a6a3a, t.x, t.y, t.z));
+  for (const m of thingMeshes) scene.add(m);
   showOpened();
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
@@ -155,6 +184,14 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   };
   const click = (e: MouseEvent): void => {
     const rect = canvas.getBoundingClientRect();
+    if (floorView) {
+      // on the floor a tap hits a lit plate or nothing; every plate is a 44 px target or more
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const hit = Object.entries(plateRects).find(([, r]) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h);
+      if (hit) onStep(hit[0]);
+      return;
+    }
     const locked = document.pointerLockElement === canvas;
     const px = locked ? canvas.clientWidth / 2 : e.clientX - rect.left;
     const py = locked ? canvas.clientHeight / 2 : e.clientY - rect.top;
@@ -181,6 +218,10 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     last = now;
     let f = (held.forward ? 1 : 0) - (held.back ? 1 : 0) + stick.forward;
     let r = (held.right ? 1 : 0) - (held.left ? 1 : 0) + stick.right;
+    if (floorView) {
+      f = r = 0;
+      target = null;
+    }
     if (f || r) target = null; // steering by hand cancels a tap-to-walk
     else if (target) {
       const toward = walkTowards(me, me.yaw, target);
@@ -195,9 +236,33 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
       const dz = (-Math.cos(me.yaw) * f - Math.sin(me.yaw) * r) * step;
       Object.assign(me, moveInRoom(room, open, me, dx, dz));
     }
-    camera.position.set(me.x, room.eyeHeight, me.z);
-    camera.rotation.set(me.pitch, me.yaw, 0);
+    if (floorView) {
+      camera.position.set(floorCentre.x, FLOOR_CAMERA_HEIGHT, floorCentre.z);
+      camera.rotation.set(-Math.PI / 2, 0, 0);
+    } else {
+      camera.position.set(me.x, room.eyeHeight, me.z);
+      camera.rotation.set(me.pitch, me.yaw, 0);
+    }
     renderer.render(scene, camera);
+    if (floorView) {
+      // where each lit plate is on screen, in CSS px from the canvas corner: the tap targets, and a test seam
+      const half = ((room.floor?.tile ?? 1) * PLATE) / 2;
+      plateRects = {};
+      for (const { dir, mesh } of plates) {
+        const xs: number[] = [];
+        const ys: number[] = [];
+        for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          const v = new THREE.Vector3(mesh.position.x + sx * half, 0, mesh.position.z + sz * half).project(camera);
+          xs.push(((v.x + 1) / 2) * canvas.clientWidth);
+          ys.push(((1 - v.y) / 2) * canvas.clientHeight);
+        }
+        plateRects[dir] = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+      }
+      canvas.dataset.plates = JSON.stringify(plateRects);
+    } else {
+      plateRects = {};
+      delete canvas.dataset.plates;
+    }
     const now4 = `${me.x},${me.z},${me.yaw},${me.pitch}`;
     if (now4 !== reported) {
       reported = now4;
@@ -223,6 +288,61 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     setOpened(next) {
       open = next;
       showOpened();
+    },
+    setFloor(view, step) {
+      floorGroup.children.slice().forEach((c) => {
+        floorGroup.remove(c);
+        if (c instanceof THREE.Mesh) c.geometry.dispose();
+      });
+      plates = [];
+      floorView = room.floor && view ? view : null;
+      if (step) onStep = step;
+      floorGroup.visible = floorView !== null;
+      for (const m of thingMeshes) m.visible = floorView === null;
+      showOpened();
+      if (floorView) canvas.dataset.walker = floorView.at;
+      else delete canvas.dataset.walker;
+      if (!floorView || !room.floor) return;
+      const tile = room.floor.tile;
+      const here = tileCentre(room, floorView.at);
+      if (!here) return;
+      floorCentre = here;
+      const marker = new THREE.Mesh(new THREE.CylinderGeometry(tile * 0.25, tile * 0.25, 0.3, 16), new THREE.MeshLambertMaterial({ color: 0xe0c060 }));
+      marker.position.set(here.x, 0.15, here.z);
+      floorGroup.add(marker);
+      for (const l of floorView.lit) {
+        const c = tileCentre(room, l.tile);
+        if (!c) continue;
+        const mesh = box(tile * PLATE, 0.05, tile * PLATE, 0x5fa86a, c.x, 0.03, c.z);
+        floorGroup.add(mesh);
+        plates.push({ dir: l.dir, mesh });
+      }
+    },
+    setPlan(text) {
+      if (!planMesh || !room.planBoard) return;
+      planMesh.visible = text !== null;
+      if (text === null) {
+        delete canvas.dataset.plan;
+        return;
+      }
+      canvas.dataset.plan = text;
+      const c = document.createElement("canvas");
+      c.width = 512;
+      c.height = Math.round((512 * room.planBoard.h) / room.planBoard.w);
+      const g = c.getContext("2d");
+      if (g) {
+        g.fillStyle = "#20262b";
+        g.fillRect(0, 0, c.width, c.height);
+        g.fillStyle = "#e8e0c8";
+        const lines = text.split("\n");
+        const size = Math.floor(c.height / (lines.length + 1));
+        g.font = `${size}px monospace`;
+        lines.forEach((line, i) => g.fillText(line, 8, size * (i + 1), c.width - 16));
+      }
+      const face = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) });
+      const plain = new THREE.MeshLambertMaterial({ color: 0x20262b });
+      // a box's +z face is the one the Player sees
+      planMesh.material = [plain, plain, plain, plain, face, plain];
     },
     setStick(walk) {
       stick = walk;

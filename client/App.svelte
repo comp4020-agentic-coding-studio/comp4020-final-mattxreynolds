@@ -243,6 +243,7 @@
     draftTimer = setTimeout(() => void api(`/api/voyages/${id}/intents`, { kind: "keypad-draft", slot: "opener", text }), 250);
   }
   let strikeNote = $state("");
+  const middle = $derived(snapshot?.draw?.puzzles.find((p) => p.slot === "middle" && p.status !== "dead"));
   let bellNote = $state("");
 
   // The server decides: this only sends the digits. A Strike or a solve comes back as a notice on the stream.
@@ -381,7 +382,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} walk={middle?.walk ?? null} plan={middle?.role === "clue" ? (middle.clue ?? null) : null} onStep={(dir) => void walkStep(dir)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { SLOTS, type Slot } from "../shared/draw.ts";
+  import { SLOTS, type Slot, type WalkView } from "../shared/draw.ts";
   import { examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
   import type { DeckName, Pose } from "../shared/intents.ts";
   import { createPoseSaver } from "./pose.ts";
@@ -9,7 +9,14 @@
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened, voyageId, pose }: { deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null } = $props();
+  let { deck, opened, voyageId, pose, walk = null, plan = null, onStep = () => {} }: {
+    deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null;
+    /** The Walker's view of the rotten floor, while it is live (#54). */
+    walk?: WalkView | null;
+    /** The trapdoor plan, for the Player who holds it. */
+    plan?: string | null;
+    onStep?: (dir: string) => void;
+  } = $props();
 
   const room = roomForDeck(deck);
   let host: HTMLDivElement;
@@ -99,6 +106,12 @@
 
   $effect(() => {
     handle?.setOpened(new Set(opened));
+  });
+  $effect(() => {
+    handle?.setFloor(walk ? { at: walk.at, lit: walk.lit.map((l) => ({ ...l })) } : null, onStep);
+  });
+  $effect(() => {
+    handle?.setPlan(plan);
   });
 
   // Always visible, and the one way to capture or release the mouse.
