@@ -78,6 +78,14 @@ const MIGRATIONS: string[] = [
      text TEXT NOT NULL,
      PRIMARY KEY (voyage_id, person_id, slot)
    );`,
+  // The finale's live instrument (#48): one row per Voyage, overwritten by each
+  // dial turn. in_band_since is when the gauges last entered band, NULL while out.
+  `CREATE TABLE instrument (
+     voyage_id TEXT PRIMARY KEY REFERENCES voyage(id),
+     valves TEXT NOT NULL CHECK (json_valid(valves)),
+     trims TEXT NOT NULL CHECK (json_valid(trims)),
+     in_band_since INTEGER
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {
