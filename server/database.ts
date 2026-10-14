@@ -45,6 +45,10 @@ const MIGRATIONS: string[] = [
    ALTER TABLE voyage_person ADD COLUMN deck TEXT CHECK (deck IN ('Upper Deck', 'Lower Deck'));
    ALTER TABLE voyage_person ADD COLUMN cast_off INTEGER NOT NULL DEFAULT 0;
    CREATE UNIQUE INDEX voyage_deck ON voyage_person (voyage_id, deck) WHERE deck IS NOT NULL;`,
+  // How a Voyage finished: NULL while unfinished, 'abandoned' once either
+  // Player ends it. Later outcomes (launched, sank) widen the CHECK.
+  `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
+   ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
 ];
 
 function migrate(db: DatabaseSync): void {

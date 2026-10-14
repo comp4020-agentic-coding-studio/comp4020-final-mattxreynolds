@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { LobbySnapshot, RejoinOffer, PersonView, VoyageView } from "../shared/lobby.ts";
+  import type { LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby";
   let screen: Screen = $state("loading");
@@ -11,6 +11,9 @@
   let copied = $state(false);
   let nameDraft = $state("");
   let nameProblem = $state("");
+  let voyages: ProfileVoyages = $state({ unfinished: [], finished: [] });
+  // the Voyage whose "End the Voyage" is awaiting its confirm
+  let confirming: string | null = $state(null);
 
   $effect(() => { if (person && !nameDraft) nameDraft = person.name; });
 
@@ -35,12 +38,32 @@
     source = es;
     es.addEventListener("snapshot", (e) => {
       retry = 0;
-      snapshot = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
+      const next = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
+      // either Player may end the Voyage, so the other's ship ends too
+      if (next.ended) return void goHome();
+      snapshot = next;
     });
     es.onerror = () => {
       if (es.readyState !== EventSource.CLOSED) return;
       setTimeout(() => source === es && watch(voyage), Math.min(1000 * 2 ** retry++, 15000));
     };
+  }
+
+  async function goHome(): Promise<void> {
+    source?.close();
+    source = null;
+    snapshot = null;
+    confirming = null;
+    history.replaceState(null, "", "/");
+    screen = "profile";
+    const res = await fetch("/api/voyages");
+    if (res.ok) voyages = (await res.json()) as ProfileVoyages;
+  }
+
+  async function endVoyage(id: string): Promise<void> {
+    const res = await api(`/api/voyages/${id}/intents`, { kind: "end-voyage" });
+    confirming = null;
+    if (res.ok || res.status === 409) await goHome();
   }
 
   function enter(voyage: VoyageView): void {
@@ -52,7 +75,7 @@
   async function playAsGuest(): Promise<void> {
     const res = await api<PersonView>("/api/guest");
     person = res.data;
-    screen = "profile";
+    await goHome();
   }
 
   async function rename(): Promise<void> {
@@ -79,7 +102,7 @@
     problem = "";
     const res = await api<VoyageView>("/api/join", by);
     if (res.ok) return enter(res.data);
-    screen = "profile";
+    await goHome();
     if (res.status === 409 && "code" in by) {
       // a full Voyage: a fresh browser may take over a Deck whose Player isn't connected
       const found = await api<{ offers: RejoinOffer[] }>("/api/rejoin/offers", by);
@@ -134,7 +157,8 @@
       if (!person) person = (await api<PersonView>("/api/guest")).data;
       await join({ key });
     } else {
-      screen = person ? "profile" : "first";
+      if (person) await goHome();
+      else screen = "first";
     }
   });
 </script>
@@ -150,6 +174,32 @@
       <button type="submit">Save</button>
     </form>
     {#if nameProblem}<p role="alert">{nameProblem}</p>{/if}
+    <section>
+      <h2>Unfinished Voyages</h2>
+      {#each voyages.unfinished as v (v.id)}
+        <article data-testid="unfinished-voyage">
+          <h3>{v.ship}</h3>
+          <p>Code <code>{v.code}</code></p>
+          <button onclick={() => enter(v)}>Resume</button>
+          {#if confirming === v.id}
+            <button onclick={() => endVoyage(v.id)}>Yes, end it</button>
+            <button onclick={() => (confirming = null)}>Keep sailing</button>
+          {:else}
+            <button onclick={() => (confirming = v.id)}>End the Voyage</button>
+          {/if}
+        </article>
+      {:else}
+        <p>None yet.</p>
+      {/each}
+    </section>
+    <section>
+      <h2>Finished Voyages</h2>
+      {#each voyages.finished as v (v.id)}
+        <article data-testid="finished-voyage"><h3>{v.ship}</h3><p>{v.outcome}</p></article>
+      {:else}
+        <p>None yet.</p>
+      {/each}
+    </section>
     <p>Bring a partner aboard: start a Voyage and share its link or code.</p>
     <button class="primary" onclick={start}>Start a Voyage</button>
     <form onsubmit={(e) => { e.preventDefault(); void join({ code }); }}>
@@ -190,6 +240,12 @@
       <p role="status">Waiting for your partner to cast off.</p>
     {/if}
     <p>Playing both Decks alone? Open a second Chrome profile or an incognito window for the other Deck.</p>
+    {/if}
+    {#if confirming === snapshot.voyage.id}
+      <button onclick={() => endVoyage(snapshot!.voyage.id)}>Yes, end it</button>
+      <button onclick={() => (confirming = null)}>Keep sailing</button>
+    {:else}
+      <button onclick={() => (confirming = snapshot!.voyage.id)}>End the Voyage</button>
     {/if}
     <p>Link: <code data-testid="voyage-link">{origin}{snapshot.voyage.link}</code>
       <button onclick={() => copy(origin + snapshot!.voyage.link)}>Copy link</button></p>
