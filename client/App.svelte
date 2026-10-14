@@ -262,6 +262,19 @@
     }
   }
 
+  // Dial turns carry no seq: both Decks turn at once and each turn is applied in server order.
+  async function dial(kind: "turn-valve" | "turn-trim", index: number, by: 1 | -1): Promise<void> {
+    if (!snapshot?.yourDeck) return;
+    const res = await api<{ error: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, { kind, deck: snapshot.yourDeck, index, by });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
+  }
+
+  async function lockIn(): Promise<void> {
+    if (!snapshot?.yourDeck) return;
+    const res = await api<{ error: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, { kind: "lock-in", deck: snapshot.yourDeck, seq: snapshot.seq });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
+  }
+
   // One step; the server decides whether it was a trapdoor, and says so on the stream.
   async function walkStep(dir: string): Promise<void> {
     if (!snapshot?.yourDeck) return;
@@ -401,6 +414,29 @@
                 {/each}
               </section>
             {/if}
+          {:else if p.slot === "finale" && p.status === "live" && p.instrument}
+            <section data-testid="instrument">
+              {#if p.instrument.valves}
+                <h3>Valves</h3>
+                {#each p.instrument.valves as level, i}
+                  <p data-testid="valve">Valve {i + 1}: <output>{level}</output>
+                    <button aria-label="Valve {i + 1} down" onclick={() => dial("turn-valve", i, -1)}>-</button>
+                    <button aria-label="Valve {i + 1} up" onclick={() => dial("turn-valve", i, 1)}>+</button></p>
+                {/each}
+              {:else}
+                <h3>Gauges</h3>
+                <pre data-testid="mural">{p.clue}</pre>
+                {#each p.instrument.trims ?? [] as level, i}
+                  <p data-testid="gauge">Gauge {i + 1} reads <output>{p.instrument.readings?.[i]}</output>, trim <output>{level}</output>
+                    <button aria-label="Trim {i + 1} down" onclick={() => dial("turn-trim", i, -1)}>-</button>
+                    <button aria-label="Trim {i + 1} up" onclick={() => dial("turn-trim", i, 1)}>+</button></p>
+                {/each}
+                <p data-testid="hold">{p.instrument.holdMs == null ? "Out of band." : `In band for ${Math.floor(p.instrument.holdMs / 1000)} s of 10.`}</p>
+              {/if}
+              <button data-testid="lock-in" onclick={lockIn}>Lock in</button>
+            </section>
+          {:else if p.slot === "finale" && p.status === "solved"}
+            <p data-testid="lifeboat">The Lifeboat is away.</p>
           {:else}
             <p data-testid="dead-station">A {p.slot} station, dead for now.</p>
           {/if}

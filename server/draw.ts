@@ -4,7 +4,8 @@ import { z } from "zod";
 import { SLOTS, type PublicDraw, type PublicPuzzle, type Slot } from "../shared/draw.ts";
 import type { DeckName, WalkDir } from "../shared/intents.ts";
 import { currentFor, puzzle } from "./puzzles/index.ts";
-import type { Pos, Rng } from "./puzzles/types.ts";
+import { instrumentView } from "./instrument.ts";
+import type { Pos, PuzzleVersion, Rng } from "./puzzles/types.ts";
 
 // The stored side of the Draw/PublicDraw split (ADR 0001, ADR 0007): the full
 // Draw with its answers' data, written once at Voyage start and never edited.
@@ -57,25 +58,42 @@ export function loadDraw(raw: string): StoredDraw {
   return draw;
 }
 
+/**
+ * The live Puzzle: the first present one not yet solved. A slot with no Puzzle
+ * is absent, not a gap, so the next present Puzzle goes live once the one
+ * before it is solved.
+ */
+export function liveEntry(db: DatabaseSync, voyageId: string): { slot: Slot; version: PuzzleVersion; data: unknown } | null {
+  const row = rowOf(db, voyageId);
+  if (!row.draw) return null;
+  const entry = loadDraw(row.draw).puzzles[row.solved];
+  return entry ? { slot: entry.slot, version: puzzle(entry.key), data: entry.data } : null;
+}
+
 /** What one Deck may see: its own role in each slot, its Clue text if it holds it, and never an answer. */
 export function publicDraw(db: DatabaseSync, voyageId: string, deck: DeckName): PublicDraw | null {
   const row = rowOf(db, voyageId);
   if (!row.draw) return null;
   const stored = loadDraw(row.draw);
-  const puzzles: PublicPuzzle[] = SLOTS.map((slot, index) => {
-    const entry = stored.puzzles.find((p) => p.slot === slot);
-    if (!entry) return { slot, status: "dead", role: null };
+  const now = Date.now();
+  const puzzles: PublicPuzzle[] = SLOTS.map((slot) => {
+    const index = stored.puzzles.findIndex((p) => p.slot === slot);
+    if (index === -1) return { slot, status: "dead", role: null };
+    const entry = stored.puzzles[index];
     const version = puzzle(entry.key);
     const status = index < row.solved ? "solved" : index === row.solved ? "live" : "dead";
     const role = version.decks.clue === deck ? "clue" : "lock";
     const showClue = role === "clue" && status !== "dead";
     const walk = role === "lock" && status === "live" ? version.walk : undefined;
+    // a split instrument's dials are live state, so only the live finale carries them
+    const dials = status === "live" && version.instrument ? { instrument: instrumentView(db, voyageId, version, entry.data, role, now) } : {};
     return {
       slot,
       status,
       role,
       ...(showClue ? { clue: version.clue(entry.data) } : {}),
       ...(walk ? { walk: walk.view(entry.data, walkerAt(row, walk.start(entry.data))) } : {}),
+      ...dials,
     };
   });
   return { deck, puzzles, strikes: row.strikes };
@@ -91,12 +109,15 @@ export type SubmitResult =
 export function submitConflict(db: DatabaseSync, voyageId: string, deck: DeckName, slot: Slot, step?: WalkDir): { reason: string; message: string } | null {
   const row = rowOf(db, voyageId);
   if (!row.draw) return { reason: "not underway", message: "the Voyage has not started" };
-  const entry = loadDraw(row.draw).puzzles.find((p) => p.slot === slot);
-  if (!entry) return { reason: "no such station", message: "nothing to unlock there yet" };
-  if (SLOTS.indexOf(slot) < row.solved) return { reason: "already solved", message: "that is already open" };
-  if (SLOTS.indexOf(slot) > row.solved) return { reason: "station dead", message: "that station is dead until the one before it is solved" };
+  const puzzles = loadDraw(row.draw).puzzles;
+  const index = puzzles.findIndex((p) => p.slot === slot);
+  if (index === -1) return { reason: "no such station", message: "nothing to unlock there yet" };
+  const entry = puzzles[index];
+  if (index < row.solved) return { reason: "already solved", message: "that is already open" };
+  if (index > row.solved) return { reason: "station dead", message: "that station is dead until the one before it is solved" };
   const version = puzzle(entry.key);
   if (version.decks.lock !== deck) return { reason: "not the lock Deck", message: "nothing on this Deck takes that answer" };
+  if (version.instrument) return { reason: "no typed answer", message: "that is worked with its dials, not a code" };
   if (step === undefined && version.walk) return { reason: "no typed answer", message: "that station takes steps, not a code" };
   if (step !== undefined) {
     if (!version.walk) return { reason: "not a walking station", message: "nothing here to walk on" };
