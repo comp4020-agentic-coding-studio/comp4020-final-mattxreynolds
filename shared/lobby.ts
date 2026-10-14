@@ -35,4 +35,17 @@ export interface LobbySnapshot {
   seq: number;
   /** True once both Players have pressed "Cast off". */
   started: boolean;
+  /** True once either Player has ended the Voyage. */
+  ended: boolean;
+}
+
+/** One row of the profile screen's lists. */
+export interface VoyageListing extends VoyageView {
+  /** Null while unfinished. */
+  outcome: "abandoned" | null;
+}
+
+export interface ProfileVoyages {
+  unfinished: VoyageListing[];
+  finished: VoyageListing[];
 }

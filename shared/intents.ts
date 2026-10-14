@@ -12,6 +12,9 @@ const seq = z.number().int().nonnegative();
 export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("choose-deck"), seq, deck: z.enum(DECKS) }),
   z.strictObject({ kind: z.literal("cast-off"), seq }),
+  // Ending needs no seq: either Player may stop at any state, from the profile
+  // too, where no snapshot has been seen.
+  z.strictObject({ kind: z.literal("end-voyage"), seq: seq.optional() }),
 ]);
 
 export type Intent = z.infer<typeof intentSchema>;

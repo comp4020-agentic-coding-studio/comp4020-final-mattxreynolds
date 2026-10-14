@@ -5,7 +5,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { createGuest, personForToken, renamePerson, type Person } from "./people.ts";
 import { sanitisePlayerName } from "./player-name.ts";
 import { logEvent } from "./events.ts";
-import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById } from "./lobby.ts";
+import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
 import { withVoyage } from "./mutex.ts";
 import { joinVoyage, startVoyage } from "./voyages.ts";
@@ -68,6 +68,8 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return c.json({ id: you.id, name: result.name });
   });
 
+  api.get("/voyages", (c) => c.json(voyagesOf(db, c.get("person").id)));
+
   api.post("/voyages", (c) => {
     const you = c.get("person");
     const voyage = startVoyage(db, you.id);
@@ -122,6 +124,7 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     }
     if (outcome.changed) {
       logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: `intent.${kind}`, detail: { deck: String(raw.deck ?? "") } });
+      if (outcome.ended) logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: "voyage.ended", detail: { outcome: "abandoned" } });
       if (outcome.started) logEvent(db, { voyageId, action: "voyage.cast-off" });
       publish(voyageId);
     }
