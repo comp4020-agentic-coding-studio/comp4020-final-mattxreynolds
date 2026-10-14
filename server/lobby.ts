@@ -5,6 +5,7 @@ import { DECKS } from "../shared/intents.ts";
 import type { Notice } from "../shared/draw.ts";
 import type { LobbySnapshot, ProfileVoyages } from "../shared/lobby.ts";
 import { publicDraw } from "./draw.ts";
+import { draftsOf, poseOf } from "./low-trust.ts";
 
 export type Snapshot = LobbySnapshot;
 
@@ -88,6 +89,8 @@ export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person
     started: hasStarted(seats),
     draw: yourDeck ? publicDraw(db, voyage.id, yourDeck) : null,
     ended: isEnded(db, voyage.id),
+    pose: poseOf(db, voyage.id, you.id),
+    drafts: draftsOf(db, voyage.id, you.id),
   };
 }
 

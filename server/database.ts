@@ -55,6 +55,21 @@ const MIGRATIONS: string[] = [
   // Player ends it. Later outcomes (launched, sank) widen the CHECK.
   `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
    ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
+  // Low-trust rows (#57): one pose and one draft per Player per Voyage,
+  // overwritten in place. Not events: nothing here is logged.
+  `CREATE TABLE pose (
+     voyage_id TEXT NOT NULL REFERENCES voyage(id),
+     person_id TEXT NOT NULL REFERENCES person(id),
+     x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL, yaw REAL NOT NULL, pitch REAL NOT NULL,
+     PRIMARY KEY (voyage_id, person_id)
+   );
+   CREATE TABLE keypad_draft (
+     voyage_id TEXT NOT NULL REFERENCES voyage(id),
+     person_id TEXT NOT NULL REFERENCES person(id),
+     slot TEXT NOT NULL,
+     text TEXT NOT NULL,
+     PRIMARY KEY (voyage_id, person_id, slot)
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {
