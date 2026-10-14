@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { SLOTS, type Slot } from "../shared/draw.ts";
-  import { examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
+  import { displayText, examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
+  import type { InstrumentView } from "../shared/draw.ts";
   import type { DeckName, Pose } from "../shared/intents.ts";
   import { createPoseSaver } from "./pose.ts";
   import { buildScene, type SceneHandle } from "./scene.ts";
@@ -9,7 +10,7 @@
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened, voyageId, pose }: { deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null } = $props();
+  let { deck, opened, voyageId, pose, instrument = null }: { deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null; instrument?: InstrumentView | null } = $props();
 
   const room = roomForDeck(deck);
   let host: HTMLDivElement;
@@ -60,6 +61,16 @@
   // Using a thing: show its text and log the examine through the intent pipeline. It is never a Strike (#52).
   function use(thing: Thing): void {
     const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
+    // a live finale's valve and trim controls turn their dial, the same intent as the 2D view (#55)
+    if (thing.control && instrument) {
+      seen = "";
+      void fetch(`/api/voyages/${voyageId}/intents`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...thing.control, deck }),
+      }).catch(() => {});
+      return;
+    }
     seen = examineText(thing, live);
     void fetch(`/api/voyages/${voyageId}/intents`, {
       method: "POST",
@@ -99,6 +110,24 @@
 
   $effect(() => {
     handle?.setOpened(new Set(opened));
+  });
+
+  // The wall read-outs follow the Deck's view; the hold counts up between snapshots (#55).
+  let arrived = Date.now();
+  let tick = $state(0);
+  $effect(() => {
+    void instrument;
+    arrived = Date.now();
+    tick = 0;
+  });
+  $effect(() => {
+    const timer = setInterval(() => tick++, 250);
+    return () => clearInterval(timer);
+  });
+  $effect(() => {
+    void tick;
+    const launched = opened.includes("finale");
+    handle?.setDisplays(Object.fromEntries(room.displays.map((d) => [d.id, displayText(d, instrument, Date.now() - arrived, launched)])));
   });
 
   // Always visible, and the one way to capture or release the mouse.
