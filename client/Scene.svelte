@@ -2,12 +2,13 @@
   import { onMount } from "svelte";
   import type { Slot } from "../shared/draw.ts";
   import { roomForDeck } from "../shared/rooms.ts";
-  import type { DeckName } from "../shared/intents.ts";
+  import type { DeckName, Pose } from "../shared/intents.ts";
+  import { createPoseSaver } from "./pose.ts";
   import { buildScene, type SceneHandle } from "./scene.ts";
 
   // Mounted once per Deck view. State changes reach the scene only through
   // setOpened; the render loop never reads Svelte state (ADR 0006).
-  let { deck, opened }: { deck: DeckName; opened: Slot[] } = $props();
+  let { deck, opened, voyageId, pose }: { deck: DeckName; opened: Slot[]; voyageId: string; pose: Pose | null } = $props();
 
   const room = roomForDeck(deck);
   let host: HTMLDivElement;
@@ -16,9 +17,12 @@
   let locked = $state(false);
 
   onMount(() => {
+    const saver = createPoseSaver(voyageId);
+    const flush = (): void => saver.flush();
+    const onHide = (): void => { if (document.visibilityState === "hidden") saver.flush(); };
     const onLock = (): void => { locked = document.pointerLockElement === handle?.canvas; };
     try {
-      handle = buildScene(room, new Set(opened));
+      handle = buildScene(room, new Set(opened), pose, (p) => saver.capture(p));
     } catch {
       failed = true;
       return;
@@ -31,7 +35,12 @@
     canvas.addEventListener("click", () => { if (document.pointerLockElement === canvas) document.exitPointerLock(); });
     host.prepend(canvas);
     document.addEventListener("pointerlockchange", onLock);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
     return () => {
+      saver.flush();
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
       document.removeEventListener("pointerlockchange", onLock);
       if (document.pointerLockElement === handle?.canvas) document.exitPointerLock();
       handle?.dispose();

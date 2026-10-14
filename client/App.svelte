@@ -319,7 +319,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene deck={snapshot.yourDeck} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0}</p>
         {#if strikeNote}<p role="status">{strikeNote}</p>{/if}
         {#if bellNote}<p role="status">{bellNote}</p>{/if}
