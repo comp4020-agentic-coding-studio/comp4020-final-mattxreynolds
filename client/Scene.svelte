@@ -74,7 +74,7 @@
   function use(thing: Thing): void {
     // A keypad button works the same keypad as the 2D view while the opener is live (#53).
     // Only the live opener's own controls work; the other opener's buttons are just furniture.
-    if (thing.press && thing.control === control && !opened.includes("opener")) return onKey(thing.press);
+    if (thing.press && thing.bank === control && !opened.includes("opener")) return onKey(thing.press);
     const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
     // a live finale's valve and trim controls turn their dial, the same intent as the 2D view (#55)
     if (thing.control && instrument) {

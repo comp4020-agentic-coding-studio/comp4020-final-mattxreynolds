@@ -57,7 +57,7 @@ export interface Thing {
   /** A keypad button: the key it presses (a digit, "clear" or "enter"). */
   press?: string;
   /** Which opener's controls a button belongs to: the keypad's digits or the lever bank. Buttons of the other opener stay dead. */
-  control?: "keypad" | "levers";
+  bank?: "keypad" | "levers";
   /** A face the scene draws text on: the Clue on the mural or wiring card, the code typed so far, or the lever order so far. */
   screen?: "clue" | "code" | "order";
   x: number;
@@ -137,7 +137,7 @@ const KEYPAD_BUTTONS: Thing[] = KEYPAD_ROWS.flatMap((row, r) =>
     kind: "station",
     slot: "opener",
     press: key,
-    control: "keypad",
+    bank: "keypad",
     x: 2 + (c - 1) * 0.45,
     y: 2.25 - r * 0.45,
     z: 0.2,
@@ -157,7 +157,7 @@ const LEVER_BUTTONS: Thing[] = LEVER_ROWS.flatMap((row, r) =>
           id: key === "clear" ? "lever-clear" : key === "enter" ? "lever-set" : key,
           kind: "station",
           slot: "opener",
-          control: "levers",
+          bank: "levers",
           press: key,
           x: 4.1 + (c - 1) * 0.45,
           y: 1.8 - r * 0.45,

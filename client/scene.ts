@@ -88,7 +88,7 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   const screens = new Map<string, (text: string) => void>();
   for (const t of room.things) {
     if (!t.press && !t.screen) continue;
-    const label = t.press === "enter" && t.control === "levers" ? "SET" : t.press?.replace(/^lever-/, "").toUpperCase();
+    const label = t.press === "enter" && t.bank === "levers" ? "SET" : t.press?.replace(/^lever-/, "").toUpperCase();
     const f = face(t, label ?? "");
     scene.add(f.mesh);
     if (t.screen) screens.set(t.screen, f.draw);

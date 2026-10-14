@@ -4,7 +4,7 @@ import { leverAfter, roomForDeck } from "../shared/rooms.ts";
 // The lever bank worked in place (#62). At 390 px wide a metre spans about
 // 127 px from the 2 m reach limit, so 44 px is about 0.35 m.
 const engine = roomForDeck("Lower Deck");
-const controls = engine.things.filter((t) => t.control === "levers");
+const controls = engine.things.filter((t) => t.bank === "levers");
 
 describe("the lever bank in the Engine Room", () => {
   it("has five levers, a clear and a set, all on the opener and pressed as lever controls", () => {
@@ -26,7 +26,7 @@ describe("the lever bank in the Engine Room", () => {
   });
 
   it("the keypad buttons are marked as keypad controls, and the order has a display", () => {
-    for (const t of engine.things.filter((t) => t.press && t.control !== "levers")) expect(t.control).toBe("keypad");
+    for (const t of engine.things.filter((t) => t.press && t.bank !== "levers")) expect(t.bank).toBe("keypad");
     expect(engine.things.some((t) => t.screen === "order")).toBe(true);
   });
 
