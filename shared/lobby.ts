@@ -49,3 +49,9 @@ export interface ProfileVoyages {
   unfinished: VoyageListing[];
   finished: VoyageListing[];
 }
+
+/** A Deck a fresh browser may take over: its Player isn't connected. */
+export interface RejoinOffer {
+  deck: DeckName;
+  playerName: string;
+}
