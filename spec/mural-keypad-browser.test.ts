@@ -1,6 +1,8 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { codeFromClue } from "./helpers/mural.ts";
+import { pageFor } from "./helpers/browser.ts";
+import { underwayWith } from "./helpers/voyage.ts";
 
 const baseUrl = inject("baseUrl");
 let browser: Browser;
@@ -12,25 +14,10 @@ afterAll(async () => {
   await browser.close();
 });
 
-async function sailor(link?: string): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
-  await page.goto(link ?? baseUrl);
-  if (!link) await page.getByRole("button", { name: "Play as guest" }).click();
-  return page;
-}
-
 it("the Wheelhouse reads the mural, the Engine Room keys a code in: a wrong one is a Strike, the right one opens the hatch on both Decks", async () => {
-  const host = await sailor();
-  await host.getByRole("button", { name: "Start a Voyage" }).click();
-  await host.getByTestId("voyage-link").waitFor();
-  const partner = await sailor((await host.getByTestId("voyage-link").innerText()).trim());
-  await expect.poll(() => host.getByTestId("player").count()).toBe(2);
-  await host.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => partner.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).innerText()).toMatch(/held by/i);
-  await partner.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => host.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).innerText()).toMatch(/held by/i);
-  await host.getByRole("button", { name: "Cast off" }).click();
-  await partner.getByRole("button", { name: "Cast off" }).click();
+  const l = await underwayWith(baseUrl, "mural"); // the Draw picks the opener at random
+  const host = await pageFor(browser, baseUrl, l.voyage, l.host);
+  const partner = await pageFor(browser, baseUrl, l.voyage, l.partner);
 
   const mural = host.getByTestId("mural");
   await mural.waitFor();
@@ -57,17 +44,9 @@ it("the Wheelhouse reads the mural, the Engine Room keys a code in: a wrong one 
 });
 
 it("a half-typed keypad code is still there after the Engine Room reloads, and the Wheelhouse never sees it", async () => {
-  const host = await sailor();
-  await host.getByRole("button", { name: "Start a Voyage" }).click();
-  await host.getByTestId("voyage-link").waitFor();
-  const partner = await sailor((await host.getByTestId("voyage-link").innerText()).trim());
-  await expect.poll(() => host.getByTestId("player").count()).toBe(2);
-  await host.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => partner.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).innerText()).toMatch(/held by/i);
-  await partner.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).getByRole("button", { name: "Take" }).click();
-  await expect.poll(() => host.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).innerText()).toMatch(/held by/i);
-  await host.getByRole("button", { name: "Cast off" }).click();
-  await partner.getByRole("button", { name: "Cast off" }).click();
+  const l = await underwayWith(baseUrl, "mural"); // the Draw picks the opener at random
+  const host = await pageFor(browser, baseUrl, l.voyage, l.host);
+  const partner = await pageFor(browser, baseUrl, l.voyage, l.partner);
 
   const field = () => partner.getByTestId("keypad").getByLabel("Code");
   await field().waitFor();
