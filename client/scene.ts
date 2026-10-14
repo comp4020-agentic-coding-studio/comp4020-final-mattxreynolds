@@ -12,6 +12,8 @@ export interface SceneHandle {
   canvas: HTMLCanvasElement;
   /** The Puzzles whose areas are open; their blockers stop blocking and stop being drawn. */
   setOpened(opened: ReadonlySet<Slot>): void;
+  /** The words on each wall read-out, by display id (#55). */
+  setDisplays(texts: Readonly<Record<string, string>>): void;
   /** The virtual joystick's walk, each axis -1..1; {0,0} lets go. */
   setStick(walk: Walk): void;
   /** "tap" turns a tap or click on the floor into a walk there; "direct" leaves walking to keys and the stick. */
@@ -24,7 +26,7 @@ export interface SceneHandle {
   /** The trapdoor plan, written on the Room's plan board; null clears it. */
   setPlan(text: string | null): void;
   /** Text for a thing's face: the Clue on the mural, the code typed so far on the keypad display. */
-  setScreen(which: "clue" | "code", text: string): void;
+  setScreen(which: "clue" | "code" | "order", text: string): void;
   dispose(): void;
 }
 
@@ -50,16 +52,17 @@ function face(t: Thing, text: string): { mesh: THREE.Mesh; draw: (text: string) 
   const ctx = cv.getContext("2d")!;
   const texture = new THREE.CanvasTexture(cv);
   texture.colorSpace = THREE.SRGBColorSpace;
+  const typed = t.screen === "code" || t.screen === "order";
   const draw = (words: string): void => {
     ctx.fillStyle = t.press ? "#e9dcc0" : "#f2ead6";
     ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.fillStyle = "#1b1b1b";
-    ctx.textAlign = t.press || t.screen === "code" ? "center" : "left";
+    ctx.textAlign = t.press || typed ? "center" : "left";
     ctx.textBaseline = "middle";
-    const lines = t.press || t.screen === "code" ? [words] : words.split("\n");
-    const size = t.press || t.screen === "code" ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
+    const lines = t.press || typed ? [words] : words.split("\n");
+    const size = t.press || typed ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
     ctx.font = `bold ${size}px monospace`;
-    const x = t.press || t.screen === "code" ? cv.width / 2 : 12;
+    const x = t.press || typed ? cv.width / 2 : 12;
     lines.forEach((line, i) => ctx.fillText(line, x, ((i + 0.5) * cv.height) / lines.length, cv.width - 24));
     texture.needsUpdate = true;
   };
@@ -92,10 +95,50 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
   const screens = new Map<string, (text: string) => void>();
   for (const t of room.things) {
     if (!t.press && !t.screen) continue;
-    const f = face(t, t.press ? t.press.toUpperCase() : "");
+    const label = t.press === "enter" && t.bank === "levers" ? "SET" : t.press?.replace(/^lever-/, "").toUpperCase();
+    const f = face(t, label ?? "");
     scene.add(f.mesh);
     if (t.screen) screens.set(t.screen, f.draw);
   }
+
+  // The finale's controls carry a minus or plus and its read-outs show this Deck's half of the instrument (#55).
+  const label = (text: string, w: number, h: number, size: number, ink: string, paper: string): THREE.CanvasTexture => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d")!;
+    g.fillStyle = paper;
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = ink;
+    g.font = `bold ${size}px sans-serif`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(text, w / 2, h / 2);
+    return new THREE.CanvasTexture(c);
+  };
+  const eastFace = (x: number, y: number, z: number, w: number, h: number, map: THREE.Texture): THREE.Mesh => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map }));
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = -Math.PI / 2; // faces west, into the Room from the east wall
+    return mesh;
+  };
+  for (const t of room.things) {
+    if (t.control) scene.add(eastFace(t.x - t.size[0] / 2 - 0.005, t.y, t.z, t.size[2], t.size[1], label(t.control.by < 0 ? "\u2212" : "+", 64, 64, 56, "#1b1208", "#d9a441")));
+  }
+  const displayFaces = room.displays.map((d) => {
+    scene.add(box(...d.size, 0x15191e, d.x, d.y, d.z));
+    const screen = eastFace(d.x - d.size[0] / 2 - 0.005, d.y, d.z, d.size[2], d.size[1], label("", 4, 4, 1, "#fff", "#0b1410"));
+    scene.add(screen);
+    const shown = { text: "" };
+    const draw = (text: string): void => {
+      shown.text = text;
+      const material = screen.material as THREE.MeshBasicMaterial;
+      material.map?.dispose();
+      material.map = label(text, 256, Math.round((256 * d.size[1]) / d.size[2]), 40, "#8cff9b", "#0b1410");
+      material.needsUpdate = true;
+    };
+    return { id: d.id, draw, shown };
+  });
 
   const blockerMeshes = room.blockers.map((b) => {
     const w = b.box.maxX - b.box.minX;
@@ -393,6 +436,13 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
       const plain = new THREE.MeshLambertMaterial({ color: 0x20262b });
       // a box's +z face is the one the Player sees
       planMesh.material = [plain, plain, plain, plain, face, plain];
+    },
+    setDisplays(texts) {
+      for (const f of displayFaces) {
+        const text = texts[f.id] ?? "";
+        if (text !== f.shown.text) f.draw(text);
+      }
+      canvas.dataset.displays = JSON.stringify(Object.fromEntries(displayFaces.map((f) => [f.id, f.shown.text])));
     },
     setStick(walk) {
       stick = walk;

@@ -100,6 +100,7 @@ describe("greybox Rooms in 3D", () => {
     await expect.poll(() => host.getByTestId("scene-fallback").isVisible()).toBe(true);
     await expect.poll(() => host.getByTestId("hatch").isVisible()).toBe(true);
     await expect.poll(() => host.getByTestId("mural").isVisible()).toBe(true);
-    await expect.poll(() => partner.getByTestId("keypad").isVisible()).toBe(true);
+    // the keypad or the lever bank, whichever opener was drawn
+    await expect.poll(async () => (await partner.getByTestId("keypad").isVisible()) || (await partner.getByTestId("levers").isVisible())).toBe(true);
   }, 60_000);
 });

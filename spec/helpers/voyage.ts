@@ -64,3 +64,21 @@ export async function intent(
   const seq = "seq" in body ? body.seq : (await snapshot(base, voyageId, who.cookie)).seq;
   return post(base, `/api/voyages/${voyageId}/intents`, who.cookie, { ...body, seq });
 }
+
+export type OpenerKind = "mural" | "levers";
+
+/** Which opener a Clue text belongs to. */
+export const openerOf = (clue: string): OpenerKind => (/Wire \d: lever/.test(clue) ? "levers" : "mural");
+
+/**
+ * An underway Voyage whose opener is the given Puzzle (the Draw picks one of
+ * two at random, so this casts off fresh Voyages until it gets that one).
+ */
+export async function underwayWith(base: string, kind: OpenerKind): ReturnType<typeof lobby> {
+  for (let tries = 0; tries < 40; tries++) {
+    const l = await underway(base);
+    const clue = (await snapshot(base, l.voyage.id, l.host.cookie)).draw!.puzzles[0].clue!;
+    if (openerOf(clue) === kind) return l;
+  }
+  throw new Error(`no ${kind} opener drawn in 40 Voyages`);
+}

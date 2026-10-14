@@ -70,7 +70,7 @@ it("a keypad draft survives a reload for its owner only", async () => {
   expect((await snap(voyage.id, host)).drafts).toEqual({});
   await send(voyage.id, partner, { kind: "keypad-draft", slot: "opener", text: "" });
   expect((await snap(voyage.id, partner)).drafts).toEqual({});
-  expect((await send(voyage.id, partner, { kind: "keypad-draft", slot: "opener", text: "12345" })).status).toBe(400);
+  expect((await send(voyage.id, partner, { kind: "keypad-draft", slot: "opener", text: "123456" })).status).toBe(400);
   expect((await send(voyage.id, partner, { kind: "keypad-draft", slot: "opener", text: "ab" })).status).toBe(400);
 });
 

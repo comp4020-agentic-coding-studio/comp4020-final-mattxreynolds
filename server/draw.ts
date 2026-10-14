@@ -3,7 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { SLOTS, type PublicDraw, type PublicPuzzle, type Slot } from "../shared/draw.ts";
 import type { DeckName, WalkDir } from "../shared/intents.ts";
-import { currentFor, puzzle } from "./puzzles/index.ts";
+import { puzzle, versionsFor } from "./puzzles/index.ts";
 import { instrumentView } from "./instrument.ts";
 import type { Pos, PuzzleVersion, Rng } from "./puzzles/types.ts";
 
@@ -24,8 +24,11 @@ const cryptoRng: Rng = () => randomInt(2 ** 32) / 2 ** 32;
 export function generateDraw(rng: Rng = cryptoRng): StoredDraw {
   const puzzles: StoredDraw["puzzles"] = [];
   for (const slot of SLOTS) {
-    const version = currentFor(slot);
-    if (version) puzzles.push({ slot, key: version.key, data: version.generate(rng) });
+    // a plain random pick among the slot's Puzzles; the freshness rule for a known Team is #65's
+    const options = versionsFor(slot);
+    if (options.length === 0) continue;
+    const version = options[Math.floor(rng() * options.length)];
+    puzzles.push({ slot, key: version.key, data: version.generate(rng) });
   }
   return { puzzles };
 }
@@ -91,6 +94,7 @@ export function publicDraw(db: DatabaseSync, voyageId: string, deck: DeckName): 
       slot,
       status,
       role,
+      ...(role === "lock" && version.control ? { control: version.control } : {}),
       ...(showClue ? { clue: version.clue(entry.data) } : {}),
       ...(walk ? { walk: walk.view(entry.data, walkerAt(row, walk.start(entry.data))) } : {}),
       ...dials,
