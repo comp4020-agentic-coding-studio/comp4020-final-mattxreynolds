@@ -78,6 +78,16 @@ const MIGRATIONS: string[] = [
      text TEXT NOT NULL,
      PRIMARY KEY (voyage_id, person_id, slot)
    );`,
+  // The Clock (#23, #49). cast_off_at is when the Voyage started; the Clock is
+  // a pure function of it, strikes and now(). outcome widens to launched and
+  // sank (a CHECK can't be altered, so the column is replaced); score_ms is
+  // set only by the server at a launch, and no intent can reach it.
+  `ALTER TABLE voyage ADD COLUMN cast_off_at INTEGER;
+   ALTER TABLE voyage ADD COLUMN score_ms INTEGER;
+   ALTER TABLE voyage ADD COLUMN outcome2 TEXT CHECK (outcome2 IN ('abandoned', 'launched', 'sank'));
+   UPDATE voyage SET outcome2 = outcome;
+   ALTER TABLE voyage DROP COLUMN outcome;
+   ALTER TABLE voyage RENAME COLUMN outcome2 TO outcome;`,
 ];
 
 function migrate(db: DatabaseSync): void {

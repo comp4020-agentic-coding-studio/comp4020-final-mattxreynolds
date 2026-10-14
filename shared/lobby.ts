@@ -40,7 +40,9 @@ export interface LobbySnapshot {
   started: boolean;
   /** Your Deck's view of the Draw, or null until the Voyage has started. */
   draw: PublicDraw | null;
-  /** True once either Player has ended the Voyage. */
+  /** Time left on the Clock as of this snapshot, the same on both Decks; null before cast off. */
+  clock: { secondsLeft: number } | null;
+  /** True once the Voyage is over: ended by a Player, launched or sunk. */
   ended: boolean;
   /** Where you last stood, or null. Yours alone: the partner's snapshot never carries it (#57). */
   pose: Pose | null;
@@ -51,7 +53,7 @@ export interface LobbySnapshot {
 /** One row of the profile screen's lists. */
 export interface VoyageListing extends VoyageView {
   /** Null while unfinished. */
-  outcome: "abandoned" | null;
+  outcome: "abandoned" | "launched" | "sank" | null;
 }
 
 export interface ProfileVoyages {

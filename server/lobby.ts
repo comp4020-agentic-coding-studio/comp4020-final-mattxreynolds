@@ -5,6 +5,7 @@ import { DECKS } from "../shared/intents.ts";
 import type { Notice } from "../shared/draw.ts";
 import type { LobbySnapshot, ProfileVoyages } from "../shared/lobby.ts";
 import { publicDraw } from "./draw.ts";
+import { clockView, settleClock } from "./clock.ts";
 import { draftsOf, poseOf } from "./low-trust.ts";
 
 export type Snapshot = LobbySnapshot;
@@ -54,7 +55,7 @@ export function voyagesOf(db: DatabaseSync, personId: string): ProfileVoyages {
     .prepare(
       "SELECT v.id, v.code, v.link_key, v.ship_name, v.outcome FROM voyage v JOIN voyage_person vp ON vp.voyage_id = v.id WHERE vp.person_id = ? ORDER BY v.created_at DESC, v.id",
     )
-    .all(personId) as { id: string; code: string; link_key: string; ship_name: string; outcome: "abandoned" | null }[];
+    .all(personId) as { id: string; code: string; link_key: string; ship_name: string; outcome: "abandoned" | "launched" | "sank" | null }[];
   const listings = rows.map((r) => ({ id: r.id, ship: r.ship_name, link: `/v/${r.link_key}`, code: r.code, outcome: r.outcome }));
   return { unfinished: listings.filter((v) => v.outcome === null), finished: listings.filter((v) => v.outcome !== null) };
 }
@@ -69,6 +70,8 @@ export function hasStarted(seats: Seat[]): boolean {
 }
 
 export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person): Snapshot {
+  const now = Date.now();
+  if (settleClock(db, voyage.id, now)) queueMicrotask(() => publish(voyage.id)); // due and nobody has looked yet: tell the other Deck too
   const seats = seatsOf(db, voyage.id);
   const yourDeck = seats.find((s) => s.person_id === you.id)?.deck ?? null;
   return {
@@ -88,6 +91,7 @@ export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person
     seq: voyageSeq(db, voyage.id),
     started: hasStarted(seats),
     draw: yourDeck ? publicDraw(db, voyage.id, yourDeck) : null,
+    clock: clockView(db, voyage.id, now),
     ended: isEnded(db, voyage.id),
     pose: poseOf(db, voyage.id, you.id),
     drafts: draftsOf(db, voyage.id, you.id),
