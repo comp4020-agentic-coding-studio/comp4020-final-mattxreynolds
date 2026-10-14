@@ -63,6 +63,21 @@ const MIGRATIONS: string[] = [
      password_hash TEXT NOT NULL,
      created_at INTEGER NOT NULL
    );`,
+  // Low-trust rows (#57): one pose and one draft per Player per Voyage,
+  // overwritten in place. Not events: nothing here is logged.
+  `CREATE TABLE pose (
+     voyage_id TEXT NOT NULL REFERENCES voyage(id),
+     person_id TEXT NOT NULL REFERENCES person(id),
+     x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL, yaw REAL NOT NULL, pitch REAL NOT NULL,
+     PRIMARY KEY (voyage_id, person_id)
+   );
+   CREATE TABLE keypad_draft (
+     voyage_id TEXT NOT NULL REFERENCES voyage(id),
+     person_id TEXT NOT NULL REFERENCES person(id),
+     slot TEXT NOT NULL,
+     text TEXT NOT NULL,
+     PRIMARY KEY (voyage_id, person_id, slot)
+   );`,
   // The Clock (#23, #49). cast_off_at is when the Voyage started; the Clock is
   // a pure function of it, strikes and now(). outcome widens to launched and
   // sank (a CHECK can't be altered, so the column is replaced); score_ms is

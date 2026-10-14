@@ -55,3 +55,26 @@ it("the Wheelhouse reads the mural, the Engine Room keys a code in: a wrong one 
   await expect.poll(() => host.getByTestId("hatch").innerText()).toMatch(/open/i);
   await expect.poll(() => partner.getByTestId("hatch").innerText()).toMatch(/open/i);
 });
+
+it("a half-typed keypad code is still there after the Engine Room reloads, and the Wheelhouse never sees it", async () => {
+  const host = await sailor();
+  await host.getByRole("button", { name: "Start a Voyage" }).click();
+  await host.getByTestId("voyage-link").waitFor();
+  const partner = await sailor((await host.getByTestId("voyage-link").innerText()).trim());
+  await expect.poll(() => host.getByTestId("player").count()).toBe(2);
+  await host.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).getByRole("button", { name: "Take" }).click();
+  await expect.poll(() => partner.getByTestId("deck-card").filter({ hasText: "Upper Deck" }).innerText()).toMatch(/held by/i);
+  await partner.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).getByRole("button", { name: "Take" }).click();
+  await expect.poll(() => host.getByTestId("deck-card").filter({ hasText: "Lower Deck" }).innerText()).toMatch(/held by/i);
+  await host.getByRole("button", { name: "Cast off" }).click();
+  await partner.getByRole("button", { name: "Cast off" }).click();
+
+  const field = () => partner.getByTestId("keypad").getByLabel("Code");
+  await field().waitFor();
+  await field().fill("48");
+  await partner.waitForTimeout(800); // the draft posts on a short debounce
+  await partner.reload();
+  await field().waitFor();
+  await expect.poll(() => field().inputValue()).toBe("48");
+  expect(await host.getByTestId("keypad").count()).toBe(0);
+});
