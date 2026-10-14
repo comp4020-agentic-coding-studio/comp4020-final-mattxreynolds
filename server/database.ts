@@ -99,6 +99,13 @@ const MIGRATIONS: string[] = [
      trims TEXT NOT NULL CHECK (json_valid(trims)),
      in_band_since INTEGER
    );`,
+  // Sail again (#61): the new Voyage a finished one led to, and who opened it.
+  // One row per finished Voyage, so both Players' taps land in the same lobby.
+  `CREATE TABLE sail_again (
+     from_voyage TEXT PRIMARY KEY REFERENCES voyage(id),
+     new_voyage TEXT NOT NULL REFERENCES voyage(id),
+     started_by TEXT NOT NULL REFERENCES person(id)
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {

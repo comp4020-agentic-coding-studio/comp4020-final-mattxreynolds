@@ -17,6 +17,8 @@ export interface SceneHandle {
   setStick(walk: Walk): void;
   /** "tap" turns a tap or click on the floor into a walk there; "direct" leaves walking to keys and the stick. */
   setMode(mode: ControlsMode): void;
+  /** Text for a thing's face: the Clue on the mural, the code typed so far on the keypad display. */
+  setScreen(which: "clue" | "code", text: string): void;
   dispose(): void;
 }
 
@@ -32,6 +34,33 @@ function box(w: number, h: number, d: number, color: number, x: number, y: numbe
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
   mesh.position.set(x, y, z);
   return mesh;
+}
+
+/** A face for a thing, drawn on a canvas texture; returns the plane and a way to change its text. */
+function face(t: Thing, text: string): { mesh: THREE.Mesh; draw: (text: string) => void } {
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(t.size[0] * 256);
+  cv.height = Math.round(t.size[1] * 256);
+  const ctx = cv.getContext("2d")!;
+  const texture = new THREE.CanvasTexture(cv);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const draw = (words: string): void => {
+    ctx.fillStyle = t.press ? "#e9dcc0" : "#f2ead6";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#1b1b1b";
+    ctx.textAlign = t.press || t.screen === "code" ? "center" : "left";
+    ctx.textBaseline = "middle";
+    const lines = t.press || t.screen === "code" ? [words] : words.split("\n");
+    const size = t.press || t.screen === "code" ? cv.height * 0.5 : Math.min((cv.height / Math.max(lines.length, 1)) * 0.7, cv.width / 14);
+    ctx.font = `bold ${size}px monospace`;
+    const x = t.press || t.screen === "code" ? cv.width / 2 : 12;
+    lines.forEach((line, i) => ctx.fillText(line, x, ((i + 0.5) * cv.height) / lines.length, cv.width - 24));
+    texture.needsUpdate = true;
+  };
+  draw(text);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.size[0] * 0.92, t.size[1] * 0.92), new THREE.MeshBasicMaterial({ map: texture }));
+  mesh.position.set(t.x, t.y, t.z + t.size[2] / 2 + 0.002);
+  return { mesh, draw };
 }
 
 /** Throws if the browser cannot make a WebGL context; the caller shows the 2D views instead. */
@@ -54,6 +83,14 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
 
   // Nothing marks a usable thing as usable (#33): stations and decoys are drawn alike.
   for (const t of room.things) scene.add(box(...t.size, 0x8a6a3a, t.x, t.y, t.z));
+  // Buttons and screens carry writing on their faces: key labels, the mural, the typed code.
+  const screens = new Map<string, (text: string) => void>();
+  for (const t of room.things) {
+    if (!t.press && !t.screen) continue;
+    const f = face(t, t.press ? t.press.toUpperCase() : "");
+    scene.add(f.mesh);
+    if (t.screen) screens.set(t.screen, f.draw);
+  }
 
   // The finale's controls carry a minus or plus and its read-outs show this Deck's half of the instrument (#55).
   const label = (text: string, w: number, h: number, size: number, ink: string, paper: string): THREE.CanvasTexture => {
@@ -70,18 +107,18 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     g.fillText(text, w / 2, h / 2);
     return new THREE.CanvasTexture(c);
   };
-  const face = (x: number, y: number, z: number, w: number, h: number, map: THREE.Texture): THREE.Mesh => {
+  const eastFace = (x: number, y: number, z: number, w: number, h: number, map: THREE.Texture): THREE.Mesh => {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map }));
     mesh.position.set(x, y, z);
     mesh.rotation.y = -Math.PI / 2; // faces west, into the Room from the east wall
     return mesh;
   };
   for (const t of room.things) {
-    if (t.control) scene.add(face(t.x - t.size[0] / 2 - 0.005, t.y, t.z, t.size[2], t.size[1], label(t.control.by < 0 ? "\u2212" : "+", 64, 64, 56, "#1b1208", "#d9a441")));
+    if (t.control) scene.add(eastFace(t.x - t.size[0] / 2 - 0.005, t.y, t.z, t.size[2], t.size[1], label(t.control.by < 0 ? "\u2212" : "+", 64, 64, 56, "#1b1208", "#d9a441")));
   }
   const displayFaces = room.displays.map((d) => {
     scene.add(box(...d.size, 0x15191e, d.x, d.y, d.z));
-    const screen = face(d.x - d.size[0] / 2 - 0.005, d.y, d.z, d.size[2], d.size[1], label("", 4, 4, 1, "#fff", "#0b1410"));
+    const screen = eastFace(d.x - d.size[0] / 2 - 0.005, d.y, d.z, d.size[2], d.size[1], label("", 4, 4, 1, "#fff", "#0b1410"));
     scene.add(screen);
     const shown = { text: "" };
     const draw = (text: string): void => {
@@ -256,6 +293,19 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
       if (at) centres[t.id] = [Math.round(at.x), Math.round(at.y)];
     }
     canvas.dataset.things = JSON.stringify(centres);
+    // and how big each thing's front face is on screen, in CSS px (width, height)
+    const sizes: Record<string, number[]> = {};
+    for (const t of room.things) {
+      const z = t.z + t.size[2] / 2;
+      const px = (x: number, y: number): THREE.Vector3 => new THREE.Vector3(x, y, z).project(camera);
+      const l = px(t.x - t.size[0] / 2, t.y);
+      const r = px(t.x + t.size[0] / 2, t.y);
+      const u = px(t.x, t.y + t.size[1] / 2);
+      const d = px(t.x, t.y - t.size[1] / 2);
+      if (Math.max(l.z, r.z, u.z, d.z) > 1) continue;
+      sizes[t.id] = [Math.round((Math.abs(r.x - l.x) / 2) * canvas.clientWidth), Math.round((Math.abs(u.y - d.y) / 2) * canvas.clientHeight)];
+    }
+    canvas.dataset.sizes = JSON.stringify(sizes);
   };
   raf = requestAnimationFrame(frame);
 
@@ -274,6 +324,9 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | 
     },
     setStick(walk) {
       stick = walk;
+    },
+    setScreen(which, text) {
+      screens.get(which)?.(text);
     },
     setMode(next) {
       mode = next;

@@ -54,6 +54,10 @@ export interface Thing {
   plaque?: string;
   /** A station that turns one dial of the finale while that Puzzle is live. */
   control?: Control;
+  /** A keypad button: the key it presses (a digit, "clear" or "enter"). */
+  press?: string;
+  /** A face the scene draws text on: the Clue on the mural, or the code typed so far. */
+  screen?: "clue" | "code";
   x: number;
   y: number;
   z: number;
@@ -122,6 +126,21 @@ const display = (id: string, show: Display["show"], index: number, y: number, wi
 });
 
 const FINALE_STAND: Stance = { x: 6.2, z: STAND_Z, yaw: -Math.PI / 2 };
+// The mural keypad's buttons (#53): a 3 by 4 grid on the north wall, each 0.4 m
+// square so it measures 44 px on a 390 px wide phone from the edge of reach.
+const KEYPAD_ROWS = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["clear", "0", "enter"]];
+const KEYPAD_BUTTONS: Thing[] = KEYPAD_ROWS.flatMap((row, r) =>
+  row.map((key, c): Thing => ({
+    id: `key-${key}`,
+    kind: "station",
+    slot: "opener",
+    press: key,
+    x: 2 + (c - 1) * 0.45,
+    y: 2.25 - r * 0.45,
+    z: 0.2,
+    size: [0.4, 0.4, 0.1],
+  })),
+);
 
 const WHEELHOUSE: Room = {
   ...COMMON,
@@ -130,7 +149,7 @@ const WHEELHOUSE: Room = {
   start: { x: 2, z: 5.5, yaw: 0 },
   blockers: [{ id: "helm", box: { minX: 3.2, maxX: 4.8, minZ: 2.8, maxZ: 3.6 }, height: 1.2 }, ...alcove("w")],
   things: [
-    { id: "mural", kind: "station", slot: "opener", x: 2, y: 1.6, z: 0.1, size: [2.4, 1.6, 0.1] },
+    { id: "mural", kind: "station", slot: "opener", screen: "clue", x: 2, y: 1.6, z: 0.1, size: [2.4, 1.6, 0.1] },
     { id: "chart-table", kind: "station", slot: "middle", x: 1, y: 1, z: 4.2, size: [1, 1, 1.6] },
     ...dialControls("turn-trim", "trim", 0.9),
     { id: "brass-barometer", kind: "decoy", plaque: "A brass barometer. It reads STORMY.", x: 0.1, y: 1.7, z: 2.5, size: [0.1, 0.4, 0.4] },
@@ -152,7 +171,8 @@ const ENGINE_ROOM: Room = {
   start: { x: 2, z: 5.5, yaw: 0 },
   blockers: [{ id: "boiler", box: { minX: 2.8, maxX: 4.8, minZ: 2.6, maxZ: 3.8 }, height: 2 }, ...alcove("e")],
   things: [
-    { id: "keypad", kind: "station", slot: "opener", x: 2, y: 1.4, z: 0.1, size: [0.5, 0.7, 0.1] },
+    { id: "keypad", kind: "station", slot: "opener", screen: "code", x: 2, y: 2.75, z: 0.1, size: [1.35, 0.4, 0.1] },
+    ...KEYPAD_BUTTONS,
     { id: "valve-bank", kind: "station", slot: "middle", x: 0.1, y: 1.2, z: 4.5, size: [0.2, 1.2, 1.6] },
     ...dialControls("turn-valve", "valve", 0.6),
     { id: "coal-crate", kind: "decoy", plaque: "A crate of coal, stencilled GLASGOW.", x: 6.5, y: 0.4, z: 6.4, size: [1, 0.8, 0.8] },
@@ -307,4 +327,11 @@ export function displayText(d: Display, view: InstrumentView | null, sinceMs = 0
   if (d.show === "gauge") return view.readings && view.trims ? `${view.readings[d.index]}  trim ${view.trims[d.index]}` : "";
   if (view.holdMs == null) return "Out of band";
   return `In band ${Math.floor(Math.min(10_000, view.holdMs + sinceMs) / 1000)} s of 10`;
+}
+
+/** The code on the keypad after a key: digits build it up to four, clear empties it, enter leaves it. */
+export function keypadAfter(code: string, key: string): string {
+  if (key === "clear") return "";
+  if (/^\d$/.test(key) && code.length < 4) return code + key;
+  return code;
 }
