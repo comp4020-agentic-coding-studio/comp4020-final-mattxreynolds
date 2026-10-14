@@ -55,6 +55,9 @@ const MIGRATIONS: string[] = [
   // Player ends it. Later outcomes (launched, sank) widen the CHECK.
   `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
    ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
+  // Where the Walker stands in the live blind navigator Puzzle, as JSON [x, y];
+  // NULL means the start.
+  `ALTER TABLE voyage ADD COLUMN walk_pos TEXT CHECK (walk_pos IS NULL OR json_valid(walk_pos));`,
   // Credentials live apart from the Person (ADR 0002). username_key is the
   // lower-cased username; password_hash is "salt:scrypt" in hex.
   `CREATE TABLE account (

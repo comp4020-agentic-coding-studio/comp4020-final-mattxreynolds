@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { DECKS, intentSchema, type DeckName, type Intent } from "../shared/intents.ts";
-import { judge, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
+import { judge, judgeStep, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
 import { hasStarted, isEnded, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
 import type { Person } from "./people.ts";
 
@@ -61,6 +61,8 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   } else if (intent.kind === "cast-off") {
     db.prepare("UPDATE voyage_person SET cast_off = 1 WHERE voyage_id = ? AND person_id = ?").run(voyageId, you.id);
     if (hasStarted(seatsOf(db, voyageId))) storeDraw(db, voyageId); // generated once, at Voyage start
+  } else if (intent.kind === "walk-step") {
+    result = judgeStep(db, voyageId, intent.slot, intent.dir);
   } else {
     result = judge(db, voyageId, intent.slot, intent.answer);
   }
@@ -91,6 +93,10 @@ function conflictWith(
   if (mine.deck === null) return refuse(409, "no Deck chosen", "choose a Deck before casting off");
   if (intent.kind === "submit") {
     const why = submitConflict(db, voyageId, intent.deck, intent.slot);
+    return why ? refuse(409, why.reason, why.message) : null;
+  }
+  if (intent.kind === "walk-step") {
+    const why = submitConflict(db, voyageId, intent.deck, intent.slot, intent.dir);
     return why ? refuse(409, why.reason, why.message) : null;
   }
   return null;
