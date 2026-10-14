@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { DECKS, intentSchema, type DeckName, type Intent } from "../shared/intents.ts";
 import { judge, storeDraw, submitConflict, type SubmitResult } from "./draw.ts";
 import { settleClock } from "./clock.ts";
+import { armFinale, finaleConflict, lockIn, settleFinale, turnDial } from "./finale.ts";
 import { hasStarted, isEnded, publish, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
 import type { Person } from "./people.ts";
 
@@ -52,6 +53,10 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
 
   // the Clock is compared lazily: a ship that is due to sink sinks as soon as anyone acts
   if (settleClock(db, voyageId, Date.now())) publish(voyageId);
+  // likewise a hold that has run its ten seconds launches as soon as anyone acts
+  const late = settleFinale(db, voyageId, Date.now());
+  if (late?.kind === "launched") publish(voyageId, { event: "bell", data: { slot: "finale" } });
+  else if (late) publish(voyageId);
   if (isEnded(db, voyageId)) return refuse(409, "voyage ended", "this Voyage has ended");
 
   const parsed = intentSchema.safeParse(raw);
@@ -59,7 +64,9 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
     const conflict = conflictWith(db, voyageId, parsed.data, mine, seats);
     if (conflict) return conflict;
   }
-  if (typeof body.seq === "number" && body.seq !== voyageSeq(db, voyageId)) {
+  // dial turns are exempt: both Decks turn at once, and none may be lost to a stale seq (#24)
+  const isDial = body.kind === "turn-valve" || body.kind === "turn-trim";
+  if (!isDial && typeof body.seq === "number" && body.seq !== voyageSeq(db, voyageId)) {
     return refuse(409, "stale", "the ship shifted, try again");
   }
   if (!parsed.success) return refuse(400, "bad body", "that is not a valid intent");
@@ -72,9 +79,19 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
   if (intent.kind === "choose-deck" && mine.deck === intent.deck) {
     return { ok: true, changed: false, started: hasStarted(seats) };
   }
+  if (intent.kind === "turn-valve" || intent.kind === "turn-trim") {
+    // a dial is an overwritten row like pose, so it does not move seq
+    db.exec("BEGIN IMMEDIATE");
+    const moved = turnDial(db, voyageId, intent, Date.now());
+    db.exec("COMMIT");
+    if (moved) armFinale(db, voyageId);
+    return { ok: true, changed: moved, started: true };
+  }
   db.exec("BEGIN IMMEDIATE");
   let result: SubmitResult | undefined;
-  if (intent.kind === "end-voyage") {
+  if (intent.kind === "lock-in") {
+    result = lockIn(db, voyageId, Date.now());
+  } else if (intent.kind === "end-voyage") {
     db.prepare("UPDATE voyage SET outcome = 'abandoned', ended_at = ? WHERE id = ?").run(Date.now(), voyageId);
   } else if (intent.kind === "choose-deck") {
     db.prepare("UPDATE voyage_person SET deck = ? WHERE voyage_id = ? AND person_id = ?").run(intent.deck, voyageId, you.id);
@@ -116,6 +133,10 @@ function conflictWith(
   if (intent.kind === "submit") {
     const why = submitConflict(db, voyageId, intent.deck, intent.slot);
     return why ? refuse(409, why.reason, why.message) : null;
+  }
+  if (intent.kind === "turn-valve" || intent.kind === "turn-trim" || intent.kind === "lock-in") {
+    const why = finaleConflict(db, voyageId, intent);
+    return why ? refuse(why.status, why.reason, why.message) : null;
   }
   return null;
 }
