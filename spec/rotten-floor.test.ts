@@ -100,16 +100,23 @@ it("a trapdoor is one Strike that names no Player, returns the Walker to the sta
 
   const listener = await openSse(new URL(`/api/voyages/${voyage.id}/events`, server.url), partner.cookie);
   await listener.stream.next();
-  // step back toward the start then off the route: from the route's first tile, find a direction that is a trapdoor
-  const [x0, y0] = plan.start;
+  // walk on along the route until a tile borders a trapdoor (the layout is random, so the
+  // route's first tile may not), then step onto it
   const delta: Record<Dir, [number, number]> = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] };
-  const first = delta[route[0]];
-  const here = [x0 + first[0], y0 + first[1]];
-  const bad = DIRS.find((d) => {
-    const x = here[0] + delta[d][0];
-    const y = here[1] + delta[d][1];
-    return x >= 0 && y >= 0 && x < plan.width && y < plan.height && !plan.safe.has(`${x},${y}`);
-  })!;
+  const trapdoorFrom = ([hx, hy]: [number, number]) =>
+    DIRS.find((d) => {
+      const x = hx + delta[d][0];
+      const y = hy + delta[d][1];
+      return x >= 0 && y >= 0 && x < plan.width && y < plan.height && !plan.safe.has(`${x},${y}`);
+    });
+  let here: [number, number] = [plan.start[0] + delta[route[0]][0], plan.start[1] + delta[route[0]][1]];
+  let bad = trapdoorFrom(here);
+  for (let i = 1; bad === undefined && i < route.length - 1; i++) {
+    expect((await step(voyage.id, host, route[i])).status).toBe(200);
+    here = [here[0] + delta[route[i]][0], here[1] + delta[route[i]][1]];
+    bad = trapdoorFrom(here);
+  }
+  expect(bad).toBeDefined();
   expect((await step(voyage.id, host, bad)).status).toBe(200);
 
   const notice = parseFrame(await listener.stream.next());

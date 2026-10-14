@@ -83,14 +83,20 @@ describe("greybox Rooms in 3D", () => {
     const { host } = await castOff();
     const prompt = host.getByTestId("look-prompt");
     await prompt.waitFor();
-    await expect.poll(() => prompt.innerText()).toMatch(/click to look around/i);
+    // Software WebGL starves the page under a loaded run, so one round trip can outlast
+    // expect.poll's 1 s default.
+    const poll = { timeout: 15_000 };
+    await expect.poll(() => prompt.innerText(), poll).toMatch(/click to look around/i);
     await prompt.click();
-    await expect.poll(() => prompt.innerText()).toMatch(/esc to release/i);
+    await expect.poll(() => prompt.innerText(), poll).toMatch(/esc to release/i);
     expect(await host.evaluate(() => document.pointerLockElement !== null)).toBe(true);
-    await prompt.click();
-    await expect.poll(() => prompt.innerText()).toMatch(/click to look around/i);
+    // While the mouse is locked, Playwright's mouse click never completes and its locator
+    // calls can stall, so click the prompt from the page, on the next task so the release
+    // does not hold up evaluate's reply.
+    await host.evaluate(() => void setTimeout(() => document.querySelector<HTMLElement>("[data-testid=look-prompt]")!.click()));
+    await expect.poll(() => prompt.innerText(), poll).toMatch(/click to look around/i);
     expect(await host.evaluate(() => document.pointerLockElement === null)).toBe(true);
-    await expect.poll(() => prompt.isVisible()).toBe(true);
+    await expect.poll(() => prompt.isVisible(), poll).toBe(true);
   }, 60_000);
 
   it("with WebGL unavailable the 2D views carry the Voyage", async () => {
