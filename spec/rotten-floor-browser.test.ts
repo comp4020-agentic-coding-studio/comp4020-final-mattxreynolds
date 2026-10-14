@@ -1,8 +1,7 @@
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
-import { codeFromClue } from "./helpers/mural.ts";
 import { pageFor } from "./helpers/browser.ts";
-import { underwayWith } from "./helpers/voyage.ts";
+import { underwayAtMiddle } from "./helpers/voyage.ts";
 import { parsePlan, routes } from "./helpers/rotten-floor.ts";
 
 const baseUrl = inject("baseUrl");
@@ -16,14 +15,9 @@ afterAll(async () => {
 }, 30_000);
 
 it("the Engine Room reads out the trapdoor plan and the Wheelhouse walks it: a trapdoor is a Strike back at the start, the plan's route opens the way on both Decks", async () => {
-  const l = await underwayWith(baseUrl, "mural"); // the Draw picks the opener at random
+  const l = await underwayAtMiddle(baseUrl, "rotten-floor"); // the Draw picks the middle at random (#63); the opener is solved through the API
   const host = await pageFor(browser, baseUrl, l.voyage, l.host);
   const partner = await pageFor(browser, baseUrl, l.voyage, l.partner);
-
-  // the opener first
-  const code = codeFromClue(await host.getByTestId("mural").innerText());
-  await partner.getByTestId("keypad").getByLabel("Code").fill(code);
-  await partner.getByTestId("keypad").getByRole("button", { name: "Enter" }).click();
 
   const planText = await partner.getByTestId("plan").innerText();
   expect(await host.getByTestId("plan").count()).toBe(0);

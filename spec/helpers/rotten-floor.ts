@@ -23,6 +23,15 @@ export function parsePlan(text: string): PlanGrid {
     cells.forEach((c, col) => c === "S" && safe.add(`${col},${row}`));
   }
   const start = text.match(/Start on ([A-Z])(\d+)/)!;
+  if (safe.size === 0) {
+    // the bilge survey (#63) names the sound plates row by row instead of drawing a grid
+    const size = text.match(/(\d+) plates wide.*?(\d+) rows deep/s)!;
+    width = Number(size[1]);
+    height = Number(size[2]);
+    for (const line of text.matchAll(/^In row \d+, only (.+) bear weight\.$/gm)) {
+      for (const m of line[1].matchAll(/([A-Z])(\d+)/g)) safe.add(`${m[1].charCodeAt(0) - 65},${Number(m[2]) - 1}`);
+    }
+  }
   return { safe, start: [start[1].charCodeAt(0) - 65, Number(start[2]) - 1], width, height };
 }
 
