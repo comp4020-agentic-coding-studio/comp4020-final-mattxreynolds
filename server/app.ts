@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { createGuest, personForToken, renamePerson, type Person } from "./people.ts";
+import { createGuest, endSession, personForToken, recordSignInFailure, renamePerson, signIn, signInThrottled, upgradeToAccount, type Person } from "./people.ts";
 import { sanitisePlayerName } from "./player-name.ts";
 import type { Notice } from "../shared/draw.ts";
 import { logEvent } from "./events.ts";
@@ -38,6 +38,27 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     return c.json(person);
   });
 
+  // Sign-in is the one route that needs no session. The username is a
+  // credential, so logs carry the public id of the Account only, never a
+  // username or password.
+  api.post("/signin", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { username?: unknown; password?: unknown } | null;
+    const username = typeof body?.username === "string" ? body.username.slice(0, 64) : "";
+    if (signInThrottled(username)) {
+      logEvent(db, { action: "signin.refused", detail: { reason: "throttled", status: 429 } });
+      return c.json({ error: "too many attempts, wait a minute" }, 429);
+    }
+    const found = await signIn(db, username, body?.password);
+    if (!found) {
+      recordSignInFailure(username);
+      logEvent(db, { action: "signin.failed", detail: { status: 401 } });
+      return c.json({ error: "wrong username or password" }, 401);
+    }
+    issue(c, found.token);
+    logEvent(db, { actor: found.person.id, actorName: found.person.name, action: "signin.ok" });
+    return c.json(found.person);
+  });
+
   // the refusal order starts here: a known Person, or 401
   api.use("*", async (c, next) => {
     const token = getCookie(c, COOKIE);
@@ -55,6 +76,29 @@ export function createApi(db: DatabaseSync): Hono<Env> {
   });
 
   api.get("/me", (c) => c.json(c.get("person")));
+
+  // A Guest becomes an Account in place, keeping the public id and history.
+  api.post("/account", async (c) => {
+    const you = c.get("person");
+    const body = (await c.req.json().catch(() => null)) as { username?: unknown; password?: unknown } | null;
+    const result = await upgradeToAccount(db, you, body?.username, body?.password);
+    if (!result.ok) {
+      const status = result.reason === "invalid" ? 400 : 409;
+      logEvent(db, { actor: you.id, actorName: you.name, action: "account.refused", detail: { reason: result.reason, status } });
+      return c.json({ error: `account refused: ${result.reason}` }, status);
+    }
+    logEvent(db, { actor: you.id, actorName: you.name, action: "account.created" });
+    return c.json(result.person);
+  });
+
+  // Ends only this browser's session; the Account's other sessions stay.
+  api.post("/signout", (c) => {
+    const you = c.get("person");
+    endSession(db, getCookie(c, COOKIE)!);
+    deleteCookie(c, COOKIE, { path: "/" });
+    logEvent(db, { actor: you.id, actorName: you.name, action: "signout" });
+    return c.json({ ok: true });
+  });
 
   api.put("/me/name", async (c) => {
     const you = c.get("person");
