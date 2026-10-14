@@ -3,7 +3,7 @@
 // nothing from Svelte. Walking is the pure box check in shared/rooms.ts.
 import * as THREE from "three";
 import type { Slot } from "../shared/draw.ts";
-import { moveInRoom, type Room } from "../shared/rooms.ts";
+import { moveInRoom, pickThing, type Room, type Thing } from "../shared/rooms.ts";
 
 export interface SceneHandle {
   canvas: HTMLCanvasElement;
@@ -25,7 +25,7 @@ function box(w: number, h: number, d: number, color: number, x: number, y: numbe
 }
 
 /** Throws if the browser cannot make a WebGL context; the caller shows the 2D views instead. */
-export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
+export function buildScene(room: Room, opened: ReadonlySet<Slot>, onUse: (thing: Thing) => void = () => {}): SceneHandle {
   const canvas = document.createElement("canvas");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -91,6 +91,26 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     me.yaw -= e.movementX * LOOK_SPEED;
     me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch - e.movementY * LOOK_SPEED));
   };
+  // A press on the canvas uses the nearest thing within 22 px that is in reach and in front (#52). With the
+  // mouse captured the press is at the middle of the view. A miss does nothing at all.
+  const thingCentres = new Map<string, THREE.Vector3>(room.things.map((t) => [t.id, new THREE.Vector3(t.x, t.y, t.z)]));
+  const screenOf = (id: string): { x: number; y: number } | null => {
+    const v = thingCentres.get(id)!.clone().project(camera);
+    if (v.z > 1) return null;
+    return { x: ((v.x + 1) / 2) * canvas.clientWidth, y: ((1 - v.y) / 2) * canvas.clientHeight };
+  };
+  const click = (e: MouseEvent): void => {
+    const rect = canvas.getBoundingClientRect();
+    const locked = document.pointerLockElement === canvas;
+    const px = locked ? canvas.clientWidth / 2 : e.clientX - rect.left;
+    const py = locked ? canvas.clientHeight / 2 : e.clientY - rect.top;
+    const hit = pickThing(room, me, (t) => {
+      const at = screenOf(t.id);
+      return at ? Math.hypot(at.x - px, at.y - py) : Infinity;
+    });
+    if (hit) onUse(hit);
+  };
+  canvas.addEventListener("click", click);
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
   window.addEventListener("blur", blur);
@@ -120,6 +140,13 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     canvas.dataset.frames = String(frames);
     canvas.dataset.x = me.x.toFixed(3);
     canvas.dataset.z = me.z.toFixed(3);
+    // where each thing is on screen, in CSS px from the canvas corner: a test seam, drawn nowhere
+    const centres: Record<string, number[]> = {};
+    for (const t of room.things) {
+      const at = screenOf(t.id);
+      if (at) centres[t.id] = [Math.round(at.x), Math.round(at.y)];
+    }
+    canvas.dataset.things = JSON.stringify(centres);
   };
   raf = requestAnimationFrame(frame);
 
@@ -131,6 +158,7 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     },
     dispose() {
       cancelAnimationFrame(raf);
+      canvas.removeEventListener("click", click);
       observer.disconnect();
       window.removeEventListener("keydown", keydown);
       window.removeEventListener("keyup", keyup);
