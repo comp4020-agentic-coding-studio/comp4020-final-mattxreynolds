@@ -8,17 +8,30 @@
     "check": "pnpm typecheck && pnpm test",
     "check:evidence": "node scripts/check-evidence.ts",
     "test": "vitest run",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "build": "vite build",
+    "start": "node server/index.ts"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^24.0.0",
+    "@types/three": "0.186.0",
     "jsdom": "^30.1.0",
     "playwright": "1.64.0",
+    "svelte": "^5.57.2",
     "typescript": "^6.0.3",
+    "vite": "^8.3.0",
     "vitest": "^5.0.1"
   },
   "engines": {
     "pnpm": ">=11"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "hono": "^4.13.13",
+    "marked": "^18.1.1",
+    "three": "0.186.0",
+    "zod": "^4.6.7"
   }
 }

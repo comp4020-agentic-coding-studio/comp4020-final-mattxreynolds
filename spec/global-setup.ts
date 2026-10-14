@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import type { TestProject } from "vitest/node";
 
 declare module "vitest" {
@@ -28,6 +29,12 @@ export default async function setup(project: TestProject): Promise<void> {
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
+
+  // Second servers (spec/helpers/second-server.ts) run server/ from source and
+  // serve dist/, which only the image build makes. Build it here so they serve
+  // the current client: in CI there is no dist/ at all, and locally a stale one
+  // would test old code.
+  execFileSync("pnpm", ["exec", "vite", "build", "--logLevel", "error"], { stdio: "inherit" });
 
   project.provide("baseUrl", baseUrl);
 }
