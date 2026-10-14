@@ -1,7 +1,10 @@
 {
-  // Covers the supplied harness (spec/, scripts/); widen `include` if your app
-  // is TypeScript and you want `pnpm typecheck` to cover it too.
+  // Covers the harness (spec/, scripts/, .claude/hooks/) and the app's three
+  // folders (ADR 0007). Node runs the .ts source directly by stripping types
+  // (ADR 0003), so only erasable syntax is allowed: no enums, namespaces or
+  // parameter properties.
   "compilerOptions": {
+    "erasableSyntaxOnly": true,
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -16,5 +19,5 @@
     "moduleDetection": "force",
     "verbatimModuleSyntax": true
   },
-  "include": ["*.ts", "spec", "scripts"]
+  "include": ["*.ts", "spec", "scripts", ".claude/hooks", "server", "client", "shared"]
 }

@@ -21,6 +21,7 @@ mise.local.toml
 .agents
 skills-lock.json
 CLAUDE.md
+CODING_STANDARDS.md
 AGENTS.md
 GLOSSARY.md
 GLOSSARY-MAP.md
