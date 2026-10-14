@@ -25,6 +25,8 @@ export const intentSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("turn-trim"), seq: seq.optional(), deck: z.enum(DECKS), index: z.number().int().min(0).max(9), by: z.union([z.literal(1), z.literal(-1)]) }),
   // An explicit "lock in" on the instrument: off target it is a Strike.
   z.strictObject({ kind: z.literal("lock-in"), seq, deck: z.enum(DECKS) }),
+  // Using a thing in the scene (#52): never a Strike, never a state change, so seq is optional.
+  z.strictObject({ kind: z.literal("examine"), seq: seq.optional(), thing: z.string().min(1).max(60) }),
   // One step of the Walker (blind navigator Puzzles). The server decides what the step does.
   z.strictObject({ kind: z.literal("walk-step"), seq, deck: z.enum(DECKS), slot: z.enum(SLOTS), dir: z.enum(WALK_DIRS) }),
   // Ending needs no seq: either Player may stop at any state, from the profile

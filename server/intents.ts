@@ -4,10 +4,11 @@ import { judge, judgeStep, storeDraw, submitConflict, type SubmitResult } from "
 import { settleClock } from "./clock.ts";
 import { armFinale, finaleConflict, lockIn, settleFinale, turnDial } from "./finale.ts";
 import { hasStarted, isEnded, publish, seatsOf, voyageById, voyageSeq } from "./lobby.ts";
+import { roomForDeck } from "../shared/rooms.ts";
 import type { Person } from "./people.ts";
 
 export type Outcome =
-  | { ok: true; changed: boolean; started: boolean; ended?: boolean; result?: SubmitResult }
+  | { ok: true; changed: boolean; started: boolean; ended?: boolean; examined?: string; result?: SubmitResult }
   | { ok: false; status: 403 | 409 | 400 | 429; reason: string; message: string; offer?: DeckName };
 
 const refuse = (status: 403 | 409 | 400 | 429, reason: string, message: string, offer?: DeckName): Outcome => ({
@@ -86,6 +87,13 @@ export function applyIntent(db: DatabaseSync, voyageId: string, you: Person, raw
     db.exec("COMMIT");
     if (moved) armFinale(db, voyageId);
     return { ok: true, changed: moved, started: true };
+  }
+  if (intent.kind === "examine") {
+    // an examine changes nothing: no seq move, no Strike; the caller logs it
+    if (!mine.deck || !roomForDeck(mine.deck).things.some((t) => t.id === intent.thing)) {
+      return refuse(400, "no such thing", "there is nothing like that in this Room");
+    }
+    return { ok: true, changed: false, started: true, examined: intent.thing };
   }
   db.exec("BEGIN IMMEDIATE");
   let result: SubmitResult | undefined;

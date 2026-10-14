@@ -212,6 +212,9 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       });
       return c.json({ error: outcome.message, offer: outcome.offer }, outcome.status);
     }
+    if (outcome.examined) {
+      logEvent(db, { voyageId, actor: you.id, actorName: you.name, action: "intent.examine", detail: { thing: outcome.examined } });
+    }
     if (outcome.changed) {
       const { result } = outcome;
       if (result) {
