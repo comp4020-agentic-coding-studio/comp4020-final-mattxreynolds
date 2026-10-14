@@ -16,6 +16,11 @@
   let voyages: ProfileVoyages = $state({ unfinished: [], finished: [] });
   // the Voyage whose "End the Voyage" is awaiting its confirm
   let confirming: string | null = $state(null);
+  // accounts: the create-account and sign-in forms
+  let signingIn = $state(false);
+  let username = $state("");
+  let password = $state("");
+  let accountProblem = $state("");
 
   $effect(() => { if (person && !nameDraft) nameDraft = person.name; });
 
@@ -43,6 +48,11 @@
       const next = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
       // either Player may end the Voyage, so the other's ship ends too
       if (next.ended) return void goHome();
+      // a reload restores the half-typed code once, from this Player's own snapshot (#57)
+      if (!draftRestored) {
+        draftRestored = true;
+        code4 = next.drafts.opener ?? "";
+      }
       snapshot = next;
     });
     es.addEventListener("strike", () => (strikeNote = "A wrong answer. The ship groans."));
@@ -73,6 +83,7 @@
   function enter(voyage: VoyageView): void {
     history.replaceState(null, "", voyage.link);
     screen = "lobby";
+    draftRestored = false;
     watch(voyage);
   }
 
@@ -80,6 +91,42 @@
     const res = await api<PersonView>("/api/guest");
     person = res.data;
     await goHome();
+  }
+
+  async function createAccount(): Promise<void> {
+    accountProblem = "";
+    const res = await api<PersonView>("/api/account", { username, password });
+    password = "";
+    if (!res.ok) {
+      accountProblem =
+        res.status === 409 ? "That username is taken." : "Use 3 to 20 letters, digits, - or _, and a password of at least 8 characters.";
+      return;
+    }
+    person = res.data;
+    username = "";
+  }
+
+  async function signIn(): Promise<void> {
+    accountProblem = "";
+    const res = await api<PersonView>("/api/signin", { username, password });
+    password = "";
+    if (!res.ok) {
+      accountProblem = res.status === 429 ? "Too many attempts. Wait a minute." : "Wrong username or password.";
+      return;
+    }
+    person = res.data;
+    username = "";
+    signingIn = false;
+    nameDraft = "";
+    await goHome();
+  }
+
+  async function signOut(): Promise<void> {
+    await api("/api/signout", {});
+    person = null;
+    nameDraft = "";
+    voyages = { unfinished: [], finished: [] };
+    screen = "first";
   }
 
   async function rename(): Promise<void> {
@@ -148,6 +195,17 @@
   }
 
   let code4 = $state("");
+  let draftRestored = false;
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Low-trust and fire-and-forget: no seq, no refusal handling, and it never touches state (#57).
+  function saveDraft(): void {
+    clearTimeout(draftTimer);
+    const text = code4;
+    const id = snapshot?.voyage.id;
+    if (!id) return;
+    draftTimer = setTimeout(() => void api(`/api/voyages/${id}/intents`, { kind: "keypad-draft", slot: "opener", text }), 250);
+  }
   let strikeNote = $state("");
   let bellNote = $state("");
 
@@ -162,7 +220,10 @@
       seq: snapshot.seq,
     });
     intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
-    if (res.ok) code4 = "";
+    if (res.ok) {
+      code4 = "";
+      saveDraft();
+    }
   }
 
   async function copy(text: string): Promise<void> {
@@ -190,12 +251,32 @@
     <h1>Escape the sinking ship</h1>
     <p>Two of you, sealed on separate Decks. Each Deck holds the Clues for the other's Puzzles, and talking out loud is the only channel between you.</p>
     <button class="primary" onclick={playAsGuest}>Play as guest</button>
+    <button onclick={() => (signingIn = !signingIn)}>Sign in</button>
+    {#if signingIn}
+      <form onsubmit={(e) => { e.preventDefault(); void signIn(); }}>
+        <label>Username <input bind:value={username} autocomplete="username" maxlength="20" /></label>
+        <label>Password <input type="password" bind:value={password} autocomplete="current-password" /></label>
+        <button type="submit">Sign in</button>
+      </form>
+      {#if accountProblem}<p role="alert">{accountProblem}</p>{/if}
+    {/if}
   {:else if screen === "profile" && person}
     <form onsubmit={(e) => { e.preventDefault(); void rename(); }}>
       <label>Player name <input data-testid="player-name" bind:value={nameDraft} maxlength="20" /></label>
       <button type="submit">Save</button>
     </form>
     {#if nameProblem}<p role="alert">{nameProblem}</p>{/if}
+    {#if person.account}
+      <button onclick={signOut}>Sign out</button>
+    {:else}
+      <form onsubmit={(e) => { e.preventDefault(); void createAccount(); }}>
+        <p>Keep your Voyages from any browser: create an Account. No email, and no password reset.</p>
+        <label>Username <input bind:value={username} autocomplete="username" maxlength="20" /></label>
+        <label>Password <input type="password" bind:value={password} autocomplete="new-password" /></label>
+        <button type="submit">Create account</button>
+      </form>
+      {#if accountProblem}<p role="alert">{accountProblem}</p>{/if}
+    {/if}
     <section>
       <h2>Unfinished Voyages</h2>
       {#each voyages.unfinished as v (v.id)}
@@ -251,7 +332,7 @@
               <pre data-testid="mural">{p.clue}</pre>
             {:else if p.role === "lock"}
               <form data-testid="keypad" onsubmit={(e) => { e.preventDefault(); void enterCode(); }}>
-                <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} disabled={p.status !== "live"} /></label>
+                <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} oninput={saveDraft} disabled={p.status !== "live"} /></label>
                 <button type="submit" disabled={p.status !== "live"}>Enter</button>
               </form>
             {/if}

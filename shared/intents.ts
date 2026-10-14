@@ -21,3 +21,25 @@ export const intentSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type Intent = z.infer<typeof intentSchema>;
+
+// The two low-trust kinds (#57): stored as overwritten rows, never logged, and
+// exempt from the 409 checks, so `seq` is accepted but never compared. They
+// are parsed apart from intentSchema so no handler for a real intent sees them.
+const num = z.number().finite();
+export const poseSchema = z.strictObject({
+  kind: z.literal("pose"),
+  seq: seq.optional(),
+  x: num,
+  y: num,
+  z: num,
+  yaw: num,
+  pitch: num,
+});
+export const keypadDraftSchema = z.strictObject({
+  kind: z.literal("keypad-draft"),
+  seq: seq.optional(),
+  slot: z.enum(SLOTS),
+  text: z.string().regex(/^\d{0,4}$/),
+});
+export const lowTrustSchema = z.discriminatedUnion("kind", [poseSchema, keypadDraftSchema]);
+export type Pose = Omit<z.infer<typeof poseSchema>, "kind" | "seq">;

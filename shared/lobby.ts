@@ -1,10 +1,12 @@
 // Wire types for the lobby (ADR 0007: shared holds types only).
-import type { PublicDraw } from "./draw.ts";
-import type { DeckName } from "./intents.ts";
+import type { PublicDraw, Slot } from "./draw.ts";
+import type { DeckName, Pose } from "./intents.ts";
 
 export interface PersonView {
   id: string;
   name: string;
+  /** True once the Person has an Account; absent for a Guest. */
+  account?: true;
 }
 
 export interface VoyageView {
@@ -40,6 +42,10 @@ export interface LobbySnapshot {
   draw: PublicDraw | null;
   /** True once either Player has ended the Voyage. */
   ended: boolean;
+  /** Where you last stood, or null. Yours alone: the partner's snapshot never carries it (#57). */
+  pose: Pose | null;
+  /** Your half-typed keypad codes by slot. Yours alone (#57). */
+  drafts: Partial<Record<Slot, string>>;
 }
 
 /** One row of the profile screen's lists. */
