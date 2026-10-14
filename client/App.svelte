@@ -37,6 +37,8 @@
       retry = 0;
       snapshot = JSON.parse((e as MessageEvent).data) as LobbySnapshot;
     });
+    es.addEventListener("strike", () => (strikeNote = "A wrong answer. The ship groans."));
+    es.addEventListener("bell", () => (bellNote = "A bell rings. A hatch swings open."));
     es.onerror = () => {
       if (es.readyState !== EventSource.CLOSED) return;
       setTimeout(() => source === es && watch(voyage), Math.min(1000 * 2 ** retry++, 15000));
@@ -96,6 +98,24 @@
     offer = res.ok ? null : res.data?.offer ?? null;
   }
 
+  let code4 = $state("");
+  let strikeNote = $state("");
+  let bellNote = $state("");
+
+  // The server decides: this only sends the digits. A Strike or a solve comes back as a notice on the stream.
+  async function enterCode(): Promise<void> {
+    if (!snapshot?.yourDeck) return;
+    const res = await api<{ error: string }>(`/api/voyages/${snapshot.voyage.id}/intents`, {
+      kind: "submit",
+      deck: snapshot.yourDeck,
+      slot: "opener",
+      answer: code4,
+      seq: snapshot.seq,
+    });
+    intentNote = res.ok ? "" : res.data?.error ?? "The ship shifted, try again.";
+    if (res.ok) code4 = "";
+  }
+
   async function copy(text: string): Promise<void> {
     await navigator.clipboard?.writeText(text).catch(() => {});
     copied = true;
@@ -138,7 +158,26 @@
     {#if snapshot.started && snapshot.yourDeck}
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
-        <p>Nothing here yet.</p>
+        <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0}</p>
+        {#if strikeNote}<p role="status">{strikeNote}</p>{/if}
+        {#if bellNote}<p role="status">{bellNote}</p>{/if}
+        {#each snapshot.draw?.puzzles ?? [] as p}
+          {#if p.slot === "opener"}
+            <article data-testid="hatch">
+              The hatch: {p.status === "solved" ? "open" : p.status === "live" ? "bolted" : "dark"}
+            </article>
+            {#if p.role === "clue" && p.clue}
+              <pre data-testid="mural">{p.clue}</pre>
+            {:else if p.role === "lock"}
+              <form data-testid="keypad" onsubmit={(e) => { e.preventDefault(); void enterCode(); }}>
+                <label>Code <input inputmode="numeric" maxlength="4" bind:value={code4} disabled={p.status !== "live"} /></label>
+                <button type="submit" disabled={p.status !== "live"}>Enter</button>
+              </form>
+            {/if}
+          {:else}
+            <p data-testid="dead-station">A {p.slot} station, dead for now.</p>
+          {/if}
+        {/each}
       </section>
     {:else}
     <section>

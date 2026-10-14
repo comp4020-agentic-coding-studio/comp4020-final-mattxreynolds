@@ -2,7 +2,9 @@ import type { DatabaseSync } from "node:sqlite";
 import type { Person } from "./people.ts";
 import type { VoyageSummary } from "./voyages.ts";
 import { DECKS } from "../shared/intents.ts";
+import type { Notice } from "../shared/draw.ts";
 import type { LobbySnapshot } from "../shared/lobby.ts";
+import { publicDraw } from "./draw.ts";
 
 export type Snapshot = LobbySnapshot;
 
@@ -52,6 +54,7 @@ export function hasStarted(seats: Seat[]): boolean {
 
 export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person): Snapshot {
   const seats = seatsOf(db, voyage.id);
+  const yourDeck = seats.find((s) => s.person_id === you.id)?.deck ?? null;
   return {
     voyage,
     you,
@@ -65,9 +68,10 @@ export function snapshotFor(db: DatabaseSync, voyage: VoyageSummary, you: Person
         castOff: holder?.cast_off === 1,
       };
     }),
-    yourDeck: seats.find((s) => s.person_id === you.id)?.deck ?? null,
+    yourDeck,
     seq: voyageSeq(db, voyage.id),
     started: hasStarted(seats),
+    draw: yourDeck ? publicDraw(db, voyage.id, yourDeck) : null,
   };
 }
 
@@ -95,9 +99,9 @@ export function markConnected(voyageId: string, personId: string): () => void {
 
 // Open streams per Voyage. A change calls every listener, and each one sends
 // its own Person a fresh full snapshot, so SSE stays the only source of state.
-const listeners = new Map<string, Set<() => void>>();
+const listeners = new Map<string, Set<(notice?: Notice) => void>>();
 
-export function subscribe(voyageId: string, listener: () => void): () => void {
+export function subscribe(voyageId: string, listener: (notice?: Notice) => void): () => void {
   let set = listeners.get(voyageId);
   if (!set) listeners.set(voyageId, (set = new Set()));
   set.add(listener);
@@ -107,6 +111,7 @@ export function subscribe(voyageId: string, listener: () => void): () => void {
   };
 }
 
-export function publish(voyageId: string): void {
-  for (const listener of listeners.get(voyageId) ?? []) listener();
+/** Every open stream sends a fresh snapshot, then the notice if there is one (the same to both Decks). */
+export function publish(voyageId: string, notice?: Notice): void {
+  for (const listener of listeners.get(voyageId) ?? []) listener(notice);
 }

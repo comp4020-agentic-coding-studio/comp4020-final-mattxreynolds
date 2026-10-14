@@ -36,6 +36,16 @@ export async function lobby(base: string): Promise<{ voyage: Started; host: Sail
   return { voyage, host, partner };
 }
 
+/** A lobby whose Players hold a Deck each (host Upper, partner Lower) and have both cast off. */
+export async function underway(base: string): ReturnType<typeof lobby> {
+  const l = await lobby(base);
+  await intent(base, l.voyage.id, l.host, { kind: "choose-deck", deck: "Upper Deck" });
+  await intent(base, l.voyage.id, l.partner, { kind: "choose-deck", deck: "Lower Deck" });
+  await intent(base, l.voyage.id, l.host, { kind: "cast-off" });
+  await intent(base, l.voyage.id, l.partner, { kind: "cast-off" });
+  return l;
+}
+
 /** The Voyage's current state, as one fresh stream's first frame. */
 export async function snapshot(base: string, voyageId: string, cookie: string): Promise<LobbySnapshot> {
   const { stream } = await openSse(new URL(`/api/voyages/${voyageId}/events`, base), cookie);

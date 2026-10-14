@@ -45,6 +45,12 @@ const MIGRATIONS: string[] = [
    ALTER TABLE voyage_person ADD COLUMN deck TEXT CHECK (deck IN ('Upper Deck', 'Lower Deck'));
    ALTER TABLE voyage_person ADD COLUMN cast_off INTEGER NOT NULL DEFAULT 0;
    CREATE UNIQUE INDEX voyage_deck ON voyage_person (voyage_id, deck) WHERE deck IS NOT NULL;`,
+  // The Draw, stored in full as JSON at Voyage start with its version (ADR 0001),
+  // how many Puzzles are solved (strictly sequential), and the Voyage's Strikes.
+  `ALTER TABLE voyage ADD COLUMN draw TEXT CHECK (draw IS NULL OR json_valid(draw));
+   ALTER TABLE voyage ADD COLUMN draw_version INTEGER;
+   ALTER TABLE voyage ADD COLUMN solved INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE voyage ADD COLUMN strikes INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 function migrate(db: DatabaseSync): void {
