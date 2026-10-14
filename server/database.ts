@@ -121,6 +121,10 @@ const MIGRATIONS: string[] = [
      new_voyage TEXT NOT NULL REFERENCES voyage(id),
      started_by TEXT NOT NULL REFERENCES person(id)
    );`,
+  // Away (#56): froze_at is when the Voyage froze (NULL while it runs), and
+  // paused_ms the frozen time already given back to the Clock.
+  `ALTER TABLE voyage ADD COLUMN froze_at INTEGER;
+   ALTER TABLE voyage ADD COLUMN paused_ms INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 function migrate(db: DatabaseSync): void {
