@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import ClockReadout from "./ClockReadout.svelte";
+  import DebriefScreen from "./DebriefScreen.svelte";
+  import LeaderboardScreen from "./LeaderboardScreen.svelte";
   import Scene from "./Scene.svelte";
   import { keypadAfter, leverAfter, roomForDeck } from "../shared/rooms.ts";
   import type { Banner, Debrief, LeaderboardView, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
@@ -628,34 +630,9 @@
       <button onclick={goHome}>Back to profile</button>
     </section>
   {:else if screen === "leaderboard"}
-    <section data-testid="leaderboard">
-      <h1>Leaderboard</h1>
-      {#if board.entries.length === 0}<p>No Scores posted yet.</p>{/if}
-      <ol>
-        {#each board.entries as e}<li data-testid="leaderboard-entry">{e.players}: {fmtMs(e.scoreMs)}</li>{/each}
-      </ol>
-      <button onclick={closeLeaderboard}>Back</button>
-    </section>
+    <LeaderboardScreen entries={board.entries} {fmtMs} onBack={closeLeaderboard} />
   {:else if screen === "debrief" && debrief}
-    <section data-testid="debrief">
-      <h1>{debrief.ship}: debrief</h1>
-      {#each debrief.decks as d}
-        <article data-testid="debrief-deck">
-          <h2>{d.deck}: {d.room}</h2>
-          <p>{d.player?.name ?? "No Player"}</p>
-          {#each d.puzzles as p}
-            <h3>{p.slot}: {p.role === "clue" ? "held the Clue" : "took the answer"}, {p.solved ? "solved" : "unsolved"}</h3>
-            {#if p.clue}<pre>{p.clue}</pre>{/if}
-          {/each}
-        </article>
-      {/each}
-      <h2>Timeline</h2>
-      <ol data-testid="timeline">
-        {#each debrief.timeline as e}<li>{e.actor ? `${e.actor}: ` : ""}{e.text}</li>{/each}
-      </ol>
-      <button class="primary" onclick={() => sailAgain(debriefId)}>Sail again with {partnerOf(debrief.decks.map((d) => d.player?.name))}</button>
-      <button onclick={() => (debriefFrom === "end" ? (screen = "end") : void goHome())}>Back</button>
-    </section>
+    <DebriefScreen {debrief} partner={partnerOf(debrief.decks.map((d) => d.player?.name))} onSailAgain={() => sailAgain(debriefId)} onBack={() => (debriefFrom === "end" ? (screen = "end") : void goHome())} />
   {:else if screen === "loading" || screen === "lobby"}
     <p>Loading</p>
   {/if}

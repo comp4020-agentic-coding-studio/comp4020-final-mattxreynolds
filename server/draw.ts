@@ -3,7 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
 import { SLOTS, type PublicDraw, type PublicPuzzle, type Slot } from "../shared/draw.ts";
 import type { DeckName, WalkDir } from "../shared/intents.ts";
-import { puzzle, versionsFor } from "./puzzles/index.ts";
+import { puzzle, puzzleId, versionsFor } from "./puzzles/index.ts";
 import { instrumentView } from "./instrument.ts";
 import type { Pos, PuzzleVersion, Rng } from "./puzzles/types.ts";
 
@@ -20,8 +20,6 @@ export type StoredDraw = z.infer<typeof storedDrawSchema>;
 export const DRAW_VERSION = 1;
 
 const cryptoRng: Rng = () => randomInt(2 ** 32) / 2 ** 32;
-
-const puzzleId = (key: string): string => key.split("@")[0];
 
 /**
  * A fresh Draw. For a known Team, `previous` holds the Puzzle keys of their

@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PLAYER_NAME_MAX, sanitisePlayerName } from "../server/player-name.ts";
 
@@ -16,11 +18,9 @@ describe("sanitisePlayerName", () => {
     expect(sanitisePlayerName("a‮b\u0085c")).toEqual({ ok: true, name: "abc" });
   });
 
-  it("HTML-escapes", () => {
-    expect(sanitisePlayerName(`<b>"Tom" & 'Jo'</b>`)).toEqual({
-      ok: true,
-      name: "&lt;b&gt;&quot;Tom&quot; &amp; &#39;Jo&#39;&lt;/b&gt;",
-    });
+  it("keeps markup characters as typed, to be escaped where the name is drawn", () => {
+    expect(sanitisePlayerName(`<b>"Tom" & 'Jo'</b>`)).toEqual({ ok: true, name: `<b>"Tom" & 'Jo'</b>` });
+    expect(sanitisePlayerName("Tom & Jo")).toEqual({ ok: true, name: "Tom & Jo" });
   });
 
   it("refuses an empty name, including one that is only stripped characters", () => {
@@ -37,5 +37,17 @@ describe("sanitisePlayerName", () => {
       expect(sanitisePlayerName(bad), bad).toEqual({ ok: false, reason: "blocked" });
     }
     expect(sanitisePlayerName("Scunthorpe")).toEqual({ ok: true, name: "Scunthorpe" });
+  });
+});
+
+// Names are stored as typed, so safety is on the way out (#10): Svelte escapes every
+// text interpolation, and nothing in client/ may write a name (or anything) as raw HTML.
+describe("a Player name is drawn as text", () => {
+  it("no client file renders raw HTML", () => {
+    const dir = join(import.meta.dirname, "..", "client");
+    for (const file of readdirSync(dir)) {
+      const text = readFileSync(join(dir, file), "utf8");
+      expect(text, file).not.toMatch(/\{@html|innerHTML|outerHTML|insertAdjacentHTML/);
+    }
   });
 });

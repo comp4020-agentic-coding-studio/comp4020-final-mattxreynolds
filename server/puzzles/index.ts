@@ -16,6 +16,12 @@ const VERSIONS: PuzzleVersion<any>[] = [muralKeypadV1, leverOrderV1, rottenFloor
 
 const registry = new Map<string, PuzzleVersion>(VERSIONS.map((v) => [v.key, v]));
 
+/** The id part of a registry key: "rotten-floor@1" is "rotten-floor". */
+export const puzzleId = (key: string): string => key.split("@")[0];
+
+/** The newest registered version of every Puzzle id, so a spec visits each Puzzle without a list of its own. */
+export const registeredIds = (): string[] => [...new Set(VERSIONS.map((v) => puzzleId(v.key)))];
+
 export function puzzle(key: string): PuzzleVersion {
   const found = registry.get(key);
   if (!found) throw new Error(`unknown Puzzle version ${key}`);
@@ -29,6 +35,6 @@ export function puzzle(key: string): PuzzleVersion {
  */
 export function versionsFor(slot: Slot): PuzzleVersion[] {
   const newest = new Map<string, PuzzleVersion>();
-  for (const v of VERSIONS) if (v.slot === slot) newest.set(v.key.split("@")[0], v);
+  for (const v of VERSIONS) if (v.slot === slot) newest.set(puzzleId(v.key), v);
   return [...newest.values()];
 }
