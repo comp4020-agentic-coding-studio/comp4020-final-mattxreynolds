@@ -49,6 +49,14 @@ const MIGRATIONS: string[] = [
   // Player ends it. Later outcomes (launched, sank) widen the CHECK.
   `ALTER TABLE voyage ADD COLUMN outcome TEXT CHECK (outcome IN ('abandoned'));
    ALTER TABLE voyage ADD COLUMN ended_at INTEGER;`,
+  // Credentials live apart from the Person (ADR 0002). username_key is the
+  // lower-cased username; password_hash is "salt:scrypt" in hex.
+  `CREATE TABLE account (
+     person_id TEXT PRIMARY KEY REFERENCES person(id),
+     username_key TEXT NOT NULL UNIQUE,
+     password_hash TEXT NOT NULL,
+     created_at INTEGER NOT NULL
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {

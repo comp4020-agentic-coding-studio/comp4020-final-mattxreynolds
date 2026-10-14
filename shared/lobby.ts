@@ -4,6 +4,8 @@ import type { DeckName } from "./intents.ts";
 export interface PersonView {
   id: string;
   name: string;
+  /** True once the Person has an Account; absent for a Guest. */
+  account?: true;
 }
 
 export interface VoyageView {
