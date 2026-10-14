@@ -1,7 +1,7 @@
 // Wire types for a Draw (ADR 0001, ADR 0007). This is the PublicDraw side of
 // the split: what one Deck may see. The stored shape, with answers, is
 // StoredDraw under server/ and cannot be imported from here.
-import type { DeckName } from "./intents.ts";
+import type { DeckName, WalkDir } from "./intents.ts";
 
 export const SLOTS = ["opener", "middle", "finale"] as const;
 export type Slot = (typeof SLOTS)[number];
@@ -16,6 +16,13 @@ export interface PublicPuzzle {
   role: "clue" | "lock" | null;
   /** The rendered Clue; present only on the Clue Deck, and only once the Puzzle is live or solved. */
   clue?: string;
+  /** The Walker's view, on the walking Deck only, while the Puzzle is live: where they stand and the lit tiles beside them. */
+  walk?: WalkView;
+}
+
+export interface WalkView {
+  at: string;
+  lit: { dir: WalkDir; tile: string }[];
 }
 
 export interface PublicDraw {
