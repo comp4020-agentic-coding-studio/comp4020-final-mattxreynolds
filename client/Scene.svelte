@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { SLOTS, type Slot } from "../shared/draw.ts";
-  import { displayText, examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
+  import { controlLive, displayText, examineText, roomForDeck, type Thing } from "../shared/rooms.ts";
   import type { InstrumentView } from "../shared/draw.ts";
   import type { DeckName, Pose } from "../shared/intents.ts";
   import { createPoseSaver } from "./pose.ts";
@@ -77,7 +77,7 @@
     if (thing.press && thing.bank === control && !opened.includes("opener")) return onKey(thing.press);
     const live = new Set<Slot>(SLOTS.filter((s) => !opened.includes(s)).slice(0, 1));
     // a live finale's valve and trim controls turn their dial, the same intent as the 2D view (#55)
-    if (thing.control && instrument) {
+    if (thing.control && instrument && controlLive(thing.control, instrument)) {
       seen = "";
       void fetch(`/api/voyages/${voyageId}/intents`, {
         method: "POST",
@@ -86,7 +86,8 @@
       }).catch(() => {});
       return;
     }
-    seen = examineText(thing, live);
+    // the helm and telegraph finale has one dial a Deck, so the other rows are plates with nothing behind them (#64)
+    seen = thing.control && instrument ? "Rusted solid." : examineText(thing, live);
     void fetch(`/api/voyages/${voyageId}/intents`, {
       method: "POST",
       headers: { "content-type": "application/json" },

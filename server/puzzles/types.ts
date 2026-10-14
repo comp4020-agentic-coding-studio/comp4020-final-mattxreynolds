@@ -21,6 +21,8 @@ export interface Instrument<D = unknown> {
   inBand(data: D, settings: Settings): boolean;
   /** What each gauge reads for these settings, for the Deck that reads gauges. */
   readings(data: D, settings: Settings): number[];
+  /** What the Decks call the dials and gauges, when they are not the generic valves and gauges. */
+  names?: { valves: string; trims: string; gauges: string[] };
 }
 
 /**

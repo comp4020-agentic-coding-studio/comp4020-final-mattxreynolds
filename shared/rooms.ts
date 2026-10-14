@@ -346,12 +346,27 @@ export function projectedSize(
   return { width: (across * focal) / ahead, height: (sy * focal) / ahead };
 }
 
+/** Whether a finale control has a dial to turn on the live instrument: helm and telegraph have one dial a Deck, valves and gauges three. */
+export function controlLive(control: Control, view: InstrumentView): boolean {
+  return control.index < ((control.kind === "turn-valve" ? view.valves : view.trims)?.length ?? 0);
+}
+
 /** The words a read-out shows: Wheelhouse gauges with their trims and the hold, Engine Room valve levels. `sinceMs` is how old the view is. */
 export function displayText(d: Display, view: InstrumentView | null, sinceMs = 0, launched = false): string {
   if (launched) return d.show === "hold" ? "Lifeboat away" : "Launched";
   if (!view) return "";
-  if (d.show === "valve") return String(view.valves?.[d.index] ?? "");
-  if (d.show === "gauge") return view.readings && view.trims ? `${view.readings[d.index]}  trim ${view.trims[d.index]}` : "";
+  const { names } = view;
+  if (d.show === "valve") {
+    const level = view.valves?.[d.index];
+    return level === undefined ? "" : names ? `${names.dial} ${level}` : String(level);
+  }
+  if (d.show === "gauge") {
+    if (!view.readings || !view.trims || d.index >= view.readings.length) return "";
+    if (!names) return `${view.readings[d.index]}  trim ${view.trims[d.index]}`;
+    // helm and telegraph: the first gauge is the heading, read with the helm; the others stand alone
+    const unit = d.index === 0 ? `  ${names.dial.toLowerCase()} ${view.trims[0]}` : " kn";
+    return `${names.gauges?.[d.index] ?? "Gauge"} ${view.readings[d.index]}${unit}`;
+  }
   if (view.holdMs == null) return "Out of band";
   return `In band ${Math.floor(Math.min(10_000, view.holdMs + sinceMs) / 1000)} s of 10`;
 }

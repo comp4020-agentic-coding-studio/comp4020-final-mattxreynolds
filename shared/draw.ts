@@ -37,6 +37,8 @@ export interface InstrumentView {
   readings?: number[];
   /** Milliseconds the gauges have sat in band as of this snapshot, or null while out of band. */
   holdMs?: number | null;
+  /** Only when the finale is not the valves and gauges: what this Deck calls its dial and gauges. */
+  names?: { dial: string; gauges?: string[] };
 }
 
 export interface WalkView {

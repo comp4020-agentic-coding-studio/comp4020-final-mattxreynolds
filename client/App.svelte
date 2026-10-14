@@ -528,17 +528,27 @@
               {#if p.instrument.valves}
                 <h3>Valves</h3>
                 {#each p.instrument.valves as level, i}
-                  <p data-testid="valve">Valve {i + 1}: <output>{level}</output>
-                    <button aria-label="Valve {i + 1} down" onclick={() => dial("turn-valve", i, -1)}>-</button>
-                    <button aria-label="Valve {i + 1} up" onclick={() => dial("turn-valve", i, 1)}>+</button></p>
+                  {@const dialName = p.instrument.names ? p.instrument.names.dial : `Valve ${i + 1}`}
+                  <p data-testid="valve">{dialName}: <output>{level}</output>
+                    <button aria-label="{dialName} down" onclick={() => dial("turn-valve", i, -1)}>-</button>
+                    <button aria-label="{dialName} up" onclick={() => dial("turn-valve", i, 1)}>+</button></p>
                 {/each}
               {:else}
                 <h3>Gauges</h3>
                 <pre data-testid="mural">{p.clue}</pre>
                 {#each p.instrument.trims ?? [] as level, i}
-                  <p data-testid="gauge">Gauge {i + 1} reads <output>{p.instrument.readings?.[i]}</output>, trim <output>{level}</output>
-                    <button aria-label="Trim {i + 1} down" onclick={() => dial("turn-trim", i, -1)}>-</button>
-                    <button aria-label="Trim {i + 1} up" onclick={() => dial("turn-trim", i, 1)}>+</button></p>
+                  {@const dialName = p.instrument.names ? p.instrument.names.dial : `Trim ${i + 1}`}
+                  {#if p.instrument.names}
+                    {#each p.instrument.readings ?? [] as reading, g}
+                      <p data-testid="gauge">{p.instrument.names.gauges?.[g]} reads <output>{reading}</output></p>
+                    {/each}
+                    <p data-testid="dial">{dialName}: <output>{level}</output></p>
+                  {:else}
+                    <p data-testid="gauge">Gauge {i + 1} reads <output>{p.instrument.readings?.[i]}</output>, trim <output>{level}</output></p>
+                  {/if}
+                  <p>
+                    <button aria-label="{dialName} down" onclick={() => dial("turn-trim", i, -1)}>-</button>
+                    <button aria-label="{dialName} up" onclick={() => dial("turn-trim", i, 1)}>+</button></p>
                 {/each}
                 <p data-testid="hold">{p.instrument.holdMs == null ? "Out of band." : `In band for ${Math.floor(p.instrument.holdMs / 1000)} s of 10.`}</p>
               {/if}

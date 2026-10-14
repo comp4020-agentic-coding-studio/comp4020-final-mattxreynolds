@@ -69,7 +69,7 @@ describe("the opener slot's Draw", () => {
   it("offers the mural keypad and the lever order, and one Puzzle in the other slots", () => {
     expect(versionsFor("opener").map((v) => v.key).sort()).toEqual(["lever-order@1", "mural-keypad@1"]);
     expect(versionsFor("middle")).toHaveLength(1);
-    expect(versionsFor("finale")).toHaveLength(1);
+    expect(versionsFor("finale").map((v) => v.key).sort()).toEqual(["helm-telegraph@1", "valves-gauges@1"]);
   });
 
   it("picks either opener at random, and always one the registry can read back", () => {

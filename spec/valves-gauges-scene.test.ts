@@ -2,9 +2,8 @@ import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, inject, it } from "vitest";
 import { roomForDeck } from "../shared/rooms.ts";
 import { settingsFromClue } from "./helpers/finale.ts";
-import { codeFromClue } from "./helpers/mural.ts";
-import { parsePlan, routes } from "./helpers/rotten-floor.ts";
-import { intent, post, snapshot, underway, type Sailor } from "./helpers/voyage.ts";
+import { atFinale } from "./helpers/at-finale.ts";
+import { post, snapshot, underway, type Sailor } from "./helpers/voyage.ts";
 
 // The finale worked in place (#55, #18): two phones, one Voyage. The Engine
 // Room turns valve wheels and the Wheelhouse sets trims by tapping the wall,
@@ -59,13 +58,10 @@ async function setDial(page: Page, kind: "valve" | "trim", index: number, from: 
 }
 
 it("the Engine Room turns valve wheels and the Wheelhouse sets trims in the scene; drifting out resets the hold with no Strike, and ten seconds in band launches the Lifeboat on both Decks", async () => {
-  const l = await underway(baseUrl);
+  // the finale slot draws one of two Puzzles (#64); this spec is about valves and gauges
+  const l = await atFinale(baseUrl, "valves-gauges");
   const { voyage, host, partner } = l;
   const view = async (who: Sailor) => (await snapshot(baseUrl, voyage.id, who.cookie)).draw!;
-  const opener = (await view(host)).puzzles[0];
-  expect((await intent(baseUrl, voyage.id, partner, { kind: "submit", deck: "Lower Deck", slot: "opener", answer: codeFromClue(opener.clue!) })).status).toBe(200);
-  const route = routes(parsePlan((await view(partner)).puzzles[1].clue!))[0];
-  for (const dir of route) expect((await intent(baseUrl, voyage.id, host, { kind: "walk-step", deck: "Upper Deck", slot: "middle", dir })).status).toBe(200);
   const finale = (await view(host)).puzzles[2];
   expect(finale.status).toBe("live");
   const target = settingsFromClue(finale.clue!);
