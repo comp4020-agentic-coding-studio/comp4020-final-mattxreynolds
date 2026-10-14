@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { resolve } from "node:path";
 import { Hono } from "hono";
 import { marked } from "marked";
+import { createApi } from "./app.ts";
 import { openDatabase } from "./database.ts";
 import { serveSpa } from "./static.ts";
 
@@ -19,6 +20,8 @@ const readme = `<!doctype html>
 
 const app = new Hono();
 app.get("/readme/", (c) => c.html(readme));
+app.route("/api", createApi(db));
+app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 app.get("*", serveSpa(resolve(root, "dist")));
 
 const server = serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, (info) => {
