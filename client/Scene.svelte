@@ -206,6 +206,6 @@
   .mode { position: absolute; right: 0.5rem; top: 0.5rem; min-width: 44px; min-height: 44px; }
   .stick { position: absolute; left: 1rem; bottom: 0.75rem; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.4); touch-action: none; display: grid; place-items: center; }
   .knob { width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); pointer-events: none; }
-  .prompt { min-height: 44px; position: absolute; left: 50%; bottom: 0.75rem; transform: translateX(-50%); }
+  .prompt { min-height: 44px; position: absolute; left: 0.5rem; top: 0.5rem; } /* a corner, so it never covers a station the Player clicks */
   .seen { position: absolute; left: 50%; top: 0.75rem; transform: translateX(-50%); margin: 0; padding: 0.4rem 0.8rem; background: #000b; color: #fff; }
 </style>

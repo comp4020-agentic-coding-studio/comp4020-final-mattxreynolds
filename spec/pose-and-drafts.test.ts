@@ -22,7 +22,9 @@ function actions(voyageId: string): string[] {
   const db = new DatabaseSync(join(server.dataDir, "game.db"), { readOnly: true });
   const rows = db.prepare("SELECT action FROM event WHERE voyage_id = ? ORDER BY id").all(voyageId) as { action: string }[];
   db.close();
-  return rows.map((r) => r.action);
+  // stream.connected/closed belong to the SSE streams the helpers opened a moment ago: a close can land late, and neither is a pose or a draft
+  // stream.connected and stream.closed log the SSE streams the helpers opened and closed a moment ago; a close can land after the first read. Neither is a pose or a draft.
+  return rows.map((r) => r.action).filter((a) => !a.startsWith("stream."));
 }
 
 it("a Player's pose comes back in their own snapshot after a reload", async () => {

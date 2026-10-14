@@ -19,6 +19,10 @@ export default defineConfig({
       {
         test: {
           name: "app",
+          // Browser specs cast off a Voyage through two pages, which takes
+          // longer than vitest's 5 s default. A spec that needs more says so.
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
           include: ["spec/**/*.test.ts"],
           exclude: ["spec/**/*.unit.test.ts"],
           globalSetup: ["./spec/global-setup.ts"],
