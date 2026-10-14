@@ -129,6 +129,13 @@ export interface Debrief {
   timeline: DebriefEntry[];
 }
 
+/** "<from> started a new Voyage with you": on the partner's profile after "Sail again" (#61). */
+export interface Banner {
+  /** Player name of whoever opened the new lobby. */
+  from: string;
+  voyage: VoyageView;
+}
+
 /** A Deck a fresh browser may take over: its Player isn't connected. */
 export interface RejoinOffer {
   deck: DeckName;

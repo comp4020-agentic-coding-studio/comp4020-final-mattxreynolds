@@ -114,6 +114,13 @@ const MIGRATIONS: string[] = [
      posted_at INTEGER NOT NULL,
      hidden INTEGER NOT NULL DEFAULT 0
    );`,
+  // Sail again (#61): the new Voyage a finished one led to, and who opened it.
+  // One row per finished Voyage, so both Players' taps land in the same lobby.
+  `CREATE TABLE sail_again (
+     from_voyage TEXT PRIMARY KEY REFERENCES voyage(id),
+     new_voyage TEXT NOT NULL REFERENCES voyage(id),
+     started_by TEXT NOT NULL REFERENCES person(id)
+   );`,
 ];
 
 function migrate(db: DatabaseSync): void {

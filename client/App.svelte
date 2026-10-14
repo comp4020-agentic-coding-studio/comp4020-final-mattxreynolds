@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
-  import { roomForDeck } from "../shared/rooms.ts";
-  import type { Debrief, LeaderboardView, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
+  import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
+  import type { Banner, Debrief, LeaderboardView, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
   type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief" | "leaderboard";
   let screen: Screen = $state("loading");
@@ -80,6 +80,36 @@
     };
   }
 
+  // The profile's own stream: partner banners arrive live (#61).
+  let banners: Banner[] = $state([]);
+  let profileSource: EventSource | null = null;
+  function watchProfile(): void {
+    if (profileSource) return;
+    const es = new EventSource("/api/me/events");
+    profileSource = es;
+    es.addEventListener("banners", (e) => (banners = JSON.parse((e as MessageEvent).data) as Banner[]));
+    es.onerror = () => {
+      if (es.readyState !== EventSource.CLOSED) return;
+      profileSource = null;
+      setTimeout(() => screen === "profile" && watchProfile(), 2000);
+    };
+  }
+  function unwatchProfile(): void {
+    profileSource?.close();
+    profileSource = null;
+  }
+  $effect(() => {
+    if (screen === "profile") watchProfile();
+    else unwatchProfile();
+  });
+
+  // "Sail again with <partner>": opens (or boards) the one new lobby for this finished Voyage.
+  async function sailAgain(fromId: string): Promise<void> {
+    const res = await api<VoyageView>(`/api/voyages/${fromId}/sail-again`, {});
+    if (res.ok) enter(res.data);
+  }
+  const partnerOf = (names: (string | undefined)[]): string => names.find((n) => n && n !== person?.name) ?? "your partner";
+
   async function goHome(): Promise<void> {
     source?.close();
     source = null;
@@ -93,10 +123,12 @@
 
   let debrief: Debrief | null = $state(null);
   let debriefFrom: Screen = "profile";
+  let debriefId = "";
   async function openDebrief(id: string, from: Screen): Promise<void> {
     const res = await api<Debrief>(`/api/voyages/${id}/debrief`);
     if (!res.ok) return;
     debrief = res.data;
+    debriefId = id;
     debriefFrom = from;
     screen = "debrief";
   }
@@ -285,6 +317,13 @@
     }
   }
 
+  // A keypad button pressed in the 3D scene: the same keypad and the same submission as the 2D view.
+  function pressKey(key: string): void {
+    if (key === "enter") return void enterCode();
+    code4 = keypadAfter(code4, key);
+    saveDraft();
+  }
+
   // Dial turns carry no seq: both Decks turn at once and each turn is applied in server order.
   async function dial(kind: "turn-valve" | "turn-trim", index: number, by: 1 | -1): Promise<void> {
     if (!snapshot?.yourDeck) return;
@@ -384,6 +423,12 @@
       </form>
       {#if accountProblem}<p role="alert">{accountProblem}</p>{/if}
     {/if}
+    {#each banners as b (b.voyage.id)}
+      <aside data-testid="banner" role="status">
+        <p>{b.from} started a new Voyage with you</p>
+        <button class="primary" onclick={() => join({ key: b.voyage.link.replace("/v/", "") })}>Join {b.voyage.ship}</button>
+      </aside>
+    {/each}
     <section>
       <h2>Unfinished Voyages</h2>
       {#each voyages.unfinished as v (v.id)}
@@ -427,7 +472,7 @@
       <section data-testid="deck-view">
         <h2>{snapshot.yourDeck}</h2>
         <p data-testid="room-name">{roomForDeck(snapshot.yourDeck).name}</p>
-        <Scene deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
+        <Scene clue={snapshot.draw?.puzzles.find((p) => p.slot === "opener")?.clue ?? null} code={code4} onKey={pressKey} deck={snapshot.yourDeck} voyageId={snapshot.voyage.id} pose={snapshot.pose} opened={(snapshot.draw?.puzzles ?? []).filter((p) => p.status === "solved").map((p) => p.slot)} />
         {#if secondsLeft !== null}<div data-testid="clock"><ClockReadout {secondsLeft} /></div>{/if}
         <p data-testid="strikes">Strikes: {snapshot.draw?.strikes ?? 0} of 3</p>
         {#if fiveNote}<p role="status">{fiveNote}</p>{/if}
@@ -550,6 +595,7 @@
       {/if}
       <button onclick={() => openDebrief(snapshot!.voyage.id, "end")}>Open the debrief</button>
       <button onclick={openLeaderboard}>See the Leaderboard</button>
+      <button class="primary" onclick={() => sailAgain(snapshot!.voyage.id)}>Sail again with {partnerOf(snapshot.players.map((p) => p.name))}</button>
       <button onclick={goHome}>Back to profile</button>
     </section>
   {:else if screen === "leaderboard"}
@@ -578,6 +624,7 @@
       <ol data-testid="timeline">
         {#each debrief.timeline as e}<li>{e.actor ? `${e.actor}: ` : ""}{e.text}</li>{/each}
       </ol>
+      <button class="primary" onclick={() => sailAgain(debriefId)}>Sail again with {partnerOf(debrief.decks.map((d) => d.player?.name))}</button>
       <button onclick={() => (debriefFrom === "end" ? (screen = "end") : void goHome())}>Back</button>
     </section>
   {:else if screen === "loading" || screen === "lobby"}
