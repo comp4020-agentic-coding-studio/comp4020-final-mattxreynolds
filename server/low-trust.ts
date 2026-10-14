@@ -8,8 +8,8 @@ import { seatsOf } from "./lobby.ts";
 // logged, and never published: a Player's own next snapshot is how it comes
 // back. Nothing here touches the events table or stdout.
 
-/** Half the span of the largest Deck, generous; the server only keeps a lie from being huge. */
-export const POSE_LIMIT = 100;
+/** Four times the largest Room dimension (8 m in shared/rooms.ts); the server only keeps a lie from being huge. */
+export const POSE_LIMIT = 32;
 
 const clamp = (n: number, lim: number): number => Math.max(-lim, Math.min(lim, n));
 
