@@ -50,10 +50,13 @@
       // either Player may end the Voyage, so the other's ship ends too
       if (next.ended) {
         // either Player may end it, and a launch or a sinking ends it too: both Decks get the end card
-        source?.close();
-        source = null;
+        // a launched Voyage's stream stays open until its Score is posted, so the partner's consent shows (#67)
+        if (!next.post || next.post.posted) {
+          source?.close();
+          source = null;
+        }
         snapshot = next;
-        screen = "end";
+        if (screen !== "debrief" && screen !== "leaderboard") screen = "end";
         return;
       }
       // a reload restores the half-typed code once, from this Player's own snapshot (#57)
