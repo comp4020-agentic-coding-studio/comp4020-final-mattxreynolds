@@ -3,9 +3,9 @@
   import ClockReadout from "./ClockReadout.svelte";
   import Scene from "./Scene.svelte";
   import { keypadAfter, roomForDeck } from "../shared/rooms.ts";
-  import type { Banner, Debrief, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
+  import type { Banner, Debrief, LeaderboardView, LobbySnapshot, RejoinOffer, PersonView, ProfileVoyages, VoyageView } from "../shared/lobby.ts";
 
-  type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief";
+  type Screen = "loading" | "first" | "profile" | "lobby" | "end" | "debrief" | "leaderboard";
   let screen: Screen = $state("loading");
   let person: PersonView | null = $state(null);
   let snapshot: LobbySnapshot | null = $state(null);
@@ -50,10 +50,13 @@
       // either Player may end the Voyage, so the other's ship ends too
       if (next.ended) {
         // either Player may end it, and a launch or a sinking ends it too: both Decks get the end card
-        source?.close();
-        source = null;
+        // a launched Voyage's stream stays open until its Score is posted, so the partner's consent shows (#67)
+        if (!next.post || next.post.posted) {
+          source?.close();
+          source = null;
+        }
         snapshot = next;
-        screen = "end";
+        if (screen !== "debrief" && screen !== "leaderboard") screen = "end";
         return;
       }
       // a reload restores the half-typed code once, from this Player's own snapshot (#57)
@@ -352,7 +355,28 @@
     copied = true;
   }
 
+  // The Leaderboard is public: it needs no session and updates live over its own stream (#67).
+  let board: LeaderboardView = $state({ entries: [] });
+  let boardSource: EventSource | null = null;
+  function openLeaderboard(): void {
+    boardSource?.close();
+    boardSource = new EventSource("/api/leaderboard/events");
+    boardSource.addEventListener("leaderboard", (e) => (board = JSON.parse((e as MessageEvent).data) as LeaderboardView));
+    screen = "leaderboard";
+  }
+  function closeLeaderboard(): void {
+    boardSource?.close();
+    boardSource = null;
+    if (snapshot?.end) screen = "end";
+    else if (person) void goHome();
+    else screen = "first";
+  }
+  async function postScore(agree: boolean): Promise<void> {
+    if (snapshot) await api(`/api/voyages/${snapshot.voyage.id}/post-score`, { consent: agree });
+  }
+
   onMount(async () => {
+    if (location.pathname === "/leaderboard") return openLeaderboard();
     const me = await api<PersonView>("/api/me");
     if (me.ok) person = me.data;
     const key = location.pathname.match(/^\/v\/([\w-]+)$/)?.[1];
@@ -373,6 +397,7 @@
     <p>Two of you, sealed on separate Decks. Each Deck holds the Clues for the other's Puzzles, and talking out loud is the only channel between you.</p>
     <button class="primary" onclick={playAsGuest}>Play as guest</button>
     <button onclick={() => (signingIn = !signingIn)}>Sign in</button>
+    <button onclick={openLeaderboard}>Leaderboard</button>
     {#if signingIn}
       <form onsubmit={(e) => { e.preventDefault(); void signIn(); }}>
         <label>Username <input bind:value={username} autocomplete="username" maxlength="20" /></label>
@@ -553,9 +578,34 @@
       {#if snapshot.end.scoreMs !== null}<p data-testid="end-score">Score: {fmtMs(snapshot.end.scoreMs)}</p>{/if}
       <p data-testid="end-strikes">Strikes: {snapshot.end.strikes} of 3</p>
       <p data-testid="end-solved">Puzzles solved: {snapshot.end.solved} of {snapshot.end.total}</p>
+      {#if snapshot.post}
+        <section data-testid="post-score">
+          <h2>Post our Score</h2>
+          <p data-testid="post-preview">{snapshot.post.players.join(" + ")}: {fmtMs(snapshot.post.scoreMs)}</p>
+          {#if snapshot.post.posted}
+            <p role="status">Posted to the Leaderboard.</p>
+          {:else if snapshot.post.youConsented}
+            <p role="status">{snapshot.post.partnerConsented ? "Posting" : "Waiting for your partner to agree."}</p>
+            <button onclick={() => postScore(false)}>Take back my consent</button>
+          {:else}
+            <p role="status">{snapshot.post.partnerConsented ? "Your partner has agreed." : "It is posted only once you both agree."}</p>
+            <button onclick={() => postScore(true)}>Post our Score</button>
+          {/if}
+        </section>
+      {/if}
       <button onclick={() => openDebrief(snapshot!.voyage.id, "end")}>Open the debrief</button>
+      <button onclick={openLeaderboard}>See the Leaderboard</button>
       <button class="primary" onclick={() => sailAgain(snapshot!.voyage.id)}>Sail again with {partnerOf(snapshot.players.map((p) => p.name))}</button>
       <button onclick={goHome}>Back to profile</button>
+    </section>
+  {:else if screen === "leaderboard"}
+    <section data-testid="leaderboard">
+      <h1>Leaderboard</h1>
+      {#if board.entries.length === 0}<p>No Scores posted yet.</p>{/if}
+      <ol>
+        {#each board.entries as e}<li data-testid="leaderboard-entry">{e.players}: {fmtMs(e.scoreMs)}</li>{/each}
+      </ol>
+      <button onclick={closeLeaderboard}>Back</button>
     </section>
   {:else if screen === "debrief" && debrief}
     <section data-testid="debrief">

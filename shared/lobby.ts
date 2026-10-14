@@ -46,6 +46,8 @@ export interface LobbySnapshot {
   ended: boolean;
   /** The end card's numbers once the Voyage is over; null while it is live. Both Decks get the same. */
   end: EndCard | null;
+  /** The "Post our Score" preview after a launch (#67); null otherwise. */
+  post: PostOffer | null;
   /** Where you last stood, or null. Yours alone: the partner's snapshot never carries it (#57). */
   pose: Pose | null;
   /** Your half-typed keypad codes by slot. Yours alone (#57). */
@@ -72,6 +74,28 @@ export interface EndCard {
   solved: number;
   /** How many Puzzles the Draw held. */
   total: number;
+}
+
+/** What each Player sees after a launch: the "Post our Score" preview and who has agreed (#67). */
+export interface PostOffer {
+  scoreMs: number;
+  /** Both Player names, as the Leaderboard will show them. */
+  players: string[];
+  youConsented: boolean;
+  partnerConsented: boolean;
+  /** True once both agreed and the entry is on the Leaderboard. */
+  posted: boolean;
+}
+
+/** One row of the public Leaderboard: a rank, two names and a Score, never a Draw, Clue or answer. */
+export interface LeaderboardEntry {
+  rank: number;
+  players: string;
+  scoreMs: number;
+}
+
+export interface LeaderboardView {
+  entries: LeaderboardEntry[];
 }
 
 export interface DebriefPuzzle {

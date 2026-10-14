@@ -8,6 +8,7 @@ import type { Notice } from "../shared/draw.ts";
 import { logEvent } from "./events.ts";
 import { settleClock } from "./clock.ts";
 import { debriefOf } from "./debrief.ts";
+import { leaderboard, publishLeaderboard, setConsent, subscribeLeaderboard } from "./leaderboard.ts";
 import { markConnected, publish, seatedPlayers, voyageIdsFor, snapshotFor, subscribe, voyageById, voyagesOf } from "./lobby.ts";
 import { applyIntent } from "./intents.ts";
 import { isLowTrustKind, saveLowTrust } from "./low-trust.ts";
@@ -62,6 +63,21 @@ export function createApi(db: DatabaseSync): Hono<Env> {
     logEvent(db, { actor: found.person.id, actorName: found.person.name, action: "signin.ok" });
     return c.json(found.person);
   });
+
+  // The Leaderboard is public: no session, and its payload holds only a rank,
+  // two Player names and a Score (#67).
+  api.get("/leaderboard", (c) => c.json(leaderboard(db)));
+  api.get("/leaderboard/events", (c) =>
+    streamSSE(c, async (stream) => {
+      const send = (): Promise<void> => stream.writeSSE({ event: "leaderboard", data: JSON.stringify(leaderboard(db)) });
+      await send();
+      const unsubscribe = subscribeLeaderboard(() => void send());
+      const beat = setInterval(() => void stream.write(": heartbeat\n\n"), HEARTBEAT_MS);
+      await new Promise<void>((resolve) => stream.onAbort(resolve));
+      clearInterval(beat);
+      unsubscribe();
+    }),
+  );
 
   // the refusal order starts here: a known Person, or 401
   api.use("*", async (c, next) => {
@@ -298,6 +314,31 @@ export function createApi(db: DatabaseSync): Hono<Env> {
       return c.json({ error: "the debrief opens once the Voyage is over" }, 409);
     }
     return c.json(debrief);
+  });
+
+  // "Post our Score": each Player agrees or withdraws; the entry is posted only
+  // when both have agreed. The request carries no Score, only the consent.
+  api.post("/voyages/:id/post-score", async (c) => {
+    const you = c.get("person");
+    const voyage = voyageById(db, c.req.param("id"));
+    if (!voyage || !seatedPlayers(db, voyage.id).some((p) => p.id === you.id)) {
+      logEvent(db, { actor: you.id, actorName: you.name, action: "post-score.refused", detail: { reason: "not seated", status: 403 } });
+      return c.json({ error: "not seated in this Voyage" }, 403);
+    }
+    const body = (await c.req.json().catch(() => null)) as { consent?: unknown } | null;
+    if (typeof body?.consent !== "boolean") return c.json({ error: "say whether you consent" }, 400);
+    const result = await withVoyage(voyage.id, async () => {
+      settleClock(db, voyage.id, Date.now());
+      return setConsent(db, voyage.id, you.id, body.consent as boolean);
+    });
+    if (result !== "ok") {
+      logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: "post-score.refused", detail: { reason: result, status: 409 } });
+      return c.json({ error: result === "posted" ? "the Score is already posted" : "only a launched Voyage has a Score to post" }, 409);
+    }
+    logEvent(db, { voyageId: voyage.id, actor: you.id, actorName: you.name, action: body.consent ? "post-score.consented" : "post-score.withdrawn" });
+    publish(voyage.id);
+    publishLeaderboard();
+    return c.json({ ok: true });
   });
 
   api.get("/voyages/:id/events", (c) => {
