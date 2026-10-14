@@ -3,6 +3,7 @@
 // nothing from Svelte. Walking is the pure box check in shared/rooms.ts.
 import * as THREE from "three";
 import type { Slot } from "../shared/draw.ts";
+import type { Pose } from "../shared/intents.ts";
 import { moveInRoom, type Room } from "../shared/rooms.ts";
 import { walkTowards, type ControlsMode, type Walk } from "./controls.ts";
 
@@ -32,7 +33,7 @@ function box(w: number, h: number, d: number, color: number, x: number, y: numbe
 }
 
 /** Throws if the browser cannot make a WebGL context; the caller shows the 2D views instead. */
-export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
+export function buildScene(room: Room, opened: ReadonlySet<Slot>, start: Pose | null = null, onPose: (pose: Pose) => void = () => {}): SceneHandle {
   const canvas = document.createElement("canvas");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -69,6 +70,9 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
   const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
   camera.rotation.order = "YXZ";
   const me = { x: room.start.x, z: room.start.z, yaw: room.start.yaw, pitch: 0 };
+  // a returning Player stands where they were (#57); walls still bound them
+  if (start) Object.assign(me, moveInRoom(room, new Set(), start, 0, 0), { yaw: start.yaw, pitch: Math.max(-1.2, Math.min(1.2, start.pitch)) });
+  let reported = `${me.x},${me.z},${me.yaw},${me.pitch}`;
 
   const resize = (): void => {
     const w = canvas.clientWidth || 1;
@@ -172,6 +176,11 @@ export function buildScene(room: Room, opened: ReadonlySet<Slot>): SceneHandle {
     camera.position.set(me.x, room.eyeHeight, me.z);
     camera.rotation.set(me.pitch, me.yaw, 0);
     renderer.render(scene, camera);
+    const now4 = `${me.x},${me.z},${me.yaw},${me.pitch}`;
+    if (now4 !== reported) {
+      reported = now4;
+      onPose({ x: me.x, y: room.eyeHeight, z: me.z, yaw: me.yaw, pitch: me.pitch });
+    }
     frames++;
     canvas.dataset.frames = String(frames);
     canvas.dataset.x = me.x.toFixed(3);
