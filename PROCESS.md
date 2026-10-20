@@ -157,3 +157,14 @@ stream connections, rejections and committed mission outcomes. Full requests,
 secret player ids and device snapshots stay outside the sink. Isolated-process
 checks capture actual stdout, including parser and unexpected-error probes;
 the restart harness now parses its explicit port marker alongside JSON events.
+
+Two added probes first failed against the instrumented app: Expert input was
+accepted and a rename never reached the other open seat. Server seat checks
+and live identity refresh corrected those findings. Public tags now appear in
+the lobby and crew list, so matching callsigns remain distinguishable. The
+expanded suite passed 55 checks, including all six device permissions and a
+forced SQLite write failure: rejected persistence neither changes the cached
+room nor announces a committed action. Desktop/narrow screenshots were
+inspected; the Expert information split and visible recovery warning remain.
+The [operations guide](docs/observability.md) records rights, log fields,
+privacy boundaries and the terminal-only crit workflow.

@@ -60,3 +60,24 @@ one accepted revision and one logged conflict; malformed/unknown identities,
 rename, disconnect/reconnect, strikes and committed mission end are readable.
 Parser, oversized-body and unexpected errors return a safe correlation id.
 Captured stdout is asserted free of player credentials and sentinel payloads.
+
+## Identity/permission probes and correction
+
+With the instrumentation increment deployed locally, both new identity probes
+failed: Expert flip returned 200 instead of 403; a renamed player never
+appeared under the new name in an already-open teammate stream. The fix
+permits Expert lifecycle commands and refuses device commands at the server
+boundary. Rename notifications refresh active stream objects and persist live
+crew labels before broadcast, without advancing the gameplay revision.
+Completed mission names remain historical. Lobby/crew now show public tags so
+identical callsigns can be distinguished on the page as well as in logs.
+
+The corrected production-style suite passed typecheck and **55 tests in 11
+files**. This includes all six Expert device-input checks, rename spoofing
+(body-supplied other-player ids are ignored), live presence and finished crew,
+and a forced SQLite trigger failure. The latter returns safe HTTP 500 while
+leaving revision/strikes/status unchanged and emitting no accepted-action or
+mission-end event. Removing the trigger allows the next command to succeed.
+This is a verification fault injection in disposable storage, not a reported
+production outage. Screenshot review covered desktop and 390px Operator,
+Expert and recovery layouts, with no horizontal overflow or console errors.

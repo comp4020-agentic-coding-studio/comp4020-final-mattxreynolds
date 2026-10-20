@@ -123,6 +123,7 @@ export function Lobby({ me, rename }: { me: Me | null; rename: (c: string) => Pr
               <p className="welcome">No missions on record yet. Your first run will be logged here.</p>
             )}
 
+            <p className="hint">Browser tag {me?.tag ?? "······"} · callsigns can be shared. Keep yours fictional.</p>
             <div className="rule" />
             <button className="primary" disabled={!me} onClick={openRoom}>
               Open a new room

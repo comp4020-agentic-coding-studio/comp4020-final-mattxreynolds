@@ -16,7 +16,7 @@ import type {
   Status,
 } from "../shared/view.ts";
 import { db } from "./db.ts";
-import { getPlayer, playerFrom, type Player } from "./players.ts";
+import { getPlayer, playerFrom, playerEvents, type Player } from "./players.ts";
 
 // Rooms are server-authoritative: the device and every rule check live here,
 // clients only send intents. Each room is cached in memory and written through
@@ -59,6 +59,14 @@ const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const rooms = new Map<string, Room>();
 const timers = new Map<string, NodeJS.Timeout>();
 const clients = new Map<string, Set<Client>>();
+interface StreamContext {
+  streamId: string;
+  actorTag: string;
+  channel: "room" | "station";
+  room?: string;
+  role?: Role;
+}
+const streamContexts = new WeakMap<Response, StreamContext>();
 const logClients = new Set<{ res: Response; player: Player; limit: number }>();
 
 function newMission(no: number): Mission {
@@ -420,12 +428,13 @@ function writeEvent(res: Response, data: unknown): void {
   if (res.destroyed || res.writableEnded) return;
   // Bound queued writes: a slow receiver reconnects to a full snapshot.
   if (res.writableLength > 64 * 1024) {
-    event("stream.slow", { reason: "queue_limit" }); res.destroy(); return;
+    event("stream.slow", { ...streamContexts.get(res), reason: "queue_limit" }); res.destroy(); return;
   }
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-function openStream(res: Response, close: () => void): void {
+function openStream(res: Response, close: () => void, context: StreamContext): void {
+  streamContexts.set(res, context);
   res.set({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
@@ -435,11 +444,11 @@ function openStream(res: Response, close: () => void): void {
   res.flushHeaders();
   const heartbeat = setInterval(() => {
     if (res.writableLength > 64 * 1024) {
-      event("stream.slow", { reason: "queue_limit" }); res.destroy();
+      event("stream.slow", { ...streamContexts.get(res), reason: "queue_limit" }); res.destroy();
     }
     else res.write(": keep-alive\n\n");
   }, 25_000);
-  res.on("close", () => { clearInterval(heartbeat); close(); });
+  res.on("close", () => { clearInterval(heartbeat); close(); streamContexts.delete(res); });
 }
 
 function send(c: Client, room: Room): void {
@@ -522,7 +531,7 @@ roomRoutes.get("/:code/stream", (req, res) => {
       role: client.role, streamId, connections: set.size,
       durationMs: Math.round(performance.now() - opened) });
     broadcast(current);
-  });
+  }, { streamId, actorTag: player.tag, channel: "room", room: room.code, role: client.role });
   set.add(client);
   if (room.mission.status === "live") { enlist(room, player); save(room); }
   event("room.connected", { ...stateFields(room), actorTag: player.tag,
@@ -543,6 +552,9 @@ roomRoutes.post("/:code/actions", (req, res) => {
   if (!room) return reject(404, "missing_room", "no such room");
   if (!player) return reject(401, "unknown_player", "unknown player");
   if (!isAction(req.body, room)) return reject(400, "malformed_action", "malformed action");
+  if (role === "expert" && !["start", "newMission"].includes(req.body.type)) {
+    return reject(403, "seat_permission", "Switch to Operator to use the device.");
+  }
   if (req.body.missionNo !== room.mission.no || req.body.revision !== room.revision) {
     event("action.resolved", { ...fields, result: "conflict", reason: "stale_snapshot",
       httpStatus: 409, observedMission: req.body.missionNo, observedRevision: req.body.revision });
@@ -555,7 +567,7 @@ roomRoutes.post("/:code/actions", (req, res) => {
   if (error) return reject(409, "invalid_state", error, true);
   const field = FIELD[req.body.type as Action["type"]];
   event("action.resolved", { ...fields, ...stateFields(current),
-    previousMission: room.mission.no, previousRevision: room.revision,
+    previousMission: room.mission.no, previousRevision: room.revision, previousStatus: room.mission.status,
     result: current.mission.strikes > room.mission.strikes ? "strike" : "accepted",
     httpStatus: 200, ...(field ? { position: (req.body as unknown as Record<string, number>)[field] } : {}),
     ...(req.body.type === "flip" ? { switchUp: current.mission.switches[req.body.index] } : {}) });
@@ -630,8 +642,28 @@ logRoutes.get("/stream", (req, res) => {
   openStream(res, () => {
     logClients.delete(client);
     event("station.disconnected", { actorTag: player.tag, streamId });
-  });
+  }, { streamId, actorTag: player.tag, channel: "station" });
   event("station.connected", { actorTag: player.tag, callsign: player.callsign, streamId });
   logClients.add(client);
   writeEvent(res, stationView(player, client.limit));
+});
+
+// Callsigns are labels, not identity. Refresh existing streams and live crew
+// immediately; completed mission records keep the names used on that run.
+playerEvents.on("renamed", (player: Player) => {
+  for (const [code, set] of clients) {
+    const room = expire(rooms.get(code)!);
+    let changed = false;
+    for (const client of set) {
+      if (client.player.tag === player.tag) { client.player = player; changed = true; }
+    }
+    if (changed) {
+      if (room.mission.status === "live" && Object.hasOwn(room.mission.crew, player.tag)) {
+        const next = structuredClone(room);
+        enlist(next, player); save(next); rooms.set(code, next);
+      }
+      broadcast(rooms.get(code)!);
+    }
+  }
+  for (const client of logClients) if (client.player.tag === player.tag) client.player = player;
 });

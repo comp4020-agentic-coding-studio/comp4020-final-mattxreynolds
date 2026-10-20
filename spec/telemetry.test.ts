@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { boot, stop } from "./server.ts";
 
@@ -30,6 +31,8 @@ it("narrates distinct users, every input, conflicts, reconnects and committed ou
       { type: "flip", index: 0, ...seen })));
     expect(results.map(r => r.res.status).sort()).toEqual([200, 409]);
     await request(`/api/rooms/${code}/actions`, a.id, { type: "SECRET-BODY", player: a.id });
+    const refused = await request(`/api/rooms/${code}/actions?role=expert`, b.id, { type: "flip", index: 0, missionNo: 1, revision: 1 });
+    expect(refused.res.status).toBe(403);
     await request(`/api/rooms/${code}/actions`, "SECRET-INVALID-TOKEN", { type: "start", ...seen });
     await request("/api/players/me", a.id, { callsign: "RENAMED" }, "PATCH");
     op.abort(); ex.abort();
@@ -49,6 +52,7 @@ it("narrates distinct users, every input, conflicts, reconnects and committed ou
       position: 0, switchUp: expect.any(Boolean), actorTag: expect.stringMatching(/^[a-f0-9]{10}$/) });
     expect(actions.find(e => e.result === "conflict")).toMatchObject({ revision: 1, observedRevision: 0 });
     expect(actions.find(e => e.reason === "malformed_action")).toMatchObject({ action: "unknown" });
+    expect(actions.find(e => e.reason === "seat_permission")).toMatchObject({ actorTag: b.tag, role: "expert", httpStatus: 403 });
     expect(actions.find(e => e.reason === "unknown_player")).toMatchObject({ actorTag: null });
     expect(events.filter(e => e.event === "room.connected").map(e => e.actorTag)).toEqual([a.tag, b.tag, b.tag]);
     expect(events.find(e => e.event === "player.renamed")).toMatchObject({ actorTag: a.tag, callsign: "RENAMED" });
@@ -80,4 +84,29 @@ it("correlates safe JSON parser and unexpected server errors without echoing pay
     expect(server.output()).not.toMatch(/SECRET-|stack|SyntaxError/);
     expect(server.errors()).toBe("");
   } finally { await stop(server.child); rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("does not announce uncommitted actions when SQLite rejects a write", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "dead-air-commit-"));
+  const server = await boot(dir);
+  const db = new DatabaseSync(path.join(dir, "dead-air.db"));
+  try {
+    const json = async (route: string, id?: string, body?: unknown) => {
+      const res = await fetch(server.base + route, { method: body ? "POST" : "GET",
+        headers: { "content-type": "application/json", ...(id ? { "x-player": id } : {}) },
+        ...(body ? { body: JSON.stringify(body) } : {}) });
+      return { status: res.status, body: await res.json() };
+    };
+    const { body: p } = await json("/api/players", undefined, {});
+    const { body: { code } } = await json("/api/rooms", p.id, {});
+    db.exec("CREATE TRIGGER refuse_save BEFORE UPDATE ON rooms BEGIN SELECT RAISE(ABORT, 'SECRET-DATABASE-DETAIL'); END");
+    expect((await json(`/api/rooms/${code}/actions`, p.id,
+      { type: "override", missionNo: 1, revision: 0 })).status).toBe(500);
+    expect((await json(`/api/rooms/${code}`)).body).toMatchObject({ status: "ready", revision: 0, strikes: 0 });
+    expect(server.events.filter(e => e.event === "action.resolved" || e.event === "mission.finished")).toEqual([]);
+    expect(server.output()).not.toContain("SECRET-DATABASE-DETAIL");
+    db.exec("DROP TRIGGER refuse_save");
+    expect((await json(`/api/rooms/${code}/actions`, p.id,
+      { type: "override", missionNo: 1, revision: 0 })).status).toBe(200);
+  } finally { db.close(); await stop(server.child); rmSync(dir, { recursive: true, force: true }); }
 });

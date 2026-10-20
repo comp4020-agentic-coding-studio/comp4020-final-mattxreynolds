@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { createHash, randomBytes } from "node:crypto";
 import type { Request } from "express";
 import { Router } from "express";
@@ -36,6 +37,7 @@ export function getPlayer(id: unknown): Player | null {
 
 export const playerFrom = (req: Request): Player | null => getPlayer(req.get("x-player"));
 
+export const playerEvents = new EventEmitter();
 export const players = Router();
 
 players.post("/", (req, res) => {
@@ -75,6 +77,7 @@ players.patch("/me", (req, res) => {
     return void res.status(400).json({ error: "callsign: 2–16 letters, digits or dashes" });
   }
   db.prepare("UPDATE players SET callsign = ? WHERE id = ?").run(callsign, player.id);
+  playerEvents.emit("renamed", { ...player, callsign });
   event("player.renamed", { actorTag: player.tag, callsign, previousCallsign: player.callsign });
   res.json({ ...player, callsign });
 });
