@@ -81,3 +81,21 @@ mission-end event. Removing the trigger allows the next command to succeed.
 This is a verification fault injection in disposable storage, not a reported
 production outage. Screenshot review covered desktop and 390px Operator,
 Expert and recovery layouts, with no horizontal overflow or console errors.
+
+## Rehearsal exposed bootstrap recovery
+
+The first focused local rehearsal stalled waiting for a station-history tab
+opened just before taking its browser offline. That setup did not wait for
+identity/stream readiness. Inspection exposed a real adjacent fault:
+`ensurePlayer` treated every lookup failure as a missing identity, registering
+again on a temporary 503 and providing no retry if registration also failed.
+A browser probe against the old build timed out waiting for recovery UI.
+The correction replaces identity only on HTTP 404, bounds bootstrap requests,
+keeps storage on transient failure and offers Retry plus online recovery.
+The rehearsal now explicitly waits for station readiness before offline work.
+
+The corrected focused local rehearsal completed one exploded and one fully
+secured mission with two independent desktop/mobile profiles, both crew tags,
+same-tag/deadline recovery and 400/401/403/409 probes. No browser console/page
+errors or horizontal overflow. This is scripted agent verification; it does
+not stand in for two human pod members playing from the URL at the crit.

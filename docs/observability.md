@@ -111,3 +111,12 @@ SSE, browser and restart checks retain C9's concurrency/recovery contract.
 Use disposable local storage for the full suite; it creates many test crews
 and finished runs. The focused production rehearsal should use fictional
 callsigns and only a few rooms, then inspect the actual Fly tail.
+
+For an agent-run rehearsal with actual UI buttons and explicit rejection
+probes, run `APP_URL=https://comp4020-final-mattxreynolds.fly.dev EVIDENCE_DIR=/tmp/c10-rehearsal mise exec -- node scripts/rehearse.ts`.
+It creates one fictional room and two finished runs (one lost, one secured),
+checks desktop/narrow layouts and writes only public tags in its summary.
+Start the Fly tail separately and match the summary's room/tags to server
+events. This script drives the UI for verification; the human crit narration
+uses the log tail alone. A temporary identity lookup failure preserves browser
+storage and exposes Retry; only a confirmed server 404 creates a replacement.

@@ -168,3 +168,12 @@ room nor announces a committed action. Desktop/narrow screenshots were
 inspected; the Expert information split and visible recovery warning remain.
 The [operations guide](docs/observability.md) records rights, log fields,
 privacy boundaries and the terminal-only crit workflow.
+
+A local rehearsal then stalled after opening a station tab immediately before
+taking that profile offline. Waiting for stream readiness corrected the
+scenario, but inspection also found that bootstrap treated any identity lookup
+failure as permission to register anew. A failing browser probe now protects
+that boundary: only 404 replaces identity; temporary failure preserves storage
+and offers bounded retry/online recovery. The corrected two-profile rehearsal
+completed both a lost run and a full zero-strike defusal, with explicit
+400/401/403/409 probes and no browser errors.
