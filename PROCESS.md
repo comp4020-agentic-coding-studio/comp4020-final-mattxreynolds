@@ -136,3 +136,15 @@ branch has passed local production checks and the
 [Docker-based PR CI](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/actions/runs/38334327937),
 including all 45 tests, evidence checks and secret scans. It remains undeployed
 until merge.
+
+## Directing C10
+
+For C10 I asked Codex to carry the existing C8/C9 application through an
+observability pass, production checks and a PR, preserving the separate
+escape-room exploration. The agent read the current live brief before changing
+code. The [C10 audit](docs/evidence/c10-audit.md) records the starting commit,
+branch preservation, contract and incremental plan. The initial gaps were
+missing server activity logs, mutable/colliding callsigns, cached stream
+identities after rename and device actions accepted from the Expert view.
+The direction remains a small co-op game: anonymous browser identities,
+switchable seats, server decisions and a useful Fly log tail.
