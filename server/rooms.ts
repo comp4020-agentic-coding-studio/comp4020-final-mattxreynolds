@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { event } from "./telemetry.ts";
+import { event, identifyActivity, outsideRequest } from "./telemetry.ts";
 import type { Response } from "express";
 import { Router } from "express";
 import * as G from "../shared/game.ts";
@@ -175,10 +175,11 @@ function arm(room: Room): void {
   timers.delete(room.code);
   const m = room.mission;
   if (m.status !== "live" || m.endsAt === null) return;
-  timers.set(room.code, setTimeout(() => {
+  const delay = Math.max(0, m.endsAt - Date.now());
+  outsideRequest(() => timers.set(room.code, setTimeout(() => {
     // Use the committed room, not the snapshot captured when this timer armed.
     expire(rooms.get(room.code)!);
-  }, Math.max(0, m.endsAt - Date.now())));
+  }, delay)));
 }
 
 function enlist(room: Room, player: Player): void {
@@ -543,6 +544,8 @@ roomRoutes.post("/:code/actions", (req, res) => {
   const room = load(codeOf(req.params.code));
   const player = playerFrom(req);
   const role = roleOf(req.query.role);
+  identifyActivity({ actorTag: player?.tag ?? null, room: room?.code,
+    mission: room?.mission.no, ...actionFields(req.body), role });
   const fields = { ...(room ? stateFields(room) : {}), ...actionFields(req.body),
     actorTag: player?.tag ?? null, callsign: player?.callsign, role };
   const reject = (status: number, reason: string, error: string, withView = false) => {
@@ -651,18 +654,19 @@ logRoutes.get("/stream", (req, res) => {
 // Callsigns are labels, not identity. Refresh existing streams and live crew
 // immediately; completed mission records keep the names used on that run.
 playerEvents.on("renamed", (player: Player) => {
-  for (const [code, set] of clients) {
-    const room = expire(rooms.get(code)!);
-    let changed = false;
-    for (const client of set) {
-      if (client.player.tag === player.tag) { client.player = player; changed = true; }
+  for (const set of clients.values()) {
+    for (const client of set) if (client.player.tag === player.tag) client.player = player;
+  }
+  // Presence does not determine participation: a crew member can rename from
+  // the lobby after leaving a mission which their teammate is still playing.
+  for (const cached of rooms.values()) {
+    const room = expire(cached);
+    if (room.mission.status === "live" && Object.hasOwn(room.mission.crew, player.tag)) {
+      const next = structuredClone(room);
+      enlist(next, player); save(next); rooms.set(room.code, next);
     }
-    if (changed) {
-      if (room.mission.status === "live" && Object.hasOwn(room.mission.crew, player.tag)) {
-        const next = structuredClone(room);
-        enlist(next, player); save(next); rooms.set(code, next);
-      }
-      broadcast(rooms.get(code)!);
+    if ([...(clients.get(room.code) ?? [])].some(c => c.player.tag === player.tag)) {
+      broadcast(rooms.get(room.code)!);
     }
   }
   for (const client of logClients) if (client.player.tag === player.tag) client.player = player;

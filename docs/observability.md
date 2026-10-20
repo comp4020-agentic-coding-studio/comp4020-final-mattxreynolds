@@ -42,7 +42,7 @@ never copied from an alleged actor in a command body.
 | `station.connected`, `station.disconnected` | A browser entered/left the live station history |
 | `action.resolved` | Who submitted which input; accepted, strike, conflict or rejected, with HTTP status and reason |
 | `mission.finished` | Committed outcome/progress and participating public tags; null actor and `cause: deadline` for expiry |
-| `request.completed`, `request.failed` | Method, route template, status/duration; safe failure kind and correlation id |
+| `request.completed`, `request.failed` | Method, route template, status/duration; safe failure kind/code and correlation id, plus validated action context when available |
 | `stream.slow` | Queued bytes exceeded 64 KiB; stream closes so the browser can recover |
 | `server.started` | Process listening, mode and port |
 
@@ -89,7 +89,7 @@ JSON envelopes (requires jq, omitted from the normal workflow):
 
 ```sh
 mise exec -- flyctl logs --json -a comp4020-final-mattxreynolds |
-  jq -R 'fromjson? | .message | fromjson? | select(.schema == 1)'
+  jq '.message | fromjson? | select(.schema == 1)'
 ```
 
 Filter the parsed objects by `room` or `actorTag` when several crews play.

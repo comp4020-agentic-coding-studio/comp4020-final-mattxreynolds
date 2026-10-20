@@ -104,6 +104,9 @@ it("does not announce uncommitted actions when SQLite rejects a write", async ()
       { type: "override", missionNo: 1, revision: 0 })).status).toBe(500);
     expect((await json(`/api/rooms/${code}`)).body).toMatchObject({ status: "ready", revision: 0, strikes: 0 });
     expect(server.events.filter(e => e.event === "action.resolved" || e.event === "mission.finished")).toEqual([]);
+    await expect.poll(() => server.events.find(e => e.event === "request.failed")).toMatchObject({
+      actorTag: p.tag, room: code, mission: 1, action: "override", role: "operator", status: 500, errorCode: "ERR_SQLITE_ERROR",
+    });
     expect(server.output()).not.toContain("SECRET-DATABASE-DETAIL");
     db.exec("DROP TRIGGER refuse_save");
     expect((await json(`/api/rooms/${code}/actions`, p.id,

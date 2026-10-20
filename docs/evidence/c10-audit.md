@@ -99,3 +99,24 @@ secured mission with two independent desktop/mobile profiles, both crew tags,
 same-tag/deadline recovery and 400/401/403/409 probes. No browser console/page
 errors or horizontal overflow. This is scripted agent verification; it does
 not stand in for two human pod members playing from the URL at the crit.
+
+## Independent review and genuine corrections
+
+The code-review skill ran separate Standards and Spec reviews against
+`main...259f87c`. Standards found that a departed participant's rename did not
+update their still-live mission crew; Spec found that unexpected command
+failures retained a request id but lost actor/room/action attribution. New
+probes reproduced both failures before correction. Rename now follows live
+participation independently of connection presence. Allowlisted request
+activity context survives into safe failure events, including a bounded Node
+error code but no exception message. Deadline timers explicitly escape the
+arming request's context, so later system expiry cannot inherit that player.
+Both reviewers rechecked the corrections and reported no remaining actionable
+findings. Standards independently reran all three telemetry checks successfully.
+The full suite passed **57 checks**, including the detached-rename regression.
+
+The first Fly deployment (source `259f87c`) built the unchanged Dockerfile and
+updated the existing machine successfully. Public health returned 200 and
+real production stdout contained `server.started`. Its JSON CLI envelopes are
+pretty-printed, not JSONL; the guide's optional jq parser was corrected against
+actual output. The final code deployment and two-profile log rehearsal follow.

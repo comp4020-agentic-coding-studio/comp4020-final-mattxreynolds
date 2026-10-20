@@ -36,3 +36,19 @@ it("renames only the authenticated browser and updates open presence and live mi
     expect(run.crew.find(c => c.tag === b.tag)?.callsign).toBe(b.callsign);
   } finally { s.close(); t.close(); }
 });
+
+it("refreshes live crew labels even after the participant leaves the room", async () => {
+  const a = await newPlayer(), b = await newPlayer(), code = await openRoom(a);
+  const s = await stream(code, "expert", a), t = await stream(code, "operator", b);
+  try {
+    await s.next(); await t.next(); await act(b, code, { type: "start" });
+    s.close();
+    await until(t, v => v.crew.length === 1);
+    await fetch(url("/api/players/me"), { method: "PATCH",
+      headers: { "content-type": "application/json", "x-player": a.id },
+      body: JSON.stringify({ callsign: "DEPARTED-CREW" }) });
+    for (let i = 0; i < 3; i++) await act(b, code, { type: "override" });
+    const run = (await stationLog(a)).runs.find(r => r.roomCode === code)!;
+    expect(run.crew.find(c => c.tag === a.tag)?.callsign).toBe("DEPARTED-CREW");
+  } finally { s.close(); t.close(); }
+});
