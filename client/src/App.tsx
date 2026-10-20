@@ -22,7 +22,7 @@ function usePath(): string {
 
 export function App() {
   const path = usePath();
-  const { me, rename } = usePlayer();
+  const { me, rename, identityError, retry } = usePlayer();
   const code = path.match(/^\/room\/([A-Za-z0-9]{4})\/?$/)?.[1]?.toUpperCase() ?? null;
 
   return (
@@ -58,6 +58,10 @@ export function App() {
         )}
       </header>
       <main>
+        {identityError ? <p className="error" role="alert">
+          Couldn’t reach the station. Your browser identity has been kept. {" "}
+          <button className="quiet" onClick={retry}>Retry connection</button>
+        </p> : null}
         {code ? <Room key={code} code={code} me={me} /> : <Lobby me={me} rename={rename} />}
         <footer>
           <span>01 / DEAD AIR</span>

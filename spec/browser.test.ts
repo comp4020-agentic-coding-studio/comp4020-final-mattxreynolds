@@ -169,3 +169,25 @@ it("releases controls after a lost acknowledgement without automatically replayi
     await expect.poll(async () => (await look(code, "operator")).revision).toBe(2);
   } finally { deliver?.(); await browser.close(); }
 }, 15_000);
+
+it("preserves browser identity across a temporary bootstrap failure and offers recovery", async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext(), page = await context.newPage();
+    await page.goto(url("/"));
+    await expect.poll(() => page.getByRole("button", { name: "Open a new room" }).isEnabled()).toBe(true);
+    const id = await page.evaluate(() => localStorage.getItem("dead-air.player"));
+    let registrations = 0;
+    page.on("request", r => { if (r.method() === "POST" && new URL(r.url()).pathname === "/api/players") registrations++; });
+    await page.route("**/api/players/me", route => route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporarily unavailable"}' }));
+    await page.reload();
+    await page.getByRole("button", { name: "Retry connection", exact: true }).waitFor();
+    expect(registrations).toBe(0);
+    expect(await page.evaluate(() => localStorage.getItem("dead-air.player"))).toBe(id);
+    await page.unroute("**/api/players/me");
+    await page.getByRole("button", { name: "Retry connection", exact: true }).click();
+    await expect.poll(() => page.getByRole("button", { name: "Open a new room" }).isEnabled()).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem("dead-air.player"))).toBe(id);
+    expect(registrations).toBe(0);
+  } finally { await browser.close(); }
+}, 15_000);

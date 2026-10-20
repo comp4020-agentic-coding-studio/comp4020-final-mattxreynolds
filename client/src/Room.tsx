@@ -216,7 +216,7 @@ export function Room({ code, me }: { code: string; me: Me | null }) {
                     {c.callsign}
                     {c.tag === me?.tag ? " (you)" : ""}
                   </strong>
-                  <span>{c.role === "expert" ? "Expert · manual access" : "Operator · device access"}</span>
+                  <span>{c.role === "expert" ? "Expert · manual access" : "Operator · device access"} · {c.tag}</span>
                 </div>
               </div>
             ))

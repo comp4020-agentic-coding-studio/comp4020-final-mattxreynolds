@@ -1,5 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import { once } from "node:events";
+import { boot, stop } from "./server.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,29 +6,6 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import type { RoomView } from "../shared/view.ts";
 
-// Real API router in an independent process, on port 0; no static build needed.
-async function boot(dir: string) {
-  const child = spawn(process.execPath, ["--input-type=module", "-e", `
-    import express from 'express';
-    import { players } from './server/players.ts';
-    import { roomRoutes, logRoutes } from './server/rooms.ts';
-    const app = express(); app.use(express.json());
-    app.use('/api/players', players); app.use('/api/rooms', roomRoutes); app.use('/api/log', logRoutes);
-    const s = app.listen(0, '127.0.0.1', () => console.log(s.address().port));
-  `], { env: { ...process.env, DATA_DIR: dir }, stdio: ["ignore", "pipe", "pipe"] });
-  let stderr = ""; child.stderr!.on("data", chunk => { stderr += chunk; });
-  const port = await new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`API did not start: ${stderr}`)); }, 5000);
-    child.stdout!.once("data", data => { clearTimeout(timer); resolve(Number(String(data).trim())); });
-    child.once("error", e => { clearTimeout(timer); reject(e); });
-    child.once("exit", () => { clearTimeout(timer); reject(new Error(stderr)); });
-  });
-  return { child, base: `http://127.0.0.1:${port}`, errors: () => stderr };
-}
-async function stop(child: ChildProcess) {
-  if (child.exitCode !== null) return;
-  const ended = once(child, "exit"); child.kill("SIGTERM"); await ended;
-}
 async function json(base: string, route: string, id?: string, body?: unknown) {
   const res = await fetch(base + route, { method: body ? "POST" : "GET",
     headers: { "content-type": "application/json", ...(id ? { "x-player": id } : {}) },

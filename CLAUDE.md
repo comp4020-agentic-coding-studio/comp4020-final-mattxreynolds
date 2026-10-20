@@ -5,6 +5,13 @@
 - Expert projections omit device data on GET, SSE and error responses. Keep
   player secret ids out of views and station logs. Seats are switchable views,
   not authentication or exclusive ownership.
+- Browser identity is replaced only after a confirmed missing-player response;
+  temporary failures preserve storage and expose bounded recovery.
+- When changing identity or logging, read `docs/observability.md`. Log selected
+  public tags and validated action/progress fields after commit; credentials,
+  URLs/queries, request bodies and raw errors stay outside the sink. Verify
+  actual stdout and, after deploying, correlate two independent profiles with
+  the Fly log tail. Matching callsigns must still be distinguishable.
 - Keep manual text and executable rules aligned in `shared/game.ts`; preserve
   randomised solvable devices and the information split that makes talking necessary.
 - Before changing multiplayer, read `docs/adr/0001-observed-state-actions.md`.

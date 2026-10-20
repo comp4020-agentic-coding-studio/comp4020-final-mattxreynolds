@@ -1,0 +1,36 @@
+{
+  "base": "https://comp4020-final-mattxreynolds.fly.dev",
+  "at": "2026-10-20T04:10:45.475Z",
+  "room": "ZZ3R",
+  "alpha": {
+    "tag": "bb1d10dc9a",
+    "callsign": "C10-ALPHA"
+  },
+  "bravo": {
+    "tag": "e61b6ebc20",
+    "callsign": "C10-BRAVO"
+  },
+  "outcomes": [
+    {
+      "mission": 2,
+      "outcome": "defused"
+    },
+    {
+      "mission": 1,
+      "outcome": "exploded"
+    }
+  ],
+  "probes": {
+    "stale": 409,
+    "expertDevice": 403,
+    "malformed": 400,
+    "unknownPlayer": 401
+  },
+  "raceStatuses": [
+    200,
+    409
+  ],
+  "reconnectSameTag": true,
+  "deadlinePreserved": true,
+  "consoleErrors": []
+}
