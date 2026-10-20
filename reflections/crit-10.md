@@ -11,8 +11,8 @@ but callsigns could collide, streams retained old names after rename, and a
 temporary identity lookup failure could register the same browser again.
 A log saying only “ALPHA clicked” would hide those distinctions.
 
-The direction given to Codex was to improve the existing game, preserve the
-escape-room exploration and test the deployed story. Stable public tags now
+Codex was directed to improve the existing game, preserve the escape-room
+exploration and verify production. Stable public tags now
 connect room entry, seat changes, inputs, conflicts and outcomes without
 logging bearer credentials. Server checks refuse Expert device inputs;
 switching deliberately to Operator remains allowed for solo practice. That
@@ -20,8 +20,8 @@ permission boundary is written down rather than implied by hidden buttons.
 
 Verification corrected the work: new probes first failed on Expert input,
 rename propagation and bootstrap recovery. Those findings became server/client
-changes and regression checks. Captured stdout and a forced database failure
-also test whether the logs describe committed actions, rather than intentions.
+changes and regression checks. Captured stdout and forced storage failure test committed outcomes. The public
+two-profile rehearsal then matched both tags and 23 revisions in actual Fly logs.
 
 ## What did this work change about who I want to be as a software developer?
 

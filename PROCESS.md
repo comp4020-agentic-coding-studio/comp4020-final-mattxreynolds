@@ -109,7 +109,20 @@ and requires preserving identity during temporary failures. README describes
 current rights and testable promises; the reflection answers both standing
 prompts using the recorded work, without inventing personal reactions.
 
-Production and final review evidence are recorded below as those checks finish.
+Independent Standards and Spec reviewers found departed-crew rename and
+failed-action attribution gaps. Regression probes reproduced both; fixes now
+follow participation independently of presence and preserve safe activity
+context on errors. Reviewers rechecked and cleared them. Final local build,
+typecheck, all 57 tests and evidence checks passed.
+
+Runtime `151e122` deployed to the existing Fly machine/volume before merge.
+The production rehearsal used independent desktop/narrow profiles in room
+ZZ3R: racing inputs returned 200/409, recovery preserved tags/deadline, and
+400/401/403 probes left state untouched. One intentionally lost mission and a
+zero-strike defusal both recorded both tags. Actual Fly logs matched 85 events
+and 23 consecutive revisions; a retained selection and summary document that
+story. Privacy scanning found no credentials/raw payloads; production browser
+errors were empty and seven public HTTP smoke checks passed.
 No scripted rehearsal establishes first-time enjoyment, a one-minute human
 start, tutor feedback or the required two classmates at the crit. The supplied
 URL-only instructions and terminal narration workflow prepare that exercise;

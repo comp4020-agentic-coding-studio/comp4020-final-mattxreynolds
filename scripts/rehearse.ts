@@ -68,6 +68,25 @@ try {
   assert.equal((await probe("operator", { type: "start", missionNo: 1, revision: current.revision }, false)).status, 401);
   assert.equal((await view()).revision, current.revision);
   assert.equal((await view()).strikes, 0);
+  // Two independently rendered Operator seats deliberately race the same
+  // snapshot; hold both requests until both real buttons have been pressed.
+  await ex.getByRole("button", { name: /01 Operator/ }).click(); await live(ex);
+  let release!: () => void, queued = 0;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const hold = async (route: import("playwright").Route) => { queued++; await gate; await route.continue(); };
+  await op.route("**/actions?*", hold); await ex.route("**/actions?*", hold);
+  const responses = [op, ex].map(p => p.waitForResponse(r => r.request().method() === "POST" && r.url().includes("/actions?")));
+  try {
+    await Promise.all([op.getByRole("switch").nth(1).click(), ex.getByRole("switch").nth(1).click()]);
+    for (let tries = 0; queued < 2 && tries < 100; tries++) await op.waitForTimeout(20);
+    assert.equal(queued, 2);
+  } finally { release(); }
+  const raceStatuses = (await Promise.all(responses)).map(r => r.status()).sort();
+  assert.deepEqual(raceStatuses, [200, 409]);
+  await op.unroute("**/actions?*"); await ex.unroute("**/actions?*");
+  assert.equal((await view()).revision, current.revision + 1);
+  assert.equal((await view()).strikes, 0);
+  await ex.getByRole("button", { name: /02 Expert/ }).click(); await live(ex);
   await ex.reload(); await live(ex);
   assert.equal((await publicIdentity(ex)).tag, bravo.tag);
   assert.equal((await view()).endsAt, started.endsAt);
@@ -126,7 +145,7 @@ try {
   const summary = { base, at: new Date().toISOString(), room: code, alpha, bravo,
     outcomes: crewRuns.map((r: { missionNo: number; outcome: string }) => ({ mission: r.missionNo, outcome: r.outcome })),
     probes: { stale: 409, expertDevice: 403, malformed: 400, unknownPlayer: 401 },
-    reconnectSameTag: true, deadlinePreserved: true, consoleErrors: errors };
+    raceStatuses, reconnectSameTag: true, deadlinePreserved: true, consoleErrors: errors };
   writeFileSync(path.join(evidenceDir, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
   console.log(JSON.stringify(summary, null, 2));
 } finally { await browser.close(); }
