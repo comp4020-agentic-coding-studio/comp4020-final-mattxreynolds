@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { event } from "./telemetry.ts";
 import type { Response } from "express";
 import { Router } from "express";
 import * as G from "../shared/game.ts";
@@ -125,7 +127,7 @@ function note(room: Room, text: string, tone: LogEntry["tone"] = "info"): void {
 }
 
 /** One synchronous transaction on the single server: state and end-log commit together. */
-function change(room: Room, mutate: (next: Room) => string | null): string | null {
+function change(room: Room, mutate: (next: Room) => string | null, actor?: Player): string | null {
   const next = structuredClone(room);
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -142,6 +144,10 @@ function change(room: Room, mutate: (next: Room) => string | null): string | nul
     throw error;
   }
   rooms.set(next.code, next);
+  if (next.mission.status === "over" && room.mission.status !== "over") {
+    event("mission.finished", { ...stateFields(next), actorTag: actor?.tag ?? null,
+      cause: actor ? "action" : "deadline", crewTags: Object.keys(next.mission.crew) });
+  }
   arm(next);
   broadcast(next);
   if (next.mission.status === "over" && room.mission.status !== "over") broadcastLog();
@@ -413,7 +419,9 @@ function view(room: Room, role: Role): RoomView {
 function writeEvent(res: Response, data: unknown): void {
   if (res.destroyed || res.writableEnded) return;
   // Bound queued writes: a slow receiver reconnects to a full snapshot.
-  if (res.writableLength > 64 * 1024) { res.destroy(); return; }
+  if (res.writableLength > 64 * 1024) {
+    event("stream.slow", { reason: "queue_limit" }); res.destroy(); return;
+  }
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
@@ -426,7 +434,9 @@ function openStream(res: Response, close: () => void): void {
   });
   res.flushHeaders();
   const heartbeat = setInterval(() => {
-    if (res.writableLength > 64 * 1024) res.destroy();
+    if (res.writableLength > 64 * 1024) {
+      event("stream.slow", { reason: "queue_limit" }); res.destroy();
+    }
     else res.write(": keep-alive\n\n");
   }, 25_000);
   res.on("close", () => { clearInterval(heartbeat); close(); });
@@ -455,53 +465,100 @@ for (const row of db
 
 export const roomRoutes = Router();
 
+// A compact progress summary is enough to narrate without emitting a device.
+function stateFields(room: Room) {
+  const m = room.mission;
+  return { room: room.code, mission: m.no, revision: room.revision,
+    status: m.status, outcome: m.outcome, strikes: m.strikes,
+    solved: G.MODULES.filter(id => m.solved[id]),
+    symbolProgress: m.symbolPresses.length, keypadProgress: m.keypadHistory.length,
+    endsAt: m.endsAt };
+}
+
+// Log only server-recognised action names and bounded, validated positions.
+function actionFields(body: unknown) {
+  const b = body as Record<string, unknown> | null;
+  const action = typeof b?.type === "string" && Object.hasOwn(FIELD, b.type) ? b.type : "unknown";
+  return { action };
+}
+
 roomRoutes.post("/", (req, res) => {
-  if (!playerFrom(req)) return void res.status(401).json({ error: "unknown player" });
+  const player = playerFrom(req);
+  if (!player) {
+    event("room.rejected", { reason: "unknown_player" });
+    return void res.status(401).json({ error: "unknown player" });
+  }
   const room = createRoom();
+  event("room.created", { ...stateFields(room), actorTag: player.tag, callsign: player.callsign });
   res.status(201).json({ code: room.code });
 });
 
 roomRoutes.get("/:code", (req, res) => {
   const room = load(codeOf(req.params.code));
-  if (!room) return void res.status(404).json({ error: "no such room" });
+  if (!room) {
+    event("room.rejected", { reason: "missing_room" });
+    return void res.status(404).json({ error: "no such room" });
+  }
   res.json(view(room, roleOf(req.query.role)));
 });
 
 roomRoutes.get("/:code/stream", (req, res) => {
   const room = load(codeOf(req.params.code));
   const player = getPlayer(req.query.player);
-  if (!room) return void res.status(404).json({ error: "no such room" });
-  if (!player) return void res.status(401).json({ error: "unknown player" });
-
+  if (!room || !player) {
+    event("stream.rejected", { reason: !player ? "unknown_player" : "missing_room" });
+    return void res.status(!room ? 404 : 401).json({ error: !room ? "no such room" : "unknown player" });
+  }
+  const streamId = randomUUID();
+  const opened = performance.now();
   const client: Client = { res, player, role: roleOf(req.query.role) };
-  const set = clients.get(room.code) ?? new Set();
+  const set = clients.get(room.code) ?? new Set<Client>();
   clients.set(room.code, set);
   openStream(res, () => {
     set.delete(client);
     if (set.size === 0) clients.delete(room.code);
-    broadcast(rooms.get(room.code)!);
+    const current = rooms.get(room.code)!;
+    event("room.disconnected", { ...stateFields(current), actorTag: player.tag,
+      role: client.role, streamId, connections: set.size,
+      durationMs: Math.round(performance.now() - opened) });
+    broadcast(current);
   });
   set.add(client);
   if (room.mission.status === "live") { enlist(room, player); save(room); }
+  event("room.connected", { ...stateFields(room), actorTag: player.tag,
+    callsign: player.callsign, role: client.role, streamId, connections: set.size });
   broadcast(room);
 });
 
 roomRoutes.post("/:code/actions", (req, res) => {
   const room = load(codeOf(req.params.code));
   const player = playerFrom(req);
-  if (!room) return void res.status(404).json({ error: "no such room" });
-  if (!player) return void res.status(401).json({ error: "unknown player" });
-  if (!isAction(req.body, room)) return void res.status(400).json({ error: "malformed action" });
   const role = roleOf(req.query.role);
+  const fields = { ...(room ? stateFields(room) : {}), ...actionFields(req.body),
+    actorTag: player?.tag ?? null, callsign: player?.callsign, role };
+  const reject = (status: number, reason: string, error: string, withView = false) => {
+    event("action.resolved", { ...fields, result: "rejected", reason, httpStatus: status });
+    res.status(status).json({ error, ...(withView && room ? { view: view(room, role) } : {}) });
+  };
+  if (!room) return reject(404, "missing_room", "no such room");
+  if (!player) return reject(401, "unknown_player", "unknown player");
+  if (!isAction(req.body, room)) return reject(400, "malformed_action", "malformed action");
   if (req.body.missionNo !== room.mission.no || req.body.revision !== room.revision) {
+    event("action.resolved", { ...fields, result: "conflict", reason: "stale_snapshot",
+      httpStatus: 409, observedMission: req.body.missionNo, observedRevision: req.body.revision });
     return void res.status(409).json({
-      error: "Room changed. Read back the updated device before acting again.",
-      view: view(room, role),
+      error: "Room changed. Read back the updated device before acting again.", view: view(room, role),
     });
   }
-  const error = change(room, (next) => apply(next, player, req.body));
+  const error = change(room, (next) => apply(next, player, req.body), player);
   const current = rooms.get(room.code)!;
-  if (error) return void res.status(409).json({ error, view: view(current, role) });
+  if (error) return reject(409, "invalid_state", error, true);
+  const field = FIELD[req.body.type as Action["type"]];
+  event("action.resolved", { ...fields, ...stateFields(current),
+    previousMission: room.mission.no, previousRevision: room.revision,
+    result: current.mission.strikes > room.mission.strikes ? "strike" : "accepted",
+    httpStatus: 200, ...(field ? { position: (req.body as unknown as Record<string, number>)[field] } : {}),
+    ...(req.body.type === "flip" ? { switchUp: current.mission.switches[req.body.index] } : {}) });
   res.json(view(current, role));
 });
 
@@ -564,9 +621,17 @@ logRoutes.get("/", (req, res) => {
 
 logRoutes.get("/stream", (req, res) => {
   const player = getPlayer(req.query.player);
-  if (!player) return void res.status(401).json({ error: "unknown player" });
+  if (!player) {
+    event("stream.rejected", { reason: "unknown_player", channel: "station" });
+    return void res.status(401).json({ error: "unknown player" });
+  }
   const client = { res, player, limit: logLimit(req.query.limit) };
-  openStream(res, () => logClients.delete(client));
+  const streamId = randomUUID();
+  openStream(res, () => {
+    logClients.delete(client);
+    event("station.disconnected", { actorTag: player.tag, streamId });
+  });
+  event("station.connected", { actorTag: player.tag, callsign: player.callsign, streamId });
   logClients.add(client);
   writeEvent(res, stationView(player, client.limit));
 });

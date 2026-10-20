@@ -1,6 +1,7 @@
 import express from "express";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { event, instrument, reportError } from "./telemetry.ts";
 import { players } from "./players.ts";
 import { renderReadme } from "./readme.ts";
 import { logRoutes, roomRoutes } from "./rooms.ts";
@@ -10,7 +11,8 @@ const DEV = process.env.NODE_ENV !== "production";
 const root = path.resolve(import.meta.dirname, "..");
 
 const app = express();
-app.use(express.json());
+app.use(instrument);
+app.use(express.json({ limit: "16kb" }));
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
@@ -44,6 +46,8 @@ if (DEV) {
   });
 }
 
+app.use(reportError);
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Dead Air listening on http://localhost:${PORT} (${DEV ? "dev" : "production"})`);
+  event("server.started", { port: PORT, mode: DEV ? "dev" : "production" });
 });

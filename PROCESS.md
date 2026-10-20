@@ -148,3 +148,12 @@ missing server activity logs, mutable/colliding callsigns, cached stream
 identities after rename and device actions accepted from the Expert view.
 The direction remains a small co-op game: anonymous browser identities,
 switchable seats, server decisions and a useful Fly log tail.
+
+The unchanged C9 baseline passed all 45 checks after reinstalling its locked
+stack (the local dependency directory still contained exploration packages).
+The first implementation adds versioned JSON stdout events and server-generated
+request ids. It records safe public tags, selected inputs, revision/progress,
+stream connections, rejections and committed mission outcomes. Full requests,
+secret player ids and device snapshots stay outside the sink. Isolated-process
+checks capture actual stdout, including parser and unexpected-error probes;
+the restart harness now parses its explicit port marker alongside JSON events.

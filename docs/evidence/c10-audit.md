@@ -48,3 +48,15 @@ can expose Express HTML/stack output and lack safe diagnostic correlation.
    checks, push and open the PR with green CI. Never merge it.
 
 Evidence below will distinguish completed checks from plans and human-only work.
+
+## Baseline and structured logging increment
+
+Locked dependencies initially reflected the other branch's stack in the local
+`node_modules`; reinstalling the unchanged lockfile restored Express/React.
+The post-C9 production build and all 45 existing checks passed before changes.
+The new isolated logging checks pass alongside restart checks (4 tests):
+colliding callsigns remain distinct by public tag; simultaneous flips yield
+one accepted revision and one logged conflict; malformed/unknown identities,
+rename, disconnect/reconnect, strikes and committed mission end are readable.
+Parser, oversized-body and unexpected errors return a safe correlation id.
+Captured stdout is asserted free of player credentials and sentinel payloads.

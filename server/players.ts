@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { Request } from "express";
 import { Router } from "express";
+import { event } from "./telemetry.ts";
 import { db } from "./db.ts";
 
 // A person is an anonymous id their browser keeps, plus a callsign they can
@@ -49,22 +50,31 @@ players.post("/", (req, res) => {
     callsign,
     Date.now(),
   );
+  event("player.created", { actorTag: player.tag, callsign });
   res.status(201).json(player);
 });
 
 players.get("/me", (req, res) => {
   const player = playerFrom(req);
-  if (!player) return void res.status(404).json({ error: "unknown player" });
+  if (!player) {
+    event("player.rejected", { reason: "unknown_player" });
+    return void res.status(404).json({ error: "unknown player" });
+  }
   res.json(player);
 });
 
 players.patch("/me", (req, res) => {
   const player = playerFrom(req);
-  if (!player) return void res.status(404).json({ error: "unknown player" });
+  if (!player) {
+    event("player.rejected", { reason: "unknown_player" });
+    return void res.status(404).json({ error: "unknown player" });
+  }
   const callsign = normaliseCallsign(req.body?.callsign);
   if (!callsign) {
+    event("player.rejected", { actorTag: player.tag, reason: "invalid_callsign" });
     return void res.status(400).json({ error: "callsign: 2–16 letters, digits or dashes" });
   }
   db.prepare("UPDATE players SET callsign = ? WHERE id = ?").run(callsign, player.id);
+  event("player.renamed", { actorTag: player.tag, callsign, previousCallsign: player.callsign });
   res.json({ ...player, callsign });
 });
