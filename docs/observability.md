@@ -120,3 +120,37 @@ Start the Fly tail separately and match the summary's room/tags to server
 events. This script drives the UI for verification; the human crit narration
 uses the log tail alone. A temporary identity lookup failure preserves browser
 storage and exposes Retry; only a confirmed server 404 creates a replacement.
+
+## Local setup and deployment
+
+Use the pinned tools and locked dependencies:
+
+```sh
+mise install
+mise exec -- pnpm install --frozen-lockfile
+mise exec -- pnpm exec playwright install chromium
+mise exec -- pnpm build
+DATA_DIR=/tmp/dead-air-local mise exec -- pnpm start
+# Another terminal:
+mise exec -- pnpm check
+mise exec -- pnpm check:evidence
+```
+
+Restart after rebuilding: the production server reads its asset index at boot.
+`pnpm dev` runs Vite middleware on the same port. Production uses one Node
+process, SQLite on `/data` and the existing 256 MB Fly machine/volume. No new
+services or credentials are needed. Public PR CI checks the actual Docker
+image; merge to `main` runs the existing deploy job. A deliberate branch
+rehearsal can deploy before merge with the configured local Fly token:
+
+```sh
+mise exec -- flyctl deploy --remote-only --ha=false -a comp4020-final-mattxreynolds
+```
+
+Never print the token or put it in Git. Deployment restarts streams; browsers
+recover snapshots automatically. Refresh existing pages once to load new UI
+assets. HTTP/SSE contracts and SQLite remain compatible with post-C9 state.
+Rollback uses the previous source/image with the same volume; there is no
+schema migration. Check `/api/health`, `/readme/`, independent clients and the
+actual log tail after each production change. A branch deployment changes the
+public application before merge; the PR/evidence must identify that fact.

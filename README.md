@@ -1,76 +1,78 @@
 # Dead Air
 
-A two-seat defusal game for the browser, inspired by *Keep Talking and Nobody
-Explodes*. The Operator has the device and the Expert has the manual. Neither
-one can finish alone, so the only way through is to talk. Every run, won or
-lost, goes on a station log that everyone can see.
+A two-seat browser defusal game inspired by *Keep Talking and Nobody Explodes*.
+The Operator has the device; the Expert has the manual. Talk to finish before
+the clock runs out. Every completed run joins a shared station history.
 
-Live at <https://comp4020-final-mattxreynolds.fly.dev>.
+Play at <https://comp4020-final-mattxreynolds.fly.dev>.
 
 ## What good means here
 
-Dead Air is good if it makes two people talk to each other properly: asking
-questions, reading things back, and slowing down when the clock says hurry up.
-Specifically:
+Dead Air is good if it makes two people talk properly: asking questions,
+reading instructions back and slowing down when the clock says hurry up.
 
-1. **Talking is the game.** Each seat holds half of what's needed. Devices are
-   randomised and the manual gives general rules, so the Expert has to ask
-   what's in front of the Operator.
-2. **A stranger is playing within a minute.** There's no account or setup.
-   Open a room, play both seats yourself or share its code with a teammate.
-3. **It's fair.** Every device can be solved from the manual alone. A strike
-   should be a misunderstanding between people, not an invisible network race.
-4. **The station remembers.** Runs record the crew's callsigns, progress and
-   outcome. Returning players see their own runs among everyone else's.
+1. **Talking is the game.** Randomised devices and general rules mean the
+   Expert must ask what the Operator sees.
+2. **A stranger starts within a minute.** Open a room and share its code;
+   teammates join from their own screens without accounts or installation.
+3. **It's fair.** The manual solves every device. A strike should come from a
+   mistaken instruction, never an invisible network race.
+4. **The station remembers.** Crews, progress and outcomes survive restarts;
+   returning browsers see their runs among everyone else's.
 
 ## Who it's for
 
-Pairs in the same room: classmates at a crit, or a showcase full of pairs.
-Each pair opens its own room, so they don't disturb each other's devices.
-Seats can be switched for solo play; they are information views, not exclusive
-ownership or security against someone deliberately switching roles.
+Pairs in the same room: classmates at a crit or a showcase full of crews.
+Each pair opens a room so their devices stay separate. Play solo by switching
+seats when practising.
+
+A person is an anonymous browser profile, recognised by a server-issued secret
+stored locally. Separate profiles get separate public tags; callsigns are
+editable labels that may match. Your tag appears in the lobby and crew list.
+Clearing storage makes a new person. Use fictional callsigns: names and tags
+appear publicly in crew history and operational logs.
 
 ## Playing together
 
-Mission changes and finished runs reach open seats and station logs through
-server-sent events. The server judges actions and owns the deadline.
+One player opens a room; the other enters its four-character code and chooses
+Expert. Begin starts five minutes; a device input also starts the clock. Clear
+all five modules, leaving the override last. Three strikes end the run.
 
-When two actions use the same observed state, the first valid arrival wins.
-The other is refused **without a strike**: read back the updated device and
-choose again. Duplicates cannot flip twice or press unseen keypad stages. This favours
-communication over parallel clicking, including on different modules. The [decision record](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/main/docs/adr/0001-observed-state-actions.md)
-explains the alternatives and costs.
+Seats are switchable views. The server omits devices from Expert responses
+and refuses Expert device inputs; either seat can Begin or load the next
+mission. Anyone with a code may select Operator. Codes invite teammates;
+they provide no protection for sensitive information. Only your browser's
+credential can rename your identity. Completed crews remain as played.
+
+The server owns rules, deadlines and persistence. SSE carries room changes and
+station history. First valid arrival wins when commands describe the same
+revision; stale/duplicate inputs are refused without a strike. Read back the
+updated device before choosing again. The [decision record](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/main/docs/adr/0001-observed-state-actions.md)
+explains the trade-off.
 
 A lost link pauses controls until a fresh snapshot arrives. The clock keeps
-running; rejoin restores the mission or final result. Lost acknowledgements
-are not retried: check the recovered device before acting again.
+running. Lost acknowledgements are bounded and never automatically replayed;
+check the recovered device. Temporary startup failure preserves your identity
+and offers Retry.
 
-## What I looked at
+## What I looked at and left out
 
-- *Keep Talking and Nobody Explodes* (Steel Crate Games): split information
-  and rules depending on details only the Operator sees.
-- *Spaceteam* (Sleeping Beast Games): spoken co-operation under pressure.
-- *Hanabi*: limited information makes communication scarce.
-- Robin Sloan, "An app can be a home-cooked meal", and Clay Shirky,
-  "Situated Software": software for particular people and moments.
+*Keep Talking and Nobody Explodes* supplies asymmetric information;
+*Spaceteam* supplies spoken co-operation; *Hanabi* makes limited information
+valuable. Robin Sloan's [home-cooked apps](https://www.robinsloan.com/notes/home-cooked-app/)
+and Clay Shirky's [situated software](https://wiki.xxiivv.com/docs/situated_software.html)
+support designing for particular people and moments. Accounts would cost the
+first minute; built-in chat would replace talking; ranked scores would reward
+memorisation. Five modules fit one short conversation.
 
-## What I chose not to build
+## Checking the promises
 
-Accounts would cost the first minute. Voice/text chat would replace the
-out-loud conversation. A ranked leaderboard would reward memorising answers;
-the log records crews instead. Five modules are enough for a five-minute run.
+`pnpm check` protects rules, persistence, identity, information separation,
+conflicts and recovery using HTTP, SSE and independent desktop/narrow browsers.
+Talking and a stranger's first minute require watching first-time pairs;
+scripted rehearsals cannot establish those judgements.
 
-## Which claims are enforced and which are judged
-
-| Claim | How it's held |
-| --- | --- |
-| Finished runs persist with their crew | `spec/game.test.ts`, `spec/persistence.test.ts` |
-| Rooms stay isolated; Expert projections omit device data | `spec/game.test.ts`, `spec/realtime.test.ts` |
-| Relevant open seats and station logs update within a second | `spec/realtime.test.ts`, `spec/browser.test.ts` |
-| Stale/duplicate commands cannot act twice; reconnect restores state | `spec/multiplayer.test.ts`, `spec/browser.test.ts` |
-| The manual solves every device | `spec/game.test.ts`, `spec/rules.test.ts` |
-| Talking is the game; strangers start within a minute | Judged by watching first-time pairs |
-
-`pnpm check` runs against a running app, including independent browser contexts.
-Local timings are evidence, not a guarantee on every network. Human pod
-judgement remains to be recorded in `PROCESS.md`.
+Server JSON events identify public tags, actions, progress and rejections.
+Watch with `mise exec -- flyctl logs -a comp4020-final-mattxreynolds`.
+The [operations guide](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/main/docs/observability.md)
+explains permissions, privacy, local setup, deployment and log-only narration.
