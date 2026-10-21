@@ -1,24 +1,31 @@
 # TODO
 
 ## CURRENT
-- Marker simulation.
+- Nothing in progress. The game is complete and the full spec passes (90 tests).
 
 ## NEXT
-- Playtest the phase banner wording, audio levels and the pulse beep with real pairs.
-- Engine Room frame cost under software GL (9 lights; see polish report).
-- Marker simulation from /readme/ with two fresh profiles; fix findings.
-- Verify Docker image builds and runs (Docker Desktop not running in this env).
+- Human playtest with two people: difficulty, banner wording, audio levels,
+  pulse beep, 10–15 min length (balance figures are estimates; see
+  docs/GAME_DESIGN.md).
+- Build and run the Docker image. Docker isn't available in the dev WSL env;
+  the prod-only runtime was simulated without Docker and worked.
+- Optional perf: bake a fixed light set in the Engine Room (9 lights).
 
-## BLOCKED
-- Fly deploy: needs the user's go-ahead + choice of target app/repo (docs/DEPLOYMENT.md).
-- README "what good means" + reflections: need the student's own words ([STUDENT REVIEW]).
+## BLOCKED (needs the student)
+- Choose the submission repo/remote; update PROCESS.md commit-link prefix.
+- Fly deploy: `flyctl deploy --remote-only --ha=false -a <repo-name>` (token
+  in mise.local.toml). Not run: needs explicit go-ahead.
+- README "What good means": the student's own argument and sources ([STUDENT REVIEW]).
+- reflections/crit-10.md: the student's own words.
 
 ## COMPLETED
 - Starter template imported unchanged; docs, ADRs, CLAUDE.md.
-- Vertical slice: server, SQLite, lobby, roles, realtime prologue, reconnect.
-- Full puzzle rules in the reducer + unit tests (whole voyage solvable across seeds).
-- Audio, Dockerfile, README draft, PROCESS log, ending vignettes.
-- Engine Room + Bridge 3D merged; reliability suite merged (85 tests).
-- Full voyage passes through real controls in two browser contexts.
-- Polish pass: phase "where to look" banner, cross-room audio + pulse beeps,
-  latched toggles, sail-again double-connect, cheaper water/receiver/glass.
+- Vertical slice → full game: lobby, prologue, power, flood, radio, escape,
+  survived/lost, Ship's Log, sail again.
+- Engine Room + Bridge 3D, audio, phase guide banner, endings.
+- Reliability suite: persistence across SIGTERM/SIGKILL restarts, secrecy,
+  authority/races, presence/pause, replay, pages, slow/offline links.
+- Polish pass: latched toggles, sail-again double-connect, cross-room audio.
+- Blind-play audit: all four puzzles were solvable without talking; fixed
+  and locked in with unit tests. Danger rebalanced.
+- Marker simulation from /readme/ with two profiles + mid-voyage server restart.
