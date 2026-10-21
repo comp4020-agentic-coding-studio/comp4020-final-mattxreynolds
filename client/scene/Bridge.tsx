@@ -22,6 +22,9 @@ export function Bridge() {
 
   return (
     <group>
+      <color attach="background" args={["#0e1a24"]} />
+      <hemisphereLight args={["#c9d6e0", "#2a2420", 0.7]} />
+      <pointLight position={[0, 2.6, 0]} intensity={8} distance={14} />
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[10, 8]} />
         <meshStandardMaterial color="#4a3f35" />

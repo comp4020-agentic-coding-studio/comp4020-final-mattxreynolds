@@ -12,6 +12,7 @@ declare global {
       ids(): string[];
       view(): unknown;
     };
+    __btwPose?: (p: { x?: number; z?: number; yaw?: number; pitch?: number }) => void;
   }
 }
 

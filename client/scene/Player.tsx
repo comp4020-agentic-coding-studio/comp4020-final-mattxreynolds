@@ -29,6 +29,17 @@ export function Player({ layout }: { layout: RoomLayout }) {
     euler.current.set(0, layout.spawnYaw, 0);
   }, [layout, respawn]);
 
+  // dev/screenshot hook (scripts/screenshot.ts): set pose without pointer lock
+  useEffect(() => {
+    window.__btwPose = ({ x, z, yaw, pitch }) => {
+      if (x !== undefined && z !== undefined) pos.current.set(x, layout.spawn[1], z);
+      euler.current.set(pitch ?? 0, layout.spawnYaw + (yaw ?? 0), 0);
+    };
+    return () => {
+      delete window.__btwPose;
+    };
+  }, [layout]);
+
   useEffect(() => {
     const canvas = gl.domElement;
     const onLockChange = () => {

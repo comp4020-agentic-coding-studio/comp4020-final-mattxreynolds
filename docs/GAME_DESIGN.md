@@ -50,19 +50,21 @@ Danger `d` ∈ 0–100 (ship-wide flooding). Per second:
 | Phase | base rise/s |
 |---|---|
 | PROLOGUE | 0 |
-| POWER | 0.12 |
-| FLOOD | 0.06 + 0.18 × (mean compartment level / 100) |
-| RADIO | 0.15 |
-| ESCAPE | 0.45 |
+| POWER | 0.08 |
+| FLOOD | 0.04 + 0.12 × (mean compartment level / 100) |
+| RADIO | 0.10 |
+| ESCAPE | 0.35 |
 
 Mistakes add a lump (listed per puzzle). Completing a phase reduces danger.
 `d` starts at 10 after the prologue. Display: **FLOODING: STABLE** (rate
-≤ 0.1/s), **RISING**, **CRITICAL** (d ≥ 75). Represented by: water plane
+≤ 0.05/s), **RISING**, **CRITICAL** (d ≥ 75). Represented by: water plane
 height in the engine room, a list (camera roll) that grows with `d`, hull
 groans, alarm cadence, lamp flicker.
 
 Balance target: a careful first-time pair with a few mistakes finishes with
-`d` around 60–80. A pair that stalls for several minutes on one puzzle can
+`d` around 60–80. Worked estimate (3 min each on Power/Flood/Radio, 90 s
+escape, ~12 min total): 10 + 14 + 20 + 18 + 31 − 30 relief ≈ 63, plus
+mistakes ≈ 75. (The first draft rates gave ≈ 98, i.e. near-certain loss.) A pair that stalls for several minutes on one puzzle can
 lose. Timings were chosen from the table (see `shared/config.ts`); they need
 playtesting.
 

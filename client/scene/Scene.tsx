@@ -1,4 +1,5 @@
-// The 3D view for the local player's role.
+// The 3D view for the local player's role. Each room owns its own lighting,
+// background and fog, so the two room modules never share a file.
 
 import { Canvas } from "@react-three/fiber";
 import { useStore } from "../store.ts";
@@ -17,10 +18,6 @@ export function Scene() {
       dpr={[1, 1.75]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
-      <color attach="background" args={[engineer ? "#141a1d" : "#0e1a24"]} />
-      <fog attach="fog" args={[engineer ? "#141a1d" : "#0e1a24", 6, 22]} />
-      <hemisphereLight args={["#c9d6e0", "#2a2420", 0.7]} />
-      <pointLight position={[0, 2.6, 0]} intensity={8} distance={14} />
       {engineer ? <EngineRoom /> : <Bridge />}
       <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
     </Canvas>

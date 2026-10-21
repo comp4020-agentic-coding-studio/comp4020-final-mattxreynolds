@@ -23,6 +23,9 @@ export function EngineRoom() {
 
   return (
     <group>
+      <color attach="background" args={["#141a1d"]} />
+      <hemisphereLight args={["#c9d6e0", "#2a2420", 0.7]} />
+      <pointLight position={[0, 2.6, 0]} intensity={8} distance={14} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[10, 8]} />
         <meshStandardMaterial color="#3a4144" />

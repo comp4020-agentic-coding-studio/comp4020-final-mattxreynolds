@@ -15,14 +15,14 @@ export const DANGER = {
   start: 10,
   max: 100,
   criticalAt: 75,
-  stableRate: 0.1,
+  stableRate: 0.05,
   rate: {
     PROLOGUE: 0,
-    POWER: 0.12,
-    FLOOD_BASE: 0.06,
-    FLOOD_PER_LEVEL: 0.18,
-    RADIO: 0.15,
-    ESCAPE: 0.45,
+    POWER: 0.08,
+    FLOOD_BASE: 0.04,
+    FLOOD_PER_LEVEL: 0.12,
+    RADIO: 0.1,
+    ESCAPE: 0.35,
   },
 } as const;
 
