@@ -5,9 +5,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import {
-  AdditiveBlending,
   BackSide,
-  DoubleSide,
   Color,
   type Group,
   type HemisphereLight,
@@ -19,6 +17,7 @@ import {
   type PointLight,
   RepeatWrapping,
   ShaderMaterial,
+  SphereGeometry,
   MeshBasicMaterial,
 } from "three";
 import { useStore } from "../../store.ts";
@@ -172,6 +171,8 @@ function usePortholeTexture() {
 
 const glassMat = new MeshStandardMaterial({ color: "#8fb3c4", transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.4 });
 const rivetMat = new MeshStandardMaterial({ color: PALETTE.bulkheadDark, roughness: 0.5, metalness: 0.5 });
+// a 6-sided dome is plenty at rivet size (hundreds of instances)
+const rivetGeo = new SphereGeometry(1, 6, 3);
 
 /** Rows of rivets along the bulkhead bands (one instanced mesh). */
 function Rivets() {
@@ -179,11 +180,11 @@ function Rivets() {
   const points = useMemo(() => {
     const p: [number, number, number][] = [];
     for (const y of [0.92, 3.05]) {
-      for (let x = -HW + 0.2; x < HW; x += 0.3) {
+      for (let x = -HW + 0.2; x < HW; x += 0.4) {
         p.push([x, y, -HD + 0.005]);
         p.push([x, y, HD - 0.005]);
       }
-      for (let z = -HD + 0.2; z < HD; z += 0.3) {
+      for (let z = -HD + 0.2; z < HD; z += 0.4) {
         p.push([-HW + 0.005, y, z]);
         p.push([HW - 0.005, y, z]);
       }
@@ -198,7 +199,7 @@ function Rivets() {
     });
     ref.current!.instanceMatrix.needsUpdate = true;
   }, [points]);
-  return <instancedMesh ref={ref} args={[GEO.sphere, rivetMat, points.length]} />;
+  return <instancedMesh ref={ref} args={[rivetGeo, rivetMat, points.length]} />;
 }
 
 function Porthole({ position, rotationY }: { position: [number, number, number]; rotationY: number }) {
@@ -364,37 +365,25 @@ export function RoomLights() {
 
 // ------------------------------------------------------------ alarm beacon
 
-/** Rotating red alarm beacon; sweeps until the alarm is acknowledged. The
- * sweep is an additive beam mesh rather than a real spotlight (cheap). */
+/** Rotating red alarm beacon; sweeps until the alarm is acknowledged. The room
+ * light itself pulses red (RoomLights); no real spotlight, for cost. */
 export function AlarmBeacon({ position }: { position: [number, number, number] }) {
   const spin = useRef<Group>(null);
-  const dome = useMemo(() => new MeshStandardMaterial({ color: "#5a1410", emissive: PALETTE.emergencyRed, emissiveIntensity: 0 }), []);
-  const beam = useMemo(
-    () => new MeshBasicMaterial({ color: PALETTE.emergencyRed, transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide, fog: false }),
-    [],
-  );
-  useEffect(() => () => (dome.dispose(), beam.dispose()), [dome, beam]);
+  const dome = useMemo(() => new MeshStandardMaterial({ color: "#5a1410", emissive: PALETTE.emergencyRed, emissiveIntensity: 0, transparent: true, opacity: 0.75, depthWrite: false }), []);
+  useEffect(() => () => dome.dispose(), [dome]);
   useFrame((_, dt) => {
     const v = navView();
     const active = !!v && v.phase === "PROLOGUE" && !v.prologue.acknowledged;
     const reduced = useStore.getState().reducedMotion;
     if (spin.current && active && !reduced) spin.current.rotation.y += dt * 4;
     dome.emissiveIntensity = active ? (reduced ? 1.6 : 1.2 + 0.8 * Math.abs(Math.sin(nowS() * 4))) : 0.05;
-    beam.opacity = active && !reduced ? 0.22 : 0;
   });
   return (
     <group position={position}>
       <mesh geometry={GEO.cyl} material={MAT.enamel} position={[0, -0.04, 0]} scale={[0.1, 0.06, 0.1]} />
       <mesh geometry={GEO.sphere} material={dome} position={[0, 0.06, 0]} scale={[0.085, 0.12, 0.085]} />
       <group ref={spin} position={[0, 0.06, 0]}>
-        <mesh geometry={GEO.box} material={MAT.chrome} position={[0, 0, 0.03]} scale={[0.06, 0.08, 0.01]} />
-        {/* two opposed light beams */}
-        <mesh material={beam} position={[0, 0, 1.3]} rotation={[-Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.45, 2.6, 16, 1, true]} />
-        </mesh>
-        <mesh material={beam} position={[0, 0, -1.3]} rotation={[Math.PI / 2, 0, 0]}>
-          <coneGeometry args={[0.45, 2.6, 16, 1, true]} />
-        </mesh>
+        <mesh geometry={GEO.box} material={MAT.chrome} position={[0, 0, 0.035]} scale={[0.07, 0.09, 0.012]} />
       </group>
     </group>
   );

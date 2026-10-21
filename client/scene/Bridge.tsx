@@ -21,6 +21,7 @@ import { PowerConsole } from "./bridge/PowerConsole.tsx";
 import { ChartTable, Codebook, RadioDesk } from "./bridge/RadioDesk.tsx";
 import { Decor } from "./bridge/Decor.tsx";
 import { RoomLights, RoomShell } from "./bridge/Room.tsx";
+import { Staged, Warm } from "./bridge/kit.tsx";
 import { fxClock, nowS } from "./bridge/state.ts";
 import { box, type RoomLayout } from "./colliders.ts";
 
@@ -35,6 +36,8 @@ const AT = {
   escape: { x: 2.4, z: 3.87 },
 } as const;
 const DEPTH = 0.8;
+/** ms between staged station mounts */
+const STAGE = 350;
 
 export const BRIDGE_LAYOUT: RoomLayout = {
   // the inner faces of the bulkheads (walls are 0.12 m thick)
@@ -57,15 +60,30 @@ export function Bridge() {
   return (
     <group>
       <RoomLights />
-      <RoomShell />
-      <Decor />
-      <PowerConsole position={[AT.power.x, 0, AT.power.z]} />
-      <AlarmConsole position={[AT.alarm.x, 0, AT.alarm.z]} />
-      <FloodConsole position={[AT.flood.x, 0, AT.flood.z]} />
-      <RadioDesk position={[AT.radio.x, 0, AT.radio.z]} rotationY={Math.PI / 2} />
-      <ChartTable position={[AT.chart.x, 0, AT.chart.z]} />
-      <Codebook position={[AT.codebook.x, 1.5, AT.codebook.z]} rotationY={Math.PI / 2} />
-      <EscapePanel position={[AT.escape.x, 0, AT.escape.z]} rotationY={Math.PI} />
+      <Warm>
+        <RoomShell />
+        <AlarmConsole position={[AT.alarm.x, 0, AT.alarm.z]} />
+      </Warm>
+      {/* staged mount: see Staged in bridge/kit.tsx */}
+      <Staged after={STAGE}>
+        <PowerConsole position={[AT.power.x, 0, AT.power.z]} />
+      </Staged>
+      <Staged after={STAGE * 2}>
+        <FloodConsole position={[AT.flood.x, 0, AT.flood.z]} />
+      </Staged>
+      <Staged after={STAGE * 3}>
+        <RadioDesk position={[AT.radio.x, 0, AT.radio.z]} rotationY={Math.PI / 2} />
+      </Staged>
+      <Staged after={STAGE * 4}>
+        <ChartTable position={[AT.chart.x, 0, AT.chart.z]} />
+        <Codebook position={[AT.codebook.x, 1.5, AT.codebook.z]} rotationY={Math.PI / 2} />
+      </Staged>
+      <Staged after={STAGE * 5}>
+        <EscapePanel position={[AT.escape.x, 0, AT.escape.z]} rotationY={Math.PI} />
+      </Staged>
+      <Staged after={STAGE * 6}>
+        <Decor />
+      </Staged>
     </group>
   );
 }

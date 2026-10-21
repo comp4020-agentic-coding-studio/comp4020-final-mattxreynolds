@@ -3,12 +3,13 @@
 // animated-canvas hook. Effects are driven in useFrame from refs and the fx
 // clock (state.ts), never from per-frame React state.
 
-import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BoxGeometry,
   CanvasTexture,
   CylinderGeometry,
+  type Group,
   type Mesh,
   type MeshBasicMaterial,
   MeshStandardMaterial,
@@ -253,6 +254,42 @@ export function Lamp(props: {
       <mesh geometry={GEO.sphere} material={mat} position={[0, 0, 0.012]} scale={[r, r, r * 0.8]} />
     </group>
   );
+}
+
+/** Mounts its children only after `after` ms. The Bridge stages its stations
+ * this way so the first mount (canvas draws, texture uploads, shader
+ * compiles) is spread over several short tasks instead of one long one that
+ * would hold up socket messages — e.g. the prologue's busOn — on slow GPUs. */
+export function Staged({ after, children }: { after: number; children: ReactNode }) {
+  const [ready, setReady] = useState(after <= 0);
+  useEffect(() => {
+    if (ready) return;
+    const t = setTimeout(() => setReady(true), after);
+    return () => clearTimeout(t);
+  }, [after, ready]);
+  return ready ? <Warm>{children}</Warm> : null;
+}
+
+/** Keeps its subtree hidden until three.js has compiled its shader programs
+ * asynchronously (KHR_parallel_shader_compile where available), so first
+ * appearance doesn't stall the main thread on a synchronous link. */
+export function Warm({ children }: { children: ReactNode }) {
+  const ref = useRef<Group>(null);
+  const { gl, camera, scene } = useThree();
+  useEffect(() => {
+    const g = ref.current;
+    if (!g) return;
+    let live = true;
+    // compileAsync needs the objects visible to traverse them; it does not draw
+    gl.compileAsync(g, camera, scene)
+      .catch(() => undefined)
+      .then(() => {
+        if (live && ref.current) ref.current.visible = true;
+      });
+    g.visible = false;
+    return () => void (live = false);
+  }, [gl, camera, scene]);
+  return <group ref={ref}>{children}</group>;
 }
 
 /** Group that tilts its children like a sloped console control strip. */
