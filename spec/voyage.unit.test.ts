@@ -231,4 +231,14 @@ describe("rules", () => {
     expect(act("ENGINEER", { t: "nope" } as never)).toEqual({ ok: false, reason: "bad-input" });
     expect(act("ENGINEER", null as never)).toEqual({ ok: false, reason: "bad-input" });
   });
+
+  it("intent types named after Object.prototype members are rejected, not thrown", () => {
+    // regression: INTENT_RULES["toString"] used to resolve through the
+    // prototype and throw, crashing the server from one client message
+    const { act } = setup();
+    for (const t of ["toString", "constructor", "__proto__", "hasOwnProperty", "valueOf"]) {
+      expect(act("ENGINEER", { t } as never)).toEqual({ ok: false, reason: "bad-input" });
+    }
+    expect(act("ENGINEER", { t: 7 } as never)).toEqual({ ok: false, reason: "bad-input" });
+  });
 });
