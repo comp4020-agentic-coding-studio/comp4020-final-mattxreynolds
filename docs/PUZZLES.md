@@ -50,7 +50,10 @@ systems — BILGE PUMPS, RADIO MAST, HELM — each fed by either of two breakers
 Generator `capacity` equals the load of the unique valid selection (one feeder
 per system, shorted excluded, minimum total); the generator verifies by brute
 force that exactly one selection of breakers powers all three systems within
-capacity without the shorted one.
+capacity without the shorted one. The answer is never three neighbouring
+breakers. (A reliability spec found that ~5% of seeds had the answer
+{1, 2, 3}, so closing breakers left to right solved Power with no
+communication at all.)
 
 | | Engineer | Bridge |
 |---|---|---|

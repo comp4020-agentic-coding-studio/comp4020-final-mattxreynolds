@@ -67,6 +67,13 @@ describe("puzzle generation", () => {
     }
   });
 
+  it("power can't be solved by sweeping breakers left to right (no answer is three neighbours)", () => {
+    for (let seed = 1; seed < 2000; seed++) {
+      const sol = generatePuzzles(seed).power.solution.slice().sort((a, b) => a - b);
+      expect(sol[2] - sol[0], `seed ${seed}`).toBeGreaterThan(2);
+    }
+  });
+
   it("radio stations have distinct patterns and bearings; the target is one of them", () => {
     for (let seed = 1; seed < 200; seed++) {
       const r = generatePuzzles(seed).radio;

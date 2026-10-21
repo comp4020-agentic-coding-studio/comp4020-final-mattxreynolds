@@ -73,6 +73,10 @@ function generatePower(rng: Rng): PowerConfig {
     if (totals[0].load === totals[1].load) continue;
     const ones = breakers.filter((b, i) => b.load === 1 && i !== shorted).length;
     if (ones === 3 && totals[0].load === 3) continue;
+    // nor a run of three neighbours: closing breakers left to right must not
+    // stumble onto the answer without talking to the Bridge
+    const sol = totals[0].sel.slice().sort((a, b) => a - b);
+    if (sol[2] - sol[0] === 2) continue;
     return { breakers, feeders, shorted, capacity: totals[0].load, solution: totals[0].sel.sort() };
   }
 }
