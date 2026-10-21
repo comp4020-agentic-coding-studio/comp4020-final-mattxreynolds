@@ -97,6 +97,29 @@ script lets an agent jump to any phase and look at both rooms.
 
 (Integration results are recorded below as they happen.)
 
+### Reliability workstream (merged in [`75740cc`](https://github.com/mattxreynolds/below-the-waterline/commit/75740cc))
+
+**Verified.** The agent added 8 spec files. They cover persistence across
+SIGTERM and SIGKILL restarts, view secrecy for every phase, server
+authority and races, presence and pause, replay, server-rendered pages, and
+slow or dropped links in two browser contexts. 84 tests passed, run three
+times in a row. I reviewed both of its server changes before merging:
+
+- **A real crash bug**, [`ebbebb3`](https://github.com/mattxreynolds/below-the-waterline/commit/ebbebb3).
+  `applyIntent` looked up `INTENT_RULES[intent.t]` without checking it was an
+  own key. A seated client sending `{t: "toString"}` made the reducer throw
+  inside the socket handler, which killed the process and every live
+  voyage. The adversarial authority spec found it. It is now fixed with
+  `Object.hasOwn`, and a unit regression test covers it.
+- [`42c964d`](https://github.com/mattxreynolds/below-the-waterline/commit/42c964d):
+  `res.sendFile` refused paths containing a dot-directory, so `/` returned 404
+  when the repo was checked out under `.claude/worktrees/`. Production was
+  never affected.
+- **A testing lesson.** Chrome's CDP latency emulation does not delay frames
+  on an open WebSocket. A "slow connection" test built on it alone would
+  have passed while testing nothing. The agent measured this and proxied
+  socket frames with an added delay instead.
+
 ## [STUDENT REVIEW] Your reflection
 
 What you decided, what surprised you, and what you would do differently.

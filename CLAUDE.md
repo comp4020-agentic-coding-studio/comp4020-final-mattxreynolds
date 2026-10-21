@@ -84,4 +84,9 @@ own judgement are marked `[STUDENT REVIEW]`.
 
 ## Lessons
 
-- (add durable lessons discovered during development here)
+- Look up client-supplied keys with `Object.hasOwn`, never `obj[key]`:
+  `{t:"toString"}` once crashed the server through `INTENT_RULES[t]`.
+- CDP network emulation does not slow an open WebSocket; slow-link tests
+  must proxy frames (`slowLink` in spec/helpers/browser.ts).
+- Use `res.sendFile(name, { root })`, not an absolute path: a dot-directory
+  anywhere in the absolute path makes send 404.
