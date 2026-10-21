@@ -1,7 +1,7 @@
 // Phase 2 — damage-control map and the three glyph-labelled pump switches.
 
 import { useFrame } from "@react-three/fiber";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Group } from "three";
 import { FLOOD } from "../../../shared/config.ts";
 import type { Glyph } from "../../../shared/glyphs.ts";
@@ -21,7 +21,11 @@ const RISER = 1.05;
 
 export function FloodConsole({ position, rotationY = 0 }: { position: [number, number, number]; rotationY?: number }) {
   const mode = useStationMode("FLOOD");
-  const levels = useNavSlice((v) => v.flood.levels, { FORE: 0, CARGO: 0, ENGINE: 0 });
+  // whole percent is what the map shows, so redraw only when that changes
+  const levels = useNavSlice(
+    (v) => ({ FORE: Math.round(v.flood.levels.FORE), CARGO: Math.round(v.flood.levels.CARGO), ENGINE: Math.round(v.flood.levels.ENGINE) }),
+    { FORE: 0, CARGO: 0, ENGINE: 0 },
+  );
   const trends = useNavSlice((v) => v.flood.trends, { FORE: 0, CARGO: 0, ENGINE: 0 } as FloodData["trends"]);
   const pumps = useNavSlice((v) => v.flood.pumps, [] as { glyph: Glyph; on: boolean }[]);
   const stable = useNav((v) => v.flood.stable, false);
@@ -65,11 +69,21 @@ function PumpSwitch(props: { index: number; x: number; mode: StationMode; glyph:
   // don't know which pump that is (hidden pipework), so flash any switch
   // that just went from ON to OFF without us asking
   const prevOn = useRef(on);
+  const [tripped, setTripped] = useState(false);
   useEffect(() => {
-    if (prevOn.current && !on && pending.current !== false) flashAt.current = nowS();
+    if (prevOn.current && !on && pending.current !== false) {
+      flashAt.current = nowS();
+      setTripped(true);
+    }
+    if (on) setTripped(false);
     prevOn.current = on;
     pending.current = null;
   }, [on]);
+  useEffect(() => {
+    if (!tripped) return;
+    const t = setTimeout(() => setTripped(false), 4000);
+    return () => clearTimeout(t);
+  }, [tripped]);
 
   useFrame(() => {
     if (!rocker.current) return;
@@ -85,7 +99,9 @@ function PumpSwitch(props: { index: number; x: number; mode: StationMode; glyph:
     if (!active) return;
     pending.current = !on;
     void send({ t: "setPump", pump: index, on: !on }).then((ack) => {
+      // rejected: snap back; accepted: the next view settles it (or this does)
       if (!ack.ok) pending.current = null;
+      else setTimeout(() => (pending.current = null), 800);
     });
   }, [active, on, index]);
 
@@ -110,8 +126,15 @@ function PumpSwitch(props: { index: number; x: number; mode: StationMode; glyph:
           <mesh geometry={GEO.box} material={showOn ? MAT.brass : MAT.chrome} scale={[0.1, 0.16, 0.04]} />
         </group>
       </Interactable>
-      <Plate text={mode === "dead" ? "" : showOn ? "ON" : "OFF"} width={0.1} height={0.05} position={[0.06, -0.11, 0.03]} fg={showOn ? PALETTE.lampGreen : "#c9c2ae"} />
-      <Lamp on={mode !== "dead" && showOn} color={PALETTE.lampGreen} r={0.025} position={[0.2, 0.06, 0.01]} />
+      <Plate
+        text={mode === "dead" ? "" : showOn ? "ON" : tripped ? "TRIPPED" : "OFF"}
+        width={tripped && !showOn ? 0.16 : 0.1}
+        height={0.05}
+        position={[0.06, -0.11, 0.03]}
+        fg={showOn ? PALETTE.lampGreen : tripped ? PALETTE.lampAmber : "#c9c2ae"}
+        bg={tripped && !showOn ? "#3a1a10" : undefined}
+      />
+      <Lamp on={mode !== "dead" && (showOn || tripped)} color={tripped && !showOn ? PALETTE.lampAmber : PALETTE.lampGreen} blink={tripped && !showOn} r={0.025} position={[0.2, 0.06, 0.01]} />
       <Plate text="RUN" width={0.08} height={0.04} position={[0.2, 0.0, 0.03]} fg="#c9c2ae" />
       <Plate text={`${index + 1}`} width={0.05} height={0.05} position={[-0.17, -0.1, 0.03]} fg="#c9c2ae" />
     </group>

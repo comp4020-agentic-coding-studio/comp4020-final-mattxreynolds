@@ -29,14 +29,14 @@ export function PowerConsole({ position, rotationY = 0 }: { position: [number, n
     640,
     (ctx, w, h) => {
       if (mode === "dead") drawDead(ctx, w, h);
-      else if (d.diagram.length === 0) drawStandby(ctx, w, h, "ROUTING DIAGRAM", "AWAITING POWER");
+      else if (mode === "standby" || d.diagram.length === 0) drawStandby(ctx, w, h, "ROUTING DIAGRAM", "STANDBY", "ACKNOWLEDGE THE ALARM TO BEGIN");
       else drawPower(ctx, w, h, mode === "done" ? { ...d, online: true, tripped: false, fed: { PUMPS: true, RADIO: true, HELM: true } } : d);
     },
     [mode, d],
   );
   const live = mode !== "dead";
   // once POWER is complete every system is fed (pumps locked running)
-  const fed = (s: ShipSystem) => live && (mode === "done" || d.fed[s]);
+  const fed = (s: ShipSystem) => mode === "done" || (mode === "active" && d.fed[s]);
 
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
@@ -52,7 +52,7 @@ export function PowerConsole({ position, rotationY = 0 }: { position: [number, n
                 <Lamp on={on} color={PALETTE.lampGreen} r={0.045} position={[-0.12, 0.0, 0.01]} />
                 <Plate text={LAMP_LABEL[s]} width={0.2} height={0.065} position={[0.06, 0.035, 0.03]} />
                 <Plate
-                  text={!live ? "—" : on ? "FED" : "NO FEED"}
+                  text={!live ? "" : on ? "FED" : "NO FEED"}
                   width={0.2}
                   height={0.06}
                   position={[0.06, -0.04, 0.03]}

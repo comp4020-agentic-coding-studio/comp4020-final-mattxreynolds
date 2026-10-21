@@ -45,7 +45,12 @@ export function RadioDesk({ position, rotationY = 0 }: { position: [number, numb
     if (m === "dead") return drawDead(ctx, w, h);
     drawWave(ctx, w, h, !!v?.radio.coupled || m === "done", t, m === "standby");
   }, 8);
-  const meter = useCanvasTexture(640, 512, (ctx, w, h) => drawSignal(ctx, w, h, signal, active && coupled), [signal, active, coupled]);
+  const meter = useCanvasTexture(
+    640,
+    512,
+    (ctx, w, h) => (mode === "dead" ? drawDead(ctx, w, h) : drawSignal(ctx, w, h, signal, active && coupled)),
+    [mode, signal, active, coupled],
+  );
   const replyTex = useCanvasTexture(
     1536,
     220,
