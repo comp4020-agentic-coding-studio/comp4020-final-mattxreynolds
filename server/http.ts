@@ -82,6 +82,11 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
       manager.testChanged(v.code);
       res.json({ ok: true });
     });
+    app.get("/api/test/voyages/:code/events", (req, res) => {
+      const v = manager.testVoyage(String(req.params.code));
+      if (!v) res.status(404).end();
+      else res.json(db.events(v.id));
+    });
   }
 
   await opts.client(app);
@@ -115,7 +120,9 @@ export function staticClient(root: string) {
         return;
       }
       res.setHeader("Cache-Control", "no-cache");
-      res.sendFile(indexFile);
+      // `root` keeps send's dotfile check to the path below dist/, so a checkout
+      // under a dot-directory (e.g. .claude/worktrees) still serves the shell.
+      res.sendFile("index.html", { root: dist });
     };
     app.get("/", sendIndex);
     app.get("/v/:code", sendIndex);

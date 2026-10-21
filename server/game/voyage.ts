@@ -210,8 +210,10 @@ export function bothSeatsReady(v: Voyage): boolean {
 
 /** Validates and applies one intent. Never trusts the client about outcomes. */
 export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number): Result {
-  const rule = INTENT_RULES[intent?.t];
-  if (!rule) return { ok: false, reason: "bad-input" };
+  // own keys only: {t: "toString"} must not find Object.prototype.toString
+  const t = intent?.t;
+  if (typeof t !== "string" || !Object.hasOwn(INTENT_RULES, t)) return { ok: false, reason: "bad-input" };
+  const rule = INTENT_RULES[t];
   if (!v.seats[role]) return { ok: false, reason: "not-seated" };
   if (!rule.phases.includes(v.phase)) return { ok: false, reason: "wrong-phase" };
   if (!rule.roles.includes(role)) return { ok: false, reason: "wrong-role" };

@@ -30,6 +30,31 @@ export async function profile(baseUrl: string): Promise<Profile> {
   return { context, page, errors };
 }
 
+/**
+ * A slow link for one profile: `rttMs` of latency on HTTP (CDP network
+ * emulation) and on the Socket.IO WebSocket (CDP emulation does not delay
+ * frames on an open WebSocket, so frames are proxied with half the RTT added
+ * in each direction, order preserved). Call before the page connects.
+ */
+export async function slowLink(p: Profile, rttMs: number): Promise<void> {
+  const cdp = await p.context.newCDPSession(p.page);
+  await cdp.send("Network.enable");
+  await cdp.send("Network.emulateNetworkConditions", {
+    offline: false,
+    latency: rttMs,
+    downloadThroughput: 256 * 1024,
+    uploadThroughput: 128 * 1024,
+  });
+  const half = rttMs / 2;
+  await p.page.routeWebSocket(/\/socket\.io\//, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((m) => void setTimeout(() => server.send(m), half));
+    server.onMessage((m) => void setTimeout(() => ws.send(m), half));
+    ws.onClose((code, reason) => void setTimeout(() => server.close({ code, reason }), half));
+    server.onClose((code, reason) => void setTimeout(() => ws.close({ code, reason }), half));
+  });
+}
+
 /** Reads the current view through the page's test hook. */
 export const viewOf = (page: Page): Promise<any> => page.evaluate(() => window.__btw?.view());
 
