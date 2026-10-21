@@ -18,11 +18,11 @@ export const DANGER = {
   stableRate: 0.05,
   rate: {
     PROLOGUE: 0,
-    POWER: 0.08,
-    FLOOD_BASE: 0.04,
-    FLOOD_PER_LEVEL: 0.12,
-    RADIO: 0.1,
-    ESCAPE: 0.35,
+    POWER: 0.06,
+    FLOOD_BASE: 0.03,
+    FLOOD_PER_LEVEL: 0.1,
+    RADIO: 0.08,
+    ESCAPE: 0.3,
   },
 } as const;
 
@@ -37,7 +37,7 @@ export const POWER = {
 export const FLOOD = {
   maxPumps: 2,
   drainRate: 4.2,
-  backflowRate: 1.2,
+  backflowRate: 3,
   inflowMin: 0.15,
   inflowMax: 0.3,
   startMin: 55,
@@ -55,7 +55,7 @@ export const RADIO = {
   resonanceMin: 4,
   resonanceMax: 19,
   stations: 5,
-  dangerArc: 1,
+  dangerArc: 2,
   dangerWrongStation: 3,
   dangerNoCarrier: 1,
   dangerRelief: 5,

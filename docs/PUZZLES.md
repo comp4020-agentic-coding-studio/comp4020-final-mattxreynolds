@@ -134,6 +134,11 @@ Rules (server, per tick):
 Recoverability: any configuration can be undone; bursts only cost danger and
 time.
 
+Tuning note: backflow is 3 %/s. At the first value (1.2 %/s), "open every
+valve and rotate the pumps" drained the ship with no communication on 40/40
+simulated seeds. At 3 %/s that blind strategy fails 40/40, while a pair who
+match valves to the running pumps succeeds 40/40.
+
 ---
 
 ## Phase 3 — Distress Signal (~2–4 min)
@@ -153,7 +158,7 @@ station.
 | Controls | **COUPLE** lever `couple` | Tune ◄ / ► `tune {channel}` |
 
 Loop: "warmer / colder" → LOCK lamp lit → E pulls COUPLE. Coupling off
-resonance arcs (danger +1, `coupler-arc` fx) and is otherwise harmless.
+resonance arcs (danger +2, `arc` fx) and is otherwise harmless.
 Locked → tuning freezes, B's waveform shows a clean carrier.
 
 ### 3b Raise the right station
@@ -173,6 +178,9 @@ watches the signal meter → B transmits.
 - Aimed at empty sea → "No carrier", danger +1.
 - Signal strength being high for every station is deliberate: sweeping the
   antenna cannot substitute for identifying the pulse.
+- Blind play (step every channel and couple each time, then sweep every
+  bearing and transmit each time) costs ~22 danger on average (simulated
+  over 200 seeds). A pair who talk spends ~0.
 
 ---
 

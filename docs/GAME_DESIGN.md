@@ -50,10 +50,10 @@ Danger `d` ∈ 0–100 (ship-wide flooding). Per second:
 | Phase | base rise/s |
 |---|---|
 | PROLOGUE | 0 |
-| POWER | 0.08 |
-| FLOOD | 0.04 + 0.12 × (mean compartment level / 100) |
-| RADIO | 0.10 |
-| ESCAPE | 0.35 |
+| POWER | 0.06 |
+| FLOOD | 0.03 + 0.10 × (mean compartment level / 100) |
+| RADIO | 0.08 |
+| ESCAPE | 0.30 |
 
 Mistakes add a lump (listed per puzzle). Completing a phase reduces danger.
 `d` starts at 10 after the prologue. Display: **FLOODING: STABLE** (rate
@@ -62,11 +62,19 @@ height in the engine room, a list (camera roll) that grows with `d`, hull
 groans, alarm cadence, lamp flicker.
 
 Balance target: a careful first-time pair with a few mistakes finishes with
-`d` around 60–80. Worked estimate (3 min each on Power/Flood/Radio, 90 s
-escape, ~12 min total): 10 + 14 + 20 + 18 + 31 − 30 relief ≈ 63, plus
-mistakes ≈ 75. (The first draft rates gave ≈ 98, i.e. near-certain loss.) A pair that stalls for several minutes on one puzzle can
-lose. Timings were chosen from the table (see `shared/config.ts`); they need
-playtesting.
+`d` around 60–80. Current estimates (`start + rate × time + mistakes − 30
+relief`):
+
+| Pair | Time | Final danger |
+|---|---|---|
+| careful, ~12 mistake points | 8.5 min | ≈ 50 |
+| slow but steady, ~15 points | 14 min | ≈ 76 |
+| very slow, ~20 points | 17 min | ≈ 104 (lost) |
+
+History: the first draft's rates gave ≈ 98 for a careful 12-minute pair. A
+second pass gave ≈ 95 for a 14-minute pair after the anti-blind-play changes
+(see PUZZLES.md) raised mistake costs. Rates were lowered both times. They
+still need real playtesting.
 
 ## Success / failure / retry
 

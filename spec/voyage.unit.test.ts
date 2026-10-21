@@ -202,6 +202,21 @@ describe("rules", () => {
     expect(v.phase).toBe("RADIO");
   });
 
+  it("flood needs talking: every valve open while rotating pumps never drains the ship", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { v, act, run } = setup(seed);
+      v.phase = "FLOOD";
+      for (const c of COMPARTMENTS) act("ENGINEER", { t: "setValve", compartment: c, open: true });
+      const pairs = [[0, 1], [1, 2], [0, 2]];
+      for (let r = 0; r < 15 && v.phase === "FLOOD"; r++) {
+        for (const p of [0, 1, 2]) act("NAVIGATOR", { t: "setPump", pump: p, on: false });
+        for (const p of pairs[r % 3]) act("NAVIGATOR", { t: "setPump", pump: p, on: true });
+        run(20);
+      }
+      expect(v.phase, `seed ${seed}`).not.toBe("RADIO");
+    }
+  });
+
   it("escape needs talking: blind steady pumping with release held never opens the door", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const { v, act, run, t } = setup(seed);
