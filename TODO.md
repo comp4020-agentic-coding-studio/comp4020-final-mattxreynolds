@@ -1,11 +1,9 @@
 # TODO
 
 ## CURRENT
-- Integrating delegated workstreams: Engine Room 3D, Bridge 3D, reliability specs
-  (each on its own worktree branch; lead reviews + merges).
+- Polish/review pass (delegated) + marker simulation.
 
 ## NEXT
-- Browser spec that plays the whole voyage through the real UI in two contexts.
 - Polish/review pass (onboarding, readability, audio cues, performance).
 - Marker simulation from /readme/ with two fresh profiles; fix findings.
 - Verify Docker image builds and runs (Docker Desktop not running in this env).
@@ -19,3 +17,5 @@
 - Vertical slice: server, SQLite, lobby, roles, realtime prologue, reconnect.
 - Full puzzle rules in the reducer + unit tests (whole voyage solvable across seeds).
 - Audio, Dockerfile, README draft, PROCESS log, ending vignettes.
+- Engine Room + Bridge 3D merged; reliability suite merged (85 tests).
+- Full voyage passes through real controls in two browser contexts.

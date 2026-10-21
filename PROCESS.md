@@ -120,6 +120,44 @@ times in a row. I reviewed both of its server changes before merging:
   have passed while testing nothing. The agent measured this and proxied
   socket frames with an added delay instead.
 
+### Room workstreams (Engine Room [`69dcb7f`](https://github.com/mattxreynolds/below-the-waterline/commit/69dcb7f), Bridge [`cef6869`](https://github.com/mattxreynolds/below-the-waterline/commit/cef6869))
+
+**Verified.** Both agents kept strictly to their own folders; I checked
+this with `git diff --name-only` before each merge. Neither needed a
+protocol change. I re-screenshotted every phase from the merged `main`
+myself, rather than trusting the agents' screenshots. Both agents reported
+the same two script bugs: the screenshot `--views` separator clashed with
+commas inside poses, and worktree paths broke static serving (already fixed
+by the testing merge). I fixed the separator after merging.
+
+### Integration failures and what they revealed ([`f1574b4`](https://github.com/mattxreynolds/below-the-waterline/commit/f1574b4))
+
+With both rooms merged, the whole-voyage browser spec ran for the first time
+and failed in two places. Both failures were real findings, not test noise:
+
+1. **The flood pump hand-off was too punishing.** The spec handed a pump to
+   the third compartment the moment the first two read under 20%, and the
+   first crept back over the line while the third drained. The arithmetic
+   (drain ≈ 15 s, creep ≈ 6.6 points) showed a crew must drain well below
+   the target first, so the spec now does what a crew must do. Inflow was
+   also lowered (0.25–0.45 → 0.15–0.30 per second) so the hand-off is
+   learnable.
+2. **A 1.5–3 s main-thread stall on first entry.** The strict 1.5 s
+   cross-room browser check failed intermittently. In-page timing showed the
+   network delivered the view in under 100 ms, but each room's first mount
+   froze the page for about 1.5 s while shaders compiled (SwiftShader). A
+   lever pulled in that window reached the other screen 2.3–3 s later. I
+   did not loosen the timeout. The briefing card now shows "Lighting the
+   lamps…" until frames flow, with a 6 s cap. A first version, which needed
+   20 frames under 250 ms, never became ready under software rendering. That
+   would have stranded slow laptops, so it was relaxed to 8 frames under
+   0.5 s.
+
+After this, all 85 tests passed three runs in a row. That includes the full
+voyage played through the real controls in two independent browser contexts
+(Prologue → Power, including a deliberate short circuit → Flood → Radio →
+Escape → Survived → Ship's Log → Sail again).
+
 ## [STUDENT REVIEW] Your reflection
 
 What you decided, what surprised you, and what you would do differently.
