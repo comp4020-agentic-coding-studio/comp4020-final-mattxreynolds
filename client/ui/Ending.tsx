@@ -28,11 +28,20 @@ export function Ending({ onHome }: { onHome: () => void }) {
       <div className="card center">
         <p className="kicker">Voyage {view.code}</p>
         <h1 data-testid="outcome">{survived ? "You made it off" : "The ship went down"}</h1>
-        <p className="lede">
-          {survived
-            ? "The door gives, the sea takes the hull behind you, and the lifeboat drops clear. Somewhere out there, a station has your position."
-            : o.failureCause}
-        </p>
+        {survived ? (
+          <p className="lede">
+            The door gives, the sea takes the hull behind you, and the lifeboat drops clear. Somewhere out there, a station has your
+            position.
+          </p>
+        ) : (
+          <>
+            <p className="cause">{o.failureCause ?? "The ship went down"}.</p>
+            <p className="lede">
+              The flooding reached 100% during <b>{PHASE_NAME[o.phaseReached] ?? o.phaseReached}</b>. Every mistake and every minute
+              spent stuck adds water; finishing a phase pumps some out.
+            </p>
+          </>
+        )}
         <dl className="summary">
           {view.crew.map((c) => (
             <div key={c.role}><dt>{ROLE_TITLE[c.role]}</dt><dd>{c.callsign}</dd></div>

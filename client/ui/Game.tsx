@@ -1,10 +1,32 @@
 // The in-voyage screen: 3D scene + HUD + briefing/pause card.
 
-import { useEffect, useState } from "react";
-import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE } from "../../shared/protocol.ts";
+import { useEffect, useRef, useState } from "react";
+import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE, type Phase } from "../../shared/protocol.ts";
 import { Scene } from "../scene/Scene.tsx";
 import { useStore } from "../store.ts";
 import { Controls } from "./Controls.tsx";
+import { PHASE_GUIDE } from "./guide.ts";
+
+/** How long the "where to look" banner stays up after a phase starts. */
+const PHASE_BANNER_MS = 5500;
+
+/** Shows the phase guide for a few seconds the first time the player is in
+ * the room (pointer locked) during each phase, so a phase that changes while
+ * they're on the briefing card still gets its banner when they return. */
+function usePhaseBanner(phase: Phase, locked: boolean): Phase | null {
+  const [shown, setShown] = useState<Phase | null>(null);
+  const seen = useRef<Phase | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (!locked || seen.current === phase || !PHASE_GUIDE[phase]) return;
+    seen.current = phase;
+    setShown(phase);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setShown(null), PHASE_BANNER_MS);
+  }, [phase, locked]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return shown === phase ? shown : null;
+}
 
 const PHASE_LABEL: Record<string, string> = {
   PROLOGUE: "PROLOGUE",
@@ -34,6 +56,12 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const volume = useStore((s) => s.volume);
   const sceneReady = useStore((s) => s.sceneReady);
   const [gl] = useState(webglAvailable);
+  const bannerPhase = usePhaseBanner(view.phase, locked);
+  const takeRef = useRef<HTMLButtonElement>(null);
+  // keyboard players: Enter/Space on the card takes the controls
+  useEffect(() => {
+    if (sceneReady && !locked) takeRef.current?.focus();
+  }, [sceneReady, locked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -58,9 +86,18 @@ export function Game({ ended = false }: { ended?: boolean }) {
   }
 
   const partner = view.crew.find((c) => c.role !== view.you);
+  const partnerRoom = partner ? ROLE_ROOM[partner.role] : "other room";
+  const guide = PHASE_GUIDE[view.phase]?.[view.you];
+  const banner = bannerPhase ? PHASE_GUIDE[bannerPhase]?.[view.you] : undefined;
   const lockCanvas = () => {
+    if (!useStore.getState().sceneReady) return;
     const canvas = document.querySelector<HTMLCanvasElement>("#scene canvas");
-    canvas?.requestPointerLock?.();
+    try {
+      // some browsers return a promise that rejects (e.g. right after Esc)
+      void (canvas?.requestPointerLock?.() as unknown as Promise<void> | undefined)?.catch?.(() => {});
+    } catch {
+      /* the briefing card stays up; the player can click again */
+    }
   };
 
   return (
@@ -87,20 +124,33 @@ export function Game({ ended = false }: { ended?: boolean }) {
                 : `${partner?.callsign ?? "Partner"} lost connection — ship systems holding`}
             </div>
           )}
+          {banner && locked && (
+            <div className="phase-banner" role="status" key={bannerPhase}>
+              <p className="phase-banner-title">{banner.title}</p>
+              <p><b>You:</b> {banner.you}</p>
+              <p><b>{partner?.callsign ?? "Partner"}</b> in the {partnerRoom} {banner.partner}</p>
+            </div>
+          )}
           {muted && <div className="muted-tag">MUTED (M)</div>}
           {!locked && (
-            <div className="overlay">
+            <div className="overlay" onClick={(e) => e.target === e.currentTarget && lockCanvas()}>
               <div className="card briefing">
                 <p className="kicker">{ROLE_ROOM[view.you]} · Voyage {view.code}</p>
                 <h1>{ROLE_TITLE[view.you]}</h1>
-                <p className="objective-big">{PHASE_OBJECTIVE[view.phase][view.you]}</p>
-                <p>
-                  Your partner <b>{partner?.callsign}</b> is in the {partner ? ROLE_ROOM[partner.role] : "other room"}. You can't see each
-                  other's rooms. Describe everything.
+                <p className="apart">
+                  <b>{partner?.callsign ?? "Your partner"}</b> is in the {partnerRoom}. <b>Neither of you can see the other's room</b>, and your
+                  controls change each other's rooms. Say what you see, out loud.
                 </p>
+                <p className="objective-big">{PHASE_OBJECTIVE[view.phase][view.you]}</p>
+                {guide && (
+                  <ul className="guide">
+                    <li><b>You:</b> {guide.you}</li>
+                    <li><b>{partner?.callsign ?? "Your partner"}</b> in the {partnerRoom} {guide.partner}</li>
+                  </ul>
+                )}
                 <Controls />
                 {sceneReady ? (
-                  <button className="primary big" data-testid="take-controls" onClick={lockCanvas}>
+                  <button ref={takeRef} className="primary big" data-testid="take-controls" onClick={lockCanvas}>
                     Click to take the controls
                   </button>
                 ) : (
@@ -108,7 +158,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
                     Lighting the lamps…
                   </button>
                 )}
-                <p className="hint">Esc frees the mouse. Stuck? Press R here to return to your starting point.</p>
+                <p className="hint">Or click anywhere outside this card. Esc frees the mouse and brings this card back. Stuck? Press R here to return to your starting point.</p>
                 <label className="volume">
                   Volume
                   <input

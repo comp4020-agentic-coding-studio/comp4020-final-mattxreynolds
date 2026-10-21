@@ -53,6 +53,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
             Your callsign
             <input
               name="callsign"
+              autoFocus
               value={callsign}
               maxLength={CALLSIGN_MAX}
               autoComplete="nickname"
