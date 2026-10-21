@@ -45,36 +45,41 @@ helm". It never gives the solution.
 
 ## Sinking pressure
 
-Danger `d` ∈ 0–100 (ship-wide flooding). Per second:
+Danger `d` ∈ 0–100 (ship-wide flooding). Per second, a base rate by act
+plus the water itself (0.1 × mean compartment level / 100) in every act
+where the water is live (II–V):
 
 | Phase | base rise/s |
 |---|---|
 | PROLOGUE | 0 |
 | POWER | 0.06 |
-| FLOOD | 0.03 + 0.10 × (mean compartment level / 100) |
-| RADIO | 0.08 |
-| ESCAPE | 0.30 |
+| FLOOD | 0.03 (+ water) |
+| RADIO | 0.07 (+ water) |
+| CASCADE | 0.08 (+ water) |
+| ESCAPE | 0.30 × (1 − 0.12 per answered coast-station call) (+ water) |
 
-Mistakes add a lump (listed per puzzle). Completing a phase reduces danger.
-`d` starts at 10 after the prologue. Display: **FLOODING: STABLE** (rate
-≤ 0.05/s), **RISING**, **CRITICAL** (d ≥ 75). Represented by: water plane
-height in the engine room, a list (camera roll) that grows with `d`, hull
-groans, alarm cadence, lamp flicker.
+Modes multiply these (`MODE_RULES.danger`). Mistakes add a lump (PUZZLES.md,
+SYSTEMS.md). Completing a phase reduces danger. `d` starts at 10 after the
+prologue. Display: **FLOODING: STABLE** (rate ≤ 0.05/s), **RISING**,
+**CRITICAL** (d ≥ 75). Represented by water height in the engine room, a
+camera roll that grows with `d`, hull groans, alarm cadence and lamp flicker.
 
-Balance target: a careful first-time pair with a few mistakes finishes with
-`d` around 60–80. Current estimates (`start + rate × time + mistakes − 30
-relief`):
+### Difficulty curve (simulated, not playtested)
 
-| Pair | Time | Final danger |
-|---|---|---|
-| careful, ~12 mistake points | 8.5 min | ≈ 50 |
-| slow but steady, ~15 points | 14 min | ≈ 76 |
-| very slow, ~20 points | 17 min | ≈ 104 (lost) |
+The second production cycle aims for a crew that learns the ship: an early
+loss, then a later one, then an escape. Measured with a scripted crew that
+plays correctly but waits a human-like "thinking time" before acting in each
+act, plus some mistakes (6 seeds each, after the rate change above):
 
-History: the first draft's rates gave ≈ 98 for a careful 12-minute pair. A
-second pass gave ≈ 95 for a 14-minute pair after the anti-blind-play changes
-(see PUZZLES.md) raised mistake costs. Rates were lowered both times. They
-still need real playtesting.
+| Profile | Thinking per act (s) | Act I trips | Result | Final danger | Time |
+|---|---|---|---|---|---|
+| expert (4th try) | 15–60 | 0 | 6/6 survive | 7–33 | 5 min |
+| careful | 25–150 | 1 | 6/6 survive | 37–64 | 10 min |
+| first try | 45–240 | 3 | 3/6 lost in Act V, rest 91–93 | — | 15 min |
+
+Real first attempts also make mistakes these bots don't (wrong pumps, missed
+calls, grid trips), so a genuine first voyage is expected to end earlier,
+usually in Act II–IV. These figures need human playtesting.
 
 ## Success / failure / retry
 

@@ -20,9 +20,9 @@ export const DANGER = {
     PROLOGUE: 0,
     POWER: 0.06,
     FLOOD: 0.03,
-    RADIO: 0.06,
-    CASCADE: 0.06,
-    ESCAPE: 0.26,
+    RADIO: 0.07,
+    CASCADE: 0.08,
+    ESCAPE: 0.3,
     /** + this × (mean compartment level / 100) in every act with live water */
     PER_LEVEL: 0.1,
   },
