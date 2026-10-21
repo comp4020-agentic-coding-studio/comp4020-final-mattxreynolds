@@ -95,3 +95,71 @@ export async function hidden(baseUrl: string, code: string): Promise<any> {
 export async function patch(baseUrl: string, code: string, body: unknown): Promise<void> {
   await post(baseUrl, `/api/test/voyages/${code}/patch`, body);
 }
+
+// ---------------------------------------------------------------- extras
+// Used by the specs that run against their own server (spec/helpers/server.ts).
+
+/** A connected socket that has never sent hello — a stranger. */
+export async function strangerSocket(baseUrl: string): Promise<Socket> {
+  const socket = io(baseUrl, { transports: ["websocket"], forceNew: true, reconnection: false });
+  await new Promise<void>((resolve, reject) => {
+    socket.on("connect_error", reject);
+    socket.on("connect", () => resolve());
+  });
+  return socket;
+}
+
+/** Resolves with the next `event` payload on this socket. */
+export function nextEvent<T = any>(socket: Socket, event: string, ms = 5000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off(event, on);
+      reject(new Error(`timed out waiting for ${event}`));
+    }, ms);
+    const on = (data: T) => {
+      clearTimeout(timer);
+      socket.off(event, on);
+      resolve(data);
+    };
+    socket.on(event, on);
+  });
+}
+
+export type VoyageEvent = { at: number; kind: string; detail: string | null };
+
+/** Test hook: the voyage's public event log, oldest first. */
+export async function events(baseUrl: string, code: string): Promise<VoyageEvent[]> {
+  const res = await fetch(new URL(`/api/test/voyages/${code}/events`, baseUrl));
+  if (!res.ok) throw new Error(`events hook answered ${res.status} (is ENABLE_TEST_HOOKS on?)`);
+  return res.json();
+}
+
+/** Test hook: patch the canonical voyage; if it names a phase, wait until
+ * every player's view shows it. */
+export async function jump(baseUrl: string, players: Player[], body: Record<string, unknown>): Promise<void> {
+  const res = await fetch(new URL(`/api/test/voyages/${players[0].code}/patch`, baseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`patch hook answered ${res.status}`);
+  const phase = body.phase;
+  if (typeof phase === "string") await Promise.all(players.map((p) => p.waitFor((v) => v.phase === phase)));
+}
+
+/** PROLOGUE → POWER through the real intents. */
+export async function throughPrologue(eng: Player, nav: Player): Promise<void> {
+  await eng.send({ t: "prologueBreaker" });
+  await nav.waitFor((v) => v.prologue.busOn);
+  await nav.send({ t: "prologueAck" });
+  await eng.waitFor((v) => v.phase === "POWER");
+  await nav.waitFor((v) => v.phase === "POWER");
+}
+
+/** Jumps to ESCAPE with the door open, then both pull ABANDON → SURVIVED. */
+export async function survive(baseUrl: string, eng: Player, nav: Player): Promise<void> {
+  await jump(baseUrl, [eng, nav], { phase: "ESCAPE", deepestPhase: "ESCAPE", escape: { door: 100 } });
+  await Promise.all([eng.send({ t: "abandon" }), nav.send({ t: "abandon" })]);
+  await eng.waitFor((v) => v.phase === "SURVIVED");
+  await nav.waitFor((v) => v.phase === "SURVIVED");
+}
