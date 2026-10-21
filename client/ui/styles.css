@@ -228,3 +228,14 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .lessons ul { margin: 0 0 0.8rem; padding-left: 1.1rem; font-size: 0.88rem; }
 .act-times { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.8rem; font-size: 0.85rem; margin: 0; }
 .act-times div { display: contents; } .act-times dd { margin: 0; font-family: var(--mono); }
+
+.cinematic { position: absolute; inset: 0; pointer-events: none; }
+.cinematic .bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; }
+.cinematic .bar.top { top: 0; } .cinematic .bar.bottom { bottom: 0; }
+.cinematic .captions { position: absolute; left: 0; right: 0; bottom: 13vh; text-align: center; color: #efe9da; text-shadow: 0 2px 8px #000; }
+.cinematic .captions p { margin: 0.3rem 0; font-size: 1.1rem; animation: cap-in 0.8s ease-out; }
+.cinematic .captions p.big { font: 700 1.5rem var(--mono); letter-spacing: 0.14em; }
+.cinematic .skip { position: absolute; right: 1.2rem; bottom: calc(11vh + 0.8rem); pointer-events: auto; background: #000a; color: #efe9da; border: 1px solid #efe9da66; padding: 0.4rem 0.8rem; border-radius: 4px; font: 600 0.85rem var(--mono); cursor: pointer; }
+.cinematic .skip kbd { font: inherit; color: #efe9da; background: transparent; border: 1px solid #efe9da55; border-radius: 3px; padding: 0 0.3rem; margin-left: 0.3rem; }
+@keyframes cap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .cinematic .captions p { animation: none; } }

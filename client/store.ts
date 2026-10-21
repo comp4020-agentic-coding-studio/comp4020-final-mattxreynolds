@@ -26,6 +26,8 @@ type State = {
   lastFx: { fx: Fx; at: number }[];
   /** The 3D room has finished its first-load shader compile. */
   sceneReady: boolean;
+  /** A cinematic bookend is playing (scene/Cinematic.tsx): start is performance.now()/1000. */
+  cinematic: { shot: "intro" | "survived" | "lost"; start: number } | null;
 };
 
 export const useStore = create<State>(() => ({
@@ -42,6 +44,7 @@ export const useStore = create<State>(() => ({
   respawn: 0,
   lastFx: [],
   sceneReady: false,
+  cinematic: null,
 }));
 
 let toastId = 0;

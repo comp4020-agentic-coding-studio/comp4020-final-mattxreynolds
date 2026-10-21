@@ -63,6 +63,16 @@ export const REJECT_TEXT: Record<RejectReason, string> = {
   locked: "Not unlocked yet",
 };
 
+/** A cinematic plays only on a transition seen live (not on a reconnect). */
+function cinematicFor(prev: View | null, v: View): { cinematic?: { shot: "intro" | "survived" | "lost"; start: number } } {
+  if (!prev || prev.code !== v.code || prev.phase === v.phase) return {};
+  const start = performance.now() / 1000;
+  if (prev.phase === "LOBBY" && v.phase === "PROLOGUE") return { cinematic: { shot: "intro", start } };
+  if (v.phase === "SURVIVED" && !v.practice) return { cinematic: { shot: "survived", start } };
+  if (v.phase === "LOST") return { cinematic: { shot: "lost", start } };
+  return {};
+}
+
 export type SeatResult = { code: string; token: string; role: string } | { error: string };
 
 async function seatRequest(url: string, callsign: string, extra: Record<string, unknown> = {}): Promise<SeatResult> {
@@ -120,7 +130,7 @@ export function connect(code: string, onFail: (reason: string) => void): void {
   // sail-again move): the socket re-hellos by itself on every reconnect
   if (socket && current?.code === code && current.token === token) return;
   current = { code, token };
-  useStore.setState({ code, conn: "connecting", view: null });
+  useStore.setState({ code, conn: "connecting", view: null, cinematic: null });
   if (!socket) {
     socket = io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000 });
     socket.on("connect", () => hello());
@@ -129,7 +139,7 @@ export function connect(code: string, onFail: (reason: string) => void): void {
       const prev = useStore.getState().view;
       // views carry a monotonic rev; drop any that arrive out of order
       if (prev && prev.code === v.code && v.rev < prev.rev) return;
-      useStore.setState({ view: v });
+      useStore.setState({ view: v, ...cinematicFor(prev, v) });
     });
     socket.on("fx", (list: Fx[]) => list.forEach(emitFx));
     socket.on("moved", (m: { code: string; by: string }) => {

@@ -25,6 +25,8 @@ const { values } = parseArgs({
     views: { type: "string", default: "spawn;left;right;back" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
+    /** screenshot the opening cinematic at these seconds (e.g. "3;9;15") instead of rooms */
+    cinematic: { type: "string" },
   },
 });
 
@@ -62,6 +64,22 @@ try {
     await page.goto(`${base}/v/${seat.code}`);
     await page.getByTestId("ready").click();
     pages.push([name, page]);
+  }
+  if (values.cinematic) {
+    const [, page] = pages[0];
+    await page.getByTestId("cinematic").waitFor();
+    const t0 = Date.now();
+    for (const sec of values.cinematic.split(";").map(Number)) {
+      await page.waitForTimeout(Math.max(0, sec * 1000 - (Date.now() - t0)));
+      const file = join(values.out!, `cinematic-${sec}s.png`);
+      await page.screenshot({ path: file });
+      console.log(file);
+    }
+    process.exitCode = 0;
+  }
+  // skip the opening cinematic on both seats (Space), as a player can
+  for (const [, page] of pages) {
+    await page.getByTestId("skip-cinematic").click({ timeout: 8000 }).catch(() => {});
   }
   await pages[0][1].getByTestId("take-controls").waitFor();
   const patch = { phase: values.phase, ...(values.patch ? JSON.parse(values.patch) : {}) };

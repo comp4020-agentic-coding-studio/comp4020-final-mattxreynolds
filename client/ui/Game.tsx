@@ -5,6 +5,7 @@ import { MODE_RULES } from "../../shared/config.ts";
 import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE, type Phase } from "../../shared/protocol.ts";
 import { Scene } from "../scene/Scene.tsx";
 import { useStore } from "../store.ts";
+import { CinematicOverlay } from "./CinematicOverlay.tsx";
 import { Controls } from "./Controls.tsx";
 import { PHASE_GUIDE } from "./guide.ts";
 
@@ -57,6 +58,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const muted = useStore((s) => s.muted);
   const volume = useStore((s) => s.volume);
   const sceneReady = useStore((s) => s.sceneReady);
+  const cinematic = useStore((s) => s.cinematic);
   const [gl] = useState(webglAvailable);
   const bannerPhase = usePhaseBanner(view.phase, locked);
   const takeRef = useRef<HTMLButtonElement>(null);
@@ -101,6 +103,15 @@ export function Game({ ended = false }: { ended?: boolean }) {
       /* the briefing card stays up; the player can click again */
     }
   };
+
+  if (cinematic) {
+    return (
+      <div className="game">
+        <Scene />
+        <CinematicOverlay />
+      </div>
+    );
+  }
 
   return (
     <div className="game">

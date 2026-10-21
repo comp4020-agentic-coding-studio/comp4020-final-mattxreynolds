@@ -5,6 +5,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { memo, useEffect, useRef } from "react";
 import { useStore } from "../store.ts";
 import { Bridge, BRIDGE_LAYOUT } from "./Bridge.tsx";
+import { CinematicScene } from "./Cinematic.tsx";
 import { EngineRoom, ENGINE_LAYOUT } from "./EngineRoom.tsx";
 import { Player } from "./Player.tsx";
 
@@ -40,8 +41,17 @@ function ReadyProbe() {
  * the room components already subscribe to exactly the fields they draw. */
 export const Scene = memo(function Scene() {
   const role = useStore((s) => s.view?.you);
+  const cinematic = useStore((s) => s.cinematic);
   if (!role) return null;
   const engineer = role === "ENGINEER";
+  if (cinematic) {
+    // a separate light canvas: the room mounts (and compiles) after it
+    return (
+      <Canvas id="scene" camera={{ fov: 50, near: 0.1, far: 400 }} dpr={[1, 1.5]} gl={{ antialias: true }}>
+        <CinematicScene shot={cinematic.shot} start={cinematic.start} />
+      </Canvas>
+    );
+  }
   return (
     <Canvas
       id="scene"

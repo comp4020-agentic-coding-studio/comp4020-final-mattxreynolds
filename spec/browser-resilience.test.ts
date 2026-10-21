@@ -7,6 +7,7 @@
 
 import { afterAll, afterEach, describe, expect, inject, it } from "vitest";
 import { closeBrowser, createViaUi, joinViaLink, profile, slowLink, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
+import { skipIntro } from "./helpers/browser.ts";
 
 const baseUrl = inject("baseUrl");
 let profiles: Profile[] = [];
@@ -35,6 +36,7 @@ async function toPrologue(a: Profile, b: Profile): Promise<string> {
   await b.page.getByTestId("ready").click();
   await waitView(a.page, "v.phase === 'PROLOGUE'");
   await waitView(b.page, "v.phase === 'PROLOGUE'");
+  await Promise.all([skipIntro(a.page), skipIntro(b.page)]);
   // as a player would: act once the room has loaded (take-controls appears
   // after the first-mount shader compile; see ReadyProbe in client/scene/Scene.tsx)
   await a.page.getByTestId("take-controls").waitFor({ timeout: 15000 });

@@ -24,6 +24,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const view = useStore((s) => s.view);
   const conn = useStore((s) => s.conn);
+  const cinematic = useStore((s) => s.cinematic);
 
   useEffect(() => {
     exposeTestApi();
@@ -68,7 +69,7 @@ export function App() {
   else body = (
     <>
       <Game ended />
-      <Ending onHome={() => go(null)} />
+      {!cinematic && <Ending onHome={() => go(null)} />}
     </>
   );
 

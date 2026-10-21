@@ -4,6 +4,7 @@
 
 import { afterAll, describe, expect, inject, it } from "vitest";
 import { closeBrowser, createViaUi, joinViaLink, profile, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
+import { skipIntro } from "./helpers/browser.ts";
 
 const baseUrl = inject("baseUrl");
 const profiles: Profile[] = [];
@@ -30,6 +31,7 @@ describe("two browser profiles", () => {
     await a.page.getByTestId("ready").click();
     await b.page.locator('[data-role="ENGINEER"] .ready.yes').waitFor();
     await b.page.getByTestId("ready").click();
+    await Promise.all([skipIntro(a.page), skipIntro(b.page)]);
     await a.page.getByTestId("take-controls").waitFor();
     await b.page.getByTestId("take-controls").waitFor();
 

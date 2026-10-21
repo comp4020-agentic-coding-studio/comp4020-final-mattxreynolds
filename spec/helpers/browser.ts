@@ -85,3 +85,13 @@ export async function joinViaLink(p: Profile, code: string, callsign: string): P
   await p.page.getByRole("button", { name: "Board the ship" }).click();
   await p.page.getByTestId("voyage-code").waitFor({ timeout: 8000 });
 }
+
+/** The opening cinematic plays when a voyage starts; a player can skip it.
+ * Waits for it to appear (it always does on a live LOBBY → PROLOGUE) and
+ * presses Skip, so the room mounts. */
+export async function skipIntro(page: Page): Promise<void> {
+  const skip = page.getByTestId("skip-cinematic");
+  await skip.waitFor({ timeout: 8000 });
+  await skip.click();
+  await page.getByTestId("cinematic").waitFor({ state: "detached", timeout: 5000 });
+}
