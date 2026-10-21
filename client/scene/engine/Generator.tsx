@@ -1,16 +1,18 @@
 // The diesel generator block along the west wall. Idle and still until the
-// generator is online, then the flywheel spins up and the rumble lamps glow.
-// Purely an indicator: not interactable.
+// generator is online, then the flywheel spins up and the rumble lamps glow;
+// it spins down whenever the grid trips (the plant is reset in the Aux
+// Machinery Room). Purely an indicator: not interactable.
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { Group, MeshStandardMaterial } from "three";
-import { At, B, C, ev, G, M, Pipe, Plate, stageOf, STAGE, useEVs } from "./kit.tsx";
+import { At, B, C, ev, G, M, Pipe, Plate, stageOf, STAGE, useEV, useEVs } from "./kit.tsx";
 import { AT } from "./layout.ts";
 
 export function Generator() {
   const m = M();
-  const running = useEVs((v) => [(v?.power.online ?? false) || stageOf(v) > STAGE.POWER] as [boolean])[0];
+  const running = useEVs((v) => [((v?.power.online ?? false) || stageOf(v) > STAGE.POWER) && !(v?.ship.gridDown ?? false)] as [boolean])[0];
+  const tripped = useEV((v) => v.ship.gridDown, false);
   const fly = useRef<Group>(null);
   const speed = useRef(0);
   const glow = useMemo(() => new MeshStandardMaterial({ color: "#3a2a18", emissive: "#ff9a3a", emissiveIntensity: 0, roughness: 0.4 }), []);
@@ -18,7 +20,7 @@ export function Generator() {
     const v = ev();
     const online = (v?.power.online ?? false) || stageOf(v) > STAGE.POWER;
     const lost = v?.phase === "LOST";
-    const want = online && !lost ? 9 : 0;
+    const want = online && !lost && !v?.ship.gridDown ? 9 : 0;
     speed.current += (want - speed.current) * Math.min(1, dt * (want > speed.current ? 0.5 : 0.8));
     if (fly.current) fly.current.rotation.x += speed.current * dt;
     const t = performance.now() / 1000;
@@ -58,7 +60,7 @@ export function Generator() {
         <mesh key={x} geometry={G().sphere} material={glow} position={[x, 0.95, 0.41]} scale={[0.07, 0.07, 0.04]} />
       ))}
       <Plate text="GENERATOR No.1" w={0.9} h={0.15} position={[-0.3, 0.55, 0.405]} glow={0.6} />
-      <Plate text={running ? "RUNNING" : "STOPPED"} w={0.5} h={0.12} position={[0.85, 0.3, 0.505]} bg={running ? "#1d5a33" : "#4a1712"} glow={0.7} />
+      <Plate text={running ? "RUNNING" : tripped ? "GRID TRIPPED" : "STOPPED"} w={0.5} h={0.12} position={[0.85, 0.3, 0.505]} bg={running ? "#1d5a33" : "#4a1712"} glow={0.7} />
     </At>
   );
 }

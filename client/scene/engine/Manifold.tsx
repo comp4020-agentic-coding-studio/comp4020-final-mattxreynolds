@@ -11,7 +11,7 @@ import { IDS } from "../ids.ts";
 import { Interactable, useLatched } from "../interact.tsx";
 import { PALETTE } from "../palette.ts";
 import { Dial, type DialSpec } from "../parts.tsx";
-import { At, B, C, ev, G, M, Pipe, Plate, STAGE, useEV, useStage } from "./kit.tsx";
+import { At, B, C, ev, G, M, Pipe, Plate, shipLive, STAGE, useEV, useStage } from "./kit.tsx";
 import { AT, FACE, VALVE_X } from "./layout.ts";
 
 /** Centre-zero scale: −40..0 on the left third, 0..100 on the right. */
@@ -56,8 +56,10 @@ function Handwheel({ c }: { c: Compartment }) {
 function Valve({ c }: { c: Compartment }) {
   const m = M();
   const open = useEV((v) => v.flood.valves[c].open, false);
-  const { stage } = useStage();
-  const live = stage === STAGE.FLOOD;
+  const { phase, stage } = useStage();
+  // live from FLOOD to ESCAPE: the water never stops coming (SYSTEMS.md)
+  const live = shipLive(phase);
+  const gridDown = useEV((v) => v.ship.gridDown, false);
   const latch = useLatched(open);
   const toggle = useCallback(() => {
     const want = !latch.get();
@@ -69,9 +71,9 @@ function Valve({ c }: { c: Compartment }) {
   const prompt =
     stage < STAGE.FLOOD
       ? `${name} — ${state} · no pumps running yet`
-      : stage > STAGE.FLOOD
-        ? `${name} — ${state} · fixed, flooding under control`
-        : `${name} — ${state} · E to ${open ? "shut" : "open"}`;
+      : !live
+        ? `${name} — ${state}`
+        : `${name} — ${state}${gridDown ? " · GRID DOWN, pumps stopped" : ""} · E to ${open ? "shut" : "open"}`;
   const pressure = () => ev()?.flood.valves[c].pressure ?? 0;
 
   return (

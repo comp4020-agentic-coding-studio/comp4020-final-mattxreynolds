@@ -23,10 +23,14 @@ import {
 import { useStore } from "../../store.ts";
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { PALETTE } from "../palette.ts";
+import { MODE_RULES } from "../../../shared/config.ts";
+import { SHIP_PHASES } from "../../../shared/protocol.ts";
 import { Block, GEO, MAT } from "./kit.tsx";
 import { fxClock, navView, nowS } from "./state.ts";
 
 export const ROOM = { w: 10, d: 8, h: 3.2, winLo: 1.3, winHi: 2.75 } as const;
+/** The Comms Room doorway in the starboard bulkhead (x = +5): z range. */
+export const COMMS_DOOR: [number, number] = [0, 1.2];
 const HW = ROOM.w / 2;
 const HD = ROOM.d / 2;
 const T = 0.12; // wall thickness
@@ -124,7 +128,7 @@ function Sea() {
 
 // ------------------------------------------------------------ shell
 
-function DeckTexture() {
+export function DeckTexture() {
   return useCanvasTexture(
     256,
     256,
@@ -188,7 +192,8 @@ function Rivets() {
       }
       for (let z = -HD + 0.2; z < HD; z += 0.4) {
         p.push([-HW + 0.005, y, z]);
-        p.push([HW - 0.005, y, z]);
+        // none floating in the Comms doorway
+        if (y > 2.5 || z < COMMS_DOOR[0] - 0.05 || z > COMMS_DOOR[1] + 0.05) p.push([HW - 0.005, y, z]);
       }
     }
     return p;
@@ -253,23 +258,30 @@ function WallX({ z, holes, y0, y1, facing }: { z: number; holes: [number, number
   return <group>{parts}</group>;
 }
 
-/** A side wall along Z with square holes for portholes at the given z centres. */
-function WallZ({ x, ports, facing }: { x: number; ports: number[]; facing: 1 | -1 }) {
+/** Door height in side walls (the porthole band's top, so the lintel is the top band). */
+export const DOOR_H = 2.05;
+
+/** A side wall along Z (spanning `span`) with square holes for portholes at
+ * the given z centres and an optional full-height doorway [z0, z1]. */
+export function WallZ({ x, ports, facing, span = [-HD, HD], door }: { x: number; ports: number[]; facing: 1 | -1; span?: [number, number]; door?: [number, number] }) {
   const y0 = 1.35;
-  const y1 = 2.05;
+  const y1 = DOOR_H;
   const xc = x + (facing * -T) / 2;
+  // a band from z=a..b, split around the doorway
+  const band = (key: string, y: number, h: number, m: MeshStandardMaterial, a = span[0], b = span[1]) => {
+    const segs: [number, number][] = door ? [[a, Math.min(b, door[0])], [Math.max(a, door[1]), b]] : [[a, b]];
+    return segs
+      .filter(([s0, s1]) => s1 - s0 > 0.001)
+      .map(([s0, s1], i) => <Block key={`${key}${i}`} p={[xc, y, (s0 + s1) / 2]} s={[T, h, s1 - s0]} m={m} />);
+  };
   const parts: ReactElement[] = [
-    <Block key="low" p={[xc, 0.45, 0]} s={[T, 0.9, ROOM.d]} m={MAT.bulkheadLow} />,
-    <Block key="mid" p={[xc, (0.9 + y0) / 2, 0]} s={[T, y0 - 0.9, ROOM.d]} m={MAT.bulkhead} />,
-    <Block key="top" p={[xc, (y1 + ROOM.h) / 2, 0]} s={[T, ROOM.h - y1, ROOM.d]} m={MAT.bulkhead} />,
+    ...band("low", 0.45, 0.9, MAT.bulkheadLow),
+    ...band("mid", (0.9 + y0) / 2, y0 - 0.9, MAT.bulkhead),
+    <Block key="top" p={[xc, (y1 + ROOM.h) / 2, (span[0] + span[1]) / 2]} s={[T, ROOM.h - y1, span[1] - span[0]]} m={MAT.bulkhead} />,
   ];
   const half = (y1 - y0) / 2;
-  const edges = [-HD, ...ports.flatMap((z) => [z - half, z + half]), HD];
-  for (let i = 0; i < edges.length; i += 2) {
-    const a = edges[i];
-    const b = edges[i + 1];
-    parts.push(<Block key={`p${i}`} p={[xc, (y0 + y1) / 2, (a + b) / 2]} s={[T, y1 - y0, b - a]} m={MAT.bulkhead} />);
-  }
+  const edges = [span[0], ...ports.flatMap((z) => [z - half, z + half]), span[1]];
+  for (let i = 0; i < edges.length; i += 2) parts.push(...band(`p${i}`, (y0 + y1) / 2, y1 - y0, MAT.bulkhead, edges[i], edges[i + 1]));
   ports.forEach((z, i) =>
     parts.push(<Porthole key={`h${i}`} position={[xc, (y0 + y1) / 2, z]} rotationY={facing > 0 ? -Math.PI / 2 : Math.PI / 2} />),
   );
@@ -293,7 +305,7 @@ function Pipes() {
 }
 
 /** Caged ceiling lamp fixture whose glow follows the room lighting level. */
-function CeilingLamp({ position, glow }: { position: [number, number, number]; glow: MeshBasicMaterial }) {
+export function CeilingLamp({ position, glow }: { position: [number, number, number]; glow: MeshBasicMaterial }) {
   return (
     <group position={position}>
       <mesh geometry={GEO.cyl} material={MAT.brassDark} position={[0, 0.06, 0]} scale={[0.14, 0.04, 0.14]} />
@@ -308,15 +320,21 @@ function CeilingLamp({ position, glow }: { position: [number, number, number]; g
 
 // ------------------------------------------------------------ lighting
 
-/** Room lighting level from the game state (0 dead … 1 full working light). */
-function lightLevel(): { work: number; red: number; danger: number } {
+/** Room lighting level from the game state (0 dead … 1 full working light).
+ * `emergency`: the generator has tripped and the Bridge runs on its own
+ * battery — dim working light plus a steady red emergency fill. */
+export function lightLevel(): { work: number; red: number; danger: number; emergency: number } {
   const v = navView();
-  if (!v) return { work: 0.3, red: 0, danger: 0 };
+  if (!v) return { work: 0.3, red: 0, danger: 0, emergency: 0 };
   const dead = v.phase === "PROLOGUE" && !v.prologue.busOn;
   let work = dead ? 0.12 : v.phase === "PROLOGUE" ? 0.55 : v.power.online || v.phase !== "POWER" ? 1 : 0.7;
   if (v.phase === "LOST") work = 0.25;
+  // Blackout / All Systems: the rooms run on emergency lamps throughout
+  if (MODE_RULES[v.mode]?.dark && v.phase !== "PROLOGUE") work *= 0.6;
+  const emergency = v.ship.gridDown && SHIP_PHASES.includes(v.phase) ? 1 : 0;
+  if (emergency) work *= 0.45;
   const red = v.phase === "PROLOGUE" && !v.prologue.acknowledged ? 1 : 0;
-  return { work, red, danger: v.danger / 100 };
+  return { work, red, danger: v.danger / 100, emergency };
 }
 
 export function RoomLights() {
@@ -327,13 +345,13 @@ export function RoomLights() {
   const warm = useMemo(() => new Color(PALETTE.workLight), []);
   const smooth = useRef(0.3);
   useFrame((_, dt) => {
-    const { work: target, red, danger } = lightLevel();
+    const { work: target, red, danger, emergency } = lightLevel();
     const t = nowS();
     const reduced = useStore.getState().reducedMotion;
     smooth.current += (target - smooth.current) * Math.min(1, dt * 2.5);
     let k = smooth.current;
     // generator trip: lights brown out and stutter
-    const trip = fxClock.trip === undefined ? Infinity : t - fxClock.trip;
+    const trip = Math.min(fxClock.trip === undefined ? Infinity : t - fxClock.trip, fxClock.gridTrip === undefined ? Infinity : t - fxClock.gridTrip);
     if (trip < 1.4) k *= reduced ? 0.5 : 0.3 + 0.5 * (Math.sin(trip * 41) > 0 ? 1 : 0.2);
     // critical flooding: a slow nervous flicker
     if (!reduced && danger > 0.75 && Math.sin(t * 13) * Math.sin(t * 3.1) > 0.92) k *= 0.6;
@@ -342,7 +360,7 @@ export function RoomLights() {
     lampGlow.color.copy(warm).multiplyScalar(0.15 + 0.85 * k);
     if (redFill.current) {
       const pulse = red ? (reduced ? 0.8 : 0.5 + 0.5 * Math.abs(Math.sin(t * 2.2))) : 0;
-      redFill.current.intensity = 2.5 * pulse + 3 * Math.max(0, danger - 0.5);
+      redFill.current.intensity = 2.5 * pulse + 3 * Math.max(0, danger - 0.5) + 1.6 * emergency;
     }
   });
   const lamps: [number, number, number][] = [
@@ -414,7 +432,8 @@ export function RoomShell() {
       <WallX z={-HD} holes={windows} y0={ROOM.winLo} y1={ROOM.winHi} facing={-1} />
       <WallX z={HD} holes={[]} y0={ROOM.winLo} y1={ROOM.winHi} facing={1} />
       <WallZ x={-HW} ports={[-2.1]} facing={-1} />
-      <WallZ x={HW} ports={[2.6]} facing={1} />
+      {/* starboard: the Comms Room doorway (BRIDGE_LAYOUT's door) */}
+      <WallZ x={HW} ports={[]} facing={1} door={COMMS_DOOR} />
       <Rivets />
       <Pipes />
       {/* skirting kick plates */}

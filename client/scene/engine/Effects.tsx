@@ -20,8 +20,9 @@ const sparks: Spark[] = Array.from({ length: SPARK_N }, () => ({ alive: false, t
 let puffNext = 0;
 let sparkNext = 0;
 
-/** Light kicks read (and decayed) by Lighting: dip darkens, flash brightens. */
-export const kicks = { dip: 0, flash: 0, hum: 0, contact: 0, arc: 0 };
+/** Light kicks read (and decayed) by Lighting: dip darkens, flash brightens.
+ * shudder (hull breach) shakes the room; decayed in EngineRoom. */
+export const kicks = { dip: 0, flash: 0, hum: 0, contact: 0, arc: 0, shudder: 0 };
 
 /** A burst of steam at `at`, blowing roughly along `dir`. */
 export function spawnSteam(at: V3, dir: V3 = [0, 1, 0], count = 14): void {

@@ -126,6 +126,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
                 {view.mode !== "STANDARD" && <span className="tag mode">{MODE_RULES[view.mode].title.toUpperCase()}</span>}
               </span>
               <span className="objective" data-testid="objective">{PHASE_OBJECTIVE[view.phase][view.you]}</span>
+              <ShipStrip />
             </div>
             <div className={`flood ${view.trend.toLowerCase()}`} data-testid="flood">
               FLOODING: {view.trend}
@@ -148,7 +149,6 @@ export function Game({ ended = false }: { ended?: boolean }) {
               <p><b>{partner?.callsign ?? "Partner"}</b> in the {partnerRoom} {banner.partner}</p>
             </div>
           )}
-          <ShipStrip />
           {muted && <div className="muted-tag">MUTED (M)</div>}
           {!locked && (
             <div className="overlay" onClick={(e) => e.target === e.currentTarget && lockCanvas()}>

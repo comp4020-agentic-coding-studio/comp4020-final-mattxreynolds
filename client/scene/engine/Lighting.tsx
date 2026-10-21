@@ -3,12 +3,15 @@
 //    the EMERGENCY BUS panel has its own spot so it is never lost.
 //  - bus on, before POWER is online: dim emergency fittings (cool, low).
 //  - POWER online (or later): warm working light, beacon off.
+//  - LIGHTS circuit shed by the Bridge, or the grid tripped: working
+//    fittings dark, red emergency lamps on the bulkheads only (the controls
+//    carry emissive labels, so the room stays playable).
 // Flicker and red tint scale with danger; trip dips the lights, power-up
 // flashes them. Everything is driven in useFrame from the store.
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
-import { AmbientLight, Color, Fog, Group, HemisphereLight, MeshBasicMaterial, Object3D, PointLight, SpotLight } from "three";
+import { AmbientLight, Color, Fog, Group, HemisphereLight, MeshBasicMaterial, MeshStandardMaterial, Object3D, PointLight, SpotLight } from "three";
 import { useStore } from "../../store.ts";
 import { PALETTE } from "../palette.ts";
 import { kicks } from "./Effects.tsx";
@@ -20,6 +23,16 @@ const COOL = new Color("#9fb4c4");
 const RED = new Color(PALETTE.emergencyRed);
 const BG_DARK = new Color("#0b0e10");
 const BG_WARM = new Color("#1c1d1b");
+
+/** Emergency lamp positions [x, y, z, rotY] on the walls (facing into the room). */
+const EMERGENCY_LAMPS: [number, number, number, number][] = [
+  [-2.2, 2.45, -3.98, 0],
+  [1.9, 2.45, -3.98, 0],
+  [-2.6, 2.45, 3.98, Math.PI],
+  [2.0, 2.45, 3.98, Math.PI],
+  [4.98, 2.45, 3.1, -Math.PI / 2],
+  [-4.98, 2.45, -2.6, Math.PI / 2],
+];
 
 export function Lighting() {
   const hemi = useRef<HemisphereLight>(null);
@@ -34,6 +47,8 @@ export function Lighting() {
   const fog = useMemo(() => new Fog("#0b0e10", 6, 18), []);
   const bg = useMemo(() => new Color("#0b0e10"), []);
   const lit = useRef(0); // eased 0 = dark, 0.35 = emergency, 1 = working
+  const emerg = useRef(0); // eased 0..1: lighting circuit shed, red lamps on
+  const emergMat = useMemo(() => new MeshStandardMaterial({ color: "#3a1a14", emissive: "#ff2a1a", emissiveIntensity: 0, roughness: 0.3 }), []);
   const tmp = useMemo(() => new Color(), []);
   const lensMat = useMemo(() => new MeshBasicMaterial({ color: "#ff2a1a", transparent: true, opacity: 0.9 }), []);
   const fixtureMat = useMemo(() => new MeshBasicMaterial({ color: "#fff3d6" }), []);
@@ -50,7 +65,10 @@ export function Lighting() {
     const t = performance.now() / 1000;
     const reduced = useStore.getState().reducedMotion;
 
-    const target = lost ? 0.15 : online ? 1 : busOn ? 0.42 : 0.18;
+    // engine-room lighting circuit (from the grid): shed, or the grid is down
+    const shed = online && !!v && (!v.ship.circuits.LIGHTS || v.ship.gridDown);
+    const target = lost ? 0.15 : shed ? 0.3 : online ? 1 : busOn ? 0.42 : 0.18;
+    emerg.current += ((shed || lost ? 1 : 0) - emerg.current) * Math.min(1, dt * 4);
     lit.current += (target - lit.current) * Math.min(1, dt * (target > lit.current ? 1.6 : 3));
 
     // decay one-shot kicks
@@ -68,7 +86,7 @@ export function Lighting() {
     }
     const dip = 1 - kicks.dip * 0.75;
     const L = lit.current * flicker * dip + kicks.flash * 0.6 + kicks.arc * 0.5;
-    const redTint = Math.min(0.45, (danger / 100) * 0.4) + (online ? 0 : 0.25);
+    const redTint = Math.min(0.45, (danger / 100) * 0.4) + (online ? 0 : 0.25) + emerg.current * 0.45;
 
     tmp.copy(lit.current > 0.6 ? WARM : COOL).lerp(RED, redTint);
     if (hemi.current) {
@@ -76,12 +94,17 @@ export function Lighting() {
       hemi.current.color.copy(tmp);
     }
     if (amb.current) amb.current.intensity = 0.18 + L * 0.25;
-    for (const w of work.current) {
-      if (!w) continue;
-      w.intensity = L * 9;
-      w.color.copy(tmp);
-    }
-    fixtureMat.color.setRGB(0.25 + L * 0.9, 0.24 + L * 0.85, 0.2 + L * 0.7);
+    // shed: the working fittings go dark; two of their lights stand in as
+    // dim red emergency lamps (no extra lights in the scene)
+    work.current.forEach((w, i) => {
+      if (!w) return;
+      const e = emerg.current;
+      w.intensity = L * 9 * (1 - e) + e * (i < 2 || i === 3 ? 3.2 : 0) * flicker * dip;
+      w.color.copy(tmp).lerp(RED, e * 0.8);
+    });
+    const F = L * (1 - emerg.current * 0.9);
+    fixtureMat.color.setRGB(0.25 + F * 0.9, 0.24 + F * 0.85, 0.2 + F * 0.7);
+    emergMat.emissiveIntensity = emerg.current * (reduced ? 2 : 1.6 + Math.sin(t * 2.2) * 0.4);
 
     // rotating beacon (alarm) — stops when the bridge acknowledges
     const beaconOn = alarm || lost;
@@ -131,6 +154,14 @@ export function Lighting() {
             distance={7}
             decay={1.6}
           />
+        </group>
+      ))}
+      {/* emergency lamps on the bulkheads: caged red domes, lit when the
+          lighting circuit is shed (paired with the "EMERGENCY LIGHTING" stencil) */}
+      {EMERGENCY_LAMPS.map(([x, y, z, ry], i) => (
+        <group key={i} position={[x, y, z]} rotation={[0, ry, 0]}>
+          <mesh geometry={G().box} material={M().steel} scale={[0.22, 0.14, 0.06]} position={[0, 0, 0.03]} />
+          <mesh geometry={G().sphere} material={emergMat} scale={[0.14, 0.1, 0.09]} position={[0, 0, 0.07]} />
         </group>
       ))}
       {/* rotating red beacon */}

@@ -11,7 +11,8 @@ import { Block, GEO, MAT, Plate } from "./kit.tsx";
 export function Decor() {
   return (
     <group>
-      <LifeRing position={[4.85, 1.7, 0.6]} />
+      {/* clear of the Comms doorway (starboard, z 0…1.2) */}
+      <LifeRing position={[4.85, 1.7, 2.5]} />
       {/* lockers on the starboard bulkhead */}
       <group position={[4.62, 0, -1.4]}>
         {[-0.42, 0, 0.42].map((z) => (

@@ -183,7 +183,7 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .practice-note { border-left: 3px solid #f0c674; padding-left: 0.6rem; }
 .tag.practice { margin-left: 0.5rem; background: #f0c674; color: #1b1300; }
 .tag.mode { margin-left: 0.5rem; background: #6a3b8a; }
-.ship-strip { position: absolute; top: 4.2rem; left: 1rem; display: flex; gap: 0.8rem; flex-wrap: wrap; font: 700 0.75rem var(--mono); letter-spacing: 0.08em; color: #dfe7ea; pointer-events: none; }
+.ship-strip { margin-top: 0.4rem; display: flex; gap: 0.8rem; flex-wrap: wrap; font: 700 0.75rem var(--mono); letter-spacing: 0.08em; color: #dfe7ea; pointer-events: none; }
 .ship-strip span { background: #0009; padding: 0.15rem 0.45rem; border-radius: 3px; }
 .ship-strip .bad { background: #7a1f14d0; }
 .blink { animation: blink 0.9s steps(2, start) infinite; }

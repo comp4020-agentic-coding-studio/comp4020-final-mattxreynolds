@@ -3,7 +3,7 @@
 
 import type { Phase } from "../../../shared/protocol.ts";
 import { PALETTE } from "../palette.ts";
-import { At, B, CanvasPlane, M, STENCIL, useStage } from "./kit.tsx";
+import { At, B, CanvasPlane, M, STAGE, STENCIL, useStage } from "./kit.tsx";
 import { AT } from "./layout.ts";
 
 const TITLE: Partial<Record<Phase, string>> = {
@@ -12,17 +12,19 @@ const TITLE: Partial<Record<Phase, string>> = {
   POWER: "EMERGENCY POWER",
   FLOOD: "FLOOD CONTROL",
   RADIO: "DISTRESS SIGNAL",
+  CASCADE: "CASCADE",
   ESCAPE: "ABANDON SHIP",
   SURVIVED: "ALL HANDS OFF",
   LOST: "SHIP LOST",
 };
 
+/** Acts I–V: label and the stage (kit.tsx STAGE) at which the act is done. */
 const ROWS: [string, number][] = [
-  ["EMERGENCY BUS", 2],
-  ["GENERATOR", 3],
-  ["BILGE", 4],
-  ["RADIO", 5],
-  ["ESCAPE", 6],
+  ["I  POWER", STAGE.FLOOD],
+  ["II  BILGE", STAGE.RADIO],
+  ["III  MAYDAY", STAGE.CASCADE],
+  ["IV  EVAC", STAGE.ESCAPE],
+  ["V  ABANDON", STAGE.SURVIVED],
 ];
 
 export function StatusBoard() {
@@ -59,7 +61,7 @@ export function StatusBoard() {
           ROWS.forEach(([label, doneAt], i) => {
             const y = H * (0.39 + i * 0.13);
             const done = stage >= doneAt;
-            const now = stage === doneAt - 1;
+            const now = stage === doneAt - 1 || (i === 0 && stage === STAGE.PROLOGUE);
             ctx.font = `900 ${W * 0.06}px ${STENCIL}`;
             ctx.fillStyle = done ? "#7dffb2" : now ? PALETTE.lampAmber : "rgba(239,230,207,0.55)";
             // shape-coded status: ✔ done, ▶ now, ○ pending

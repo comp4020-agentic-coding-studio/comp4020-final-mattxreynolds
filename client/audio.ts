@@ -2,7 +2,7 @@
 // (autoplay policy), respects mute/volume, and never carries information
 // that isn't also shown visually (CLAUDE.md invariant 8 / GAME_DESIGN.md).
 
-import type { Fx, View } from "../shared/protocol.ts";
+import { ROOM_UNLOCK, type Fx, type View } from "../shared/protocol.ts";
 import { PULSE_TIMING, pulseAt } from "./scene/engine/pulse.ts";
 import { onFx, useStore } from "./store.ts";
 
@@ -304,6 +304,10 @@ function pulseTick(): void {
  * simulation), derived from consecutive views. Every one of these has a
  * visual twin in the room (lamp, gauge, screen or door). */
 function onViewChange(v: View | null, prev: View | null): void {
+  // a new room unlocks: its bulkhead door grinds open (the door animates in the scene)
+  if (ctx && v && prev && v.code === prev.code && v.phase !== prev.phase) {
+    if ((v.you === "ENGINEER" && v.phase === ROOM_UNLOCK.AUX) || (v.you === "NAVIGATOR" && v.phase === ROOM_UNLOCK.COMMS)) sfx.door();
+  }
   if (!ctx || !v || !prev || v.code !== prev.code || v.you !== prev.you || v.phase !== prev.phase) {
     for (const k of Object.keys(lineDriven)) delete lineDriven[k];
     return;

@@ -4,7 +4,7 @@
 
 import { RADIO } from "../../../shared/config.ts";
 import { BEARINGS, COMPARTMENTS, COMPARTMENT_LABEL, type Bearing, type Compartment, type Glyph, type Pulse, type ShipSystem, pulseText } from "../../../shared/glyphs.ts";
-import type { NavigatorView } from "../../../shared/protocol.ts";
+import { ACT_TITLE, type Act, type NavigatorView } from "../../../shared/protocol.ts";
 import {
   banner,
   type Ctx,
@@ -167,13 +167,46 @@ export type FloodData = {
   levels: Record<Compartment, number>;
   trends: Record<Compartment, -1 | 0 | 1>;
   running: number;
-  stable: boolean;
+  /** "flood": Act II (hold to stabilise); "later": pumps still live (Acts III–V); "done": voyage over */
+  stage: "flood" | "later" | "done";
   target: number;
+  /** seconds all three have been held at or below the target, of holdS */
+  held: number;
+  holdS: number;
+  breached: Record<Compartment, boolean>;
+  lost: Record<Compartment, boolean>;
+  dry: Record<Compartment, boolean>;
+  gridDown: boolean;
 };
+
+/** A jagged crack icon (shape-coded breach marker). */
+function crackMark(ctx: Ctx, cx: number, cy: number, s: number, color: string): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.beginPath();
+  const pts = [[-1, -0.9], [-0.35, -0.35], [-0.6, 0.05], [0.05, 0.25], [-0.15, 0.6], [0.5, 0.95]];
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * s, y * s) : ctx.moveTo(x * s, y * s)));
+  ctx.lineWidth = Math.max(4, s * 0.22);
+  ctx.lineJoin = "miter";
+  ctx.strokeStyle = "#111";
+  ctx.stroke();
+  ctx.lineWidth = Math.max(2, s * 0.12);
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  // spray ticks from the crack
+  ctx.beginPath();
+  for (const [x, y, dx, dy] of [[-0.35, -0.35, 0.45, -0.25], [0.05, 0.25, 0.5, 0.0], [-0.6, 0.05, -0.45, 0.1]]) {
+    ctx.moveTo(x * s, y * s);
+    ctx.lineTo((x + dx) * s, (y + dy) * s);
+  }
+  ctx.lineWidth = Math.max(2, s * 0.08);
+  ctx.stroke();
+  ctx.restore();
+}
 
 export function drawFlood(ctx: Ctx, w: number, h: number, d: FloodData): void {
   screenBg(ctx, w, h);
-  header(ctx, w, "DAMAGE CONTROL · FLOODING", d.stable ? "STABILISED" : `PUMP BUS ${d.running}/2`);
+  header(ctx, w, "DAMAGE CONTROL · FLOODING", d.stage === "done" ? "SECURED" : d.gridDown ? "NO SUPPLY" : `PUMP BUS ${d.running}/2`, { color: d.gridDown ? INK.red : INK.ink });
 
   // hull side elevation, bow to the right
   const x0 = 60;
@@ -197,7 +230,7 @@ export function drawFlood(ctx: Ctx, w: number, h: number, d: FloodData): void {
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.fillRect(x0, top - 20, x1 - x0, keel - top + 20);
   order.forEach((c, i) => {
-    const level = Math.max(0, Math.min(100, d.levels[c]));
+    const level = d.lost[c] ? 100 : Math.max(0, Math.min(100, d.levels[c]));
     const y = keel - ((keel - top) * level) / 100;
     const wg = ctx.createLinearGradient(0, y, 0, keel);
     wg.addColorStop(0, "rgba(127,214,240,0.85)");
@@ -210,6 +243,19 @@ export function drawFlood(ctx: Ctx, w: number, h: number, d: FloodData): void {
     ctx.lineTo(bulk[i + 1], keel + 10);
     ctx.closePath();
     ctx.fill();
+    if (d.lost[c]) {
+      // a lost compartment: dark wash + diagonal hatching (pattern, not colour)
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(bulk[i], top - 20, bulk[i + 1] - bulk[i], keel - top + 30);
+      ctx.strokeStyle = "rgba(255,68,54,0.75)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      for (let x = bulk[i] - (keel - top); x < bulk[i + 1]; x += 34) {
+        ctx.moveTo(x, keel + 10);
+        ctx.lineTo(x + (keel - top) + 30, top - 20);
+      }
+      ctx.stroke();
+    }
   });
   // target line at 20 %
   const ty = keel - ((keel - top) * d.target) / 100;
@@ -245,6 +291,12 @@ export function drawFlood(ctx: Ctx, w: number, h: number, d: FloodData): void {
     const level = Math.round(d.levels[c]);
     const ok = level <= d.target;
     text(ctx, COMPARTMENT_LABEL[c], cx, top + 34, 32, INK.white);
+    if (d.lost[c]) {
+      banner(ctx, "LOST", cx, top + 116, 200, 92, INK.red);
+      text(ctx, "FLOODED · SEALED", cx, top + 208, 24, INK.red);
+      if (d.breached[c]) text(ctx, "BREACHED", cx, top + 240, 22, INK.dim);
+      return;
+    }
     // number plate so it reads over water
     roundRect(ctx, cx - 92, top + 70, 184, 92, 10);
     ctx.fillStyle = "rgba(4,16,12,0.82)";
@@ -259,18 +311,65 @@ export function drawFlood(ctx: Ctx, w: number, h: number, d: FloodData): void {
     ctx.fill();
     trendMark(ctx, tr, cx - 76, top + 208, 34);
     text(ctx, TREND_WORD[tr], cx + 20, top + 209, 30, tr > 0 ? INK.amber : tr < 0 ? INK.green : INK.dim);
-    if (ok) text(ctx, "✓ BELOW TARGET", cx, keel - 30, 22, INK.green);
+    if (d.breached[c]) {
+      // breach: crack icon + label on a dark plate, low in the compartment
+      roundRect(ctx, cx - 118, top + 250, 236, 62, 10);
+      ctx.fillStyle = "rgba(40,6,4,0.9)";
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = INK.red;
+      ctx.stroke();
+      crackMark(ctx, cx - 80, top + 281, 24, INK.red);
+      text(ctx, "BREACH", cx + 22, top + 282, 38, INK.red);
+    }
+    if (d.dry[c]) {
+      roundRect(ctx, cx - 130, keel - 58, 260, 50, 8);
+      ctx.fillStyle = INK.amber;
+      ctx.fill();
+      text(ctx, "⚠ RUNNING DRY", cx, keel - 32, 30, "#111");
+    } else if (ok) text(ctx, "✓ BELOW TARGET", cx, keel - 30, 22, INK.green);
   });
-  // target label
-  roundRect(ctx, x0 + 8, ty - 46, 200, 36, 6);
-  ctx.fillStyle = "rgba(0,0,0,0.75)";
-  ctx.fill();
-  text(ctx, "TARGET 20%", x0 + 108, ty - 27, 24, INK.amber);
+  // target legend above the hull (kept clear of the per-compartment plates)
+  ctx.setLineDash([16, 10]);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = INK.amber;
+  ctx.beginPath();
+  ctx.moveTo(x0 + 215, top - 24);
+  ctx.lineTo(x0 + 285, top - 24);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  text(ctx, `TARGET ${d.target}%`, x0 + 298, top - 23, 24, INK.amber, "left");
 
-  if (d.stable) banner(ctx, "FLOODING STABILISED", w / 2, h - 62, 640, 70, INK.green);
-  else {
-    text(ctx, "ALL THREE AT OR BELOW THE TARGET LINE AT ONCE", w / 2, h - 82, 24, INK.dim);
-    text(ctx, `PUMPS RUNNING ${d.running} · BUS MAX 2`, w / 2, h - 44, 28, d.running >= 2 ? INK.amber : INK.ink);
+  const anyDry = COMPARTMENTS.some((c) => d.dry[c]);
+  if (d.stage === "done") banner(ctx, "DAMAGE CONTROL SECURED", w / 2, h - 62, 640, 70, INK.dim);
+  else if (d.gridDown) banner(ctx, "NO SUPPLY — PUMPS STOPPED · GENERATOR TRIPPED", w / 2, h - 62, w - 80, 70, INK.red);
+  else if (anyDry) {
+    text(ctx, "A PUMP IS DRAWING ON AN EMPTY COMPARTMENT — IT WILL SEIZE", w / 2, h - 82, 24, INK.amber);
+    text(ctx, "TELL THE ENGINE ROOM TO SHUT THAT VALVE, OR STOP THE PUMP", w / 2, h - 44, 24, INK.amber);
+  } else if (d.stage === "flood") {
+    // hold progress: all three at or below the line for holdS seconds
+    const held = Math.max(0, Math.min(d.holdS, d.held));
+    const bx = 70;
+    const bw = 520;
+    const by = h - 92;
+    text(ctx, `HOLD ${held.toFixed(1)} / ${d.holdS} s`, bx, by - 2, 26, held > 0 ? INK.green : INK.dim, "left");
+    roundRect(ctx, bx, by + 18, bw, 34, 6);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = INK.ink;
+    ctx.stroke();
+    ctx.fillStyle = INK.green;
+    ctx.fillRect(bx + 4, by + 22, ((bw - 8) * held) / d.holdS, 26);
+    for (let i = 1; i < d.holdS; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(bx + (bw * i) / d.holdS - 1, by + 18, 2, 34);
+    }
+    text(ctx, "ALL THREE BELOW THE LINE AT ONCE", bx + bw + 30, by - 2, 22, INK.dim, "left");
+    text(ctx, `PUMPS RUNNING ${d.running} · BUS MAX 2`, bx + bw + 30, by + 36, 26, d.running >= 2 ? INK.amber : INK.ink, "left");
+  } else {
+    text(ctx, "HULL SHORED · PUMPS STILL LIVE — KEEP THE WATER DOWN", w / 2, h - 82, 24, INK.dim);
+    text(ctx, `PUMPS RUNNING ${d.running} · BUS MAX 2 · FOLLOW THE BREACHES`, w / 2, h - 44, 26, d.running >= 2 ? INK.amber : INK.ink);
   }
   screenGlass(ctx, w, h);
 }
@@ -693,15 +792,41 @@ export const PHASE_NAME: Record<string, string> = {
   POWER: "1 · EMERGENCY POWER",
   FLOOD: "2 · FLOOD CONTROL",
   RADIO: "3 · DISTRESS SIGNAL",
+  CASCADE: "4 · CASCADE",
   ESCAPE: "FINAL · ABANDON SHIP",
   SURVIVED: "SHIP ABANDONED",
   LOST: "SHIP LOST",
 };
 
-export function drawStatus(ctx: Ctx, w: number, h: number, phase: string, trend: string, acknowledged: boolean): void {
+const ROMAN = ["", "I", "II", "III", "IV", "V"] as const;
+
+export type StatusData = { phase: string; act: number; trend: string; acknowledged: boolean; evac: number; gridDown: boolean };
+
+export function drawStatus(ctx: Ctx, w: number, h: number, d: StatusData): void {
+  const { phase, trend, acknowledged } = d;
   screenBg(ctx, w, h, { grid: false });
   header(ctx, w, "BRIDGE STATUS", `FLOODING: ${trend}`, { h: 56, color: trend === "STABLE" ? INK.ink : INK.amber });
-  fitText(ctx, PHASE_NAME[phase] ?? phase, w / 2, h / 2 + 20, 84, w - 60, INK.white);
+  if (d.act >= 1 && d.act <= 5) {
+    const title = ACT_TITLE[d.act as Act].toUpperCase();
+    text(ctx, `ACT ${ROMAN[d.act]} — ${title}`, w / 2, 98, 38, d.gridDown ? INK.red : INK.ink);
+  }
+  if (phase === "CASCADE") {
+    // the act's objective, big: charge the evac accumulator
+    const p = Math.max(0, Math.min(100, d.evac));
+    fitText(ctx, "CHARGE EVAC ACCUMULATOR", w / 2, 170, 56, w - 60, INK.white);
+    const bx = 70;
+    const bw = w - 300;
+    roundRect(ctx, bx, 222, bw, 64, 10);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = INK.ink;
+    ctx.stroke();
+    ctx.fillStyle = p >= 100 ? INK.green : INK.ink;
+    ctx.fillRect(bx + 6, 228, ((bw - 12) * p) / 100, 52);
+    text(ctx, `${Math.floor(p)}%`, bx + bw + 110, 256, 72, INK.white);
+    text(ctx, d.gridDown ? "NO SUPPLY — GENERATOR TRIPPED" : "COMMS ROOM · EVAC CIRCUIT ON", w / 2, 330, 28, d.gridDown ? INK.red : INK.dim);
+  } else fitText(ctx, PHASE_NAME[phase] ?? phase, w / 2, h / 2 + 30, 84, w - 60, INK.white);
   const sub =
     phase === "PROLOGUE"
       ? acknowledged
@@ -711,7 +836,9 @@ export function drawStatus(ctx: Ctx, w: number, h: number, phase: string, trend:
         ? "ALL HANDS OFF"
         : phase === "LOST"
           ? "ALL HANDS LOST"
-          : "WATCH ON STATION";
+          : d.gridDown
+            ? "EMERGENCY BATTERY — GRID DOWN"
+            : "WATCH ON STATION";
   text(ctx, sub, w / 2, h - 40, 30, phase === "PROLOGUE" && !acknowledged ? INK.amber : INK.dim);
   screenGlass(ctx, w, h);
 }

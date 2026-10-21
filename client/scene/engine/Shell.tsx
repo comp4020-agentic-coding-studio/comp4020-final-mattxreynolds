@@ -5,8 +5,8 @@
 
 import { useMemo } from "react";
 import { Shape, ExtrudeGeometry } from "three";
-import { B, C, M, Pipe } from "./kit.tsx";
-import { ESC, ROOM } from "./layout.ts";
+import { B, C, M, MR, Pipe } from "./kit.tsx";
+import { AUX, ESC, ROOM } from "./layout.ts";
 
 /** A rounded-rectangle shape centred on x, base at y=0. */
 export function roundRect(w: number, h: number, r: number, y0 = 0): Shape {
@@ -37,6 +37,8 @@ export function Shell() {
   }, []);
 
   const dw = ESC.doorW + 0.34; // wall gap width at the east wall
+  const westN = AUX.doorZ - (AUX.doorW + 0.34) / 2; // west wall gap, north edge (z)
+  const westS = AUX.doorZ + (AUX.doorW + 0.34) / 2;
   const sideLen = (d - dw) / 2;
   return (
     <group>
@@ -48,16 +50,21 @@ export function Shell() {
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, h, 0]} material={m.ceiling}>
         <planeGeometry args={[w, d]} />
       </mesh>
-      {/* north / south / west walls */}
+      {/* north / south walls; the west wall is in pieces around the Aux
+          Machinery doorway (the door and its coaming are in AuxRoom.tsx) */}
       <mesh position={[0, h / 2, -d / 2]} material={m.wall10}>
         <planeGeometry args={[w, h]} />
       </mesh>
       <mesh position={[0, h / 2, d / 2]} rotation={[0, Math.PI, 0]} material={m.wall10}>
         <planeGeometry args={[w, h]} />
       </mesh>
-      <mesh position={[-w / 2, h / 2, 0]} rotation={[0, Math.PI / 2, 0]} material={m.wall8}>
-        <planeGeometry args={[d, h]} />
+      <mesh position={[-w / 2, h / 2, (-d / 2 + westN) / 2]} rotation={[0, Math.PI / 2, 0]} material={MR("wall10", (westN + d / 2) / 2, 1)}>
+        <planeGeometry args={[westN + d / 2, h]} />
       </mesh>
+      <mesh position={[-w / 2, h / 2, (d / 2 + westS) / 2]} rotation={[0, Math.PI / 2, 0]} material={MR("wall10", (d / 2 - westS) / 2, 1)}>
+        <planeGeometry args={[d / 2 - westS, h]} />
+      </mesh>
+      <B p={[-w / 2 - 0.02, (h + AUX.doorH + 0.22) / 2, AUX.doorZ]} s={[0.04, h - AUX.doorH - 0.22, westS - westN]} m={m.beam} />
       {/* east wall, in pieces around the doorway */}
       <mesh position={[w / 2, h / 2, -d / 2 + sideLen / 2]} rotation={[0, -Math.PI / 2, 0]} material={m.wall4}>
         <planeGeometry args={[sideLen, h]} />
@@ -82,7 +89,7 @@ export function Shell() {
       {/* skirting angle along the deck edge */}
       <B p={[0, 0.04, -d / 2 + 0.03]} s={[w, 0.08, 0.06]} m={m.pipeDark} />
       <B p={[0, 0.04, d / 2 - 0.03]} s={[w, 0.08, 0.06]} m={m.pipeDark} />
-      <B p={[-w / 2 + 0.03, 0.04, 0]} s={[0.06, 0.08, d]} m={m.pipeDark} />
+      <B p={[-w / 2 + 0.03, 0.04, (-d / 2 + westN) / 2]} s={[0.06, 0.08, westN + d / 2]} m={m.pipeDark} />
 
       {/* overhead pipe runs */}
       <Pipe a={[-5, 2.62, -3.7]} b={[5, 2.62, -3.7]} d={0.14} />

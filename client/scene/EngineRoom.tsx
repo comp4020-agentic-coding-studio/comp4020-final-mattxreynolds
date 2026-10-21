@@ -3,48 +3,36 @@
 //                 status board, W/T transmitter (radio)
 //   west wall   — generator No.1 (power indicator)
 //   south wall  — bilge suction manifold (flood)
-//   east wall   — hand pump, watertight escape door, ABANDON lever (escape)
+//   east wall   — ship systems repeater (evac charge, coast-station call),
+//                 hand pump, watertight escape door, ABANDON lever + DAVITS lamp
+//   west door   — the Aux Machinery Room (generator plant + RESET), open from FLOOD
 // Stations live in ./engine/; this file composes them, owns the collision
 // layout and routes one-shot fx to particles and light kicks.
 
-import { useEffect } from "react";
-import { onFx } from "../store.ts";
-import { box, type RoomLayout } from "./colliders.ts";
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
+import type { Group } from "three";
+import { onFx, useStore } from "../store.ts";
+import type { RoomLayout } from "./colliders.ts";
 import { BusPanel } from "./engine/BusPanel.tsx";
 import { Effects, kicks, spawnSparks, spawnSteam } from "./engine/Effects.tsx";
 import { EscapeWall } from "./engine/EscapeWall.tsx";
 import { Generator } from "./engine/Generator.tsx";
-import { AT, pumpWorld, switchboardWorld, transmitterWorld, valveWorld } from "./engine/layout.ts";
+import { AuxRoom, auxOpenNow } from "./engine/AuxRoom.tsx";
+import { engineLayout } from "./engine/collision.ts";
+import { auxExhaustWorld, auxGenWorld, pumpWorld, switchboardWorld, transmitterWorld, valveWorld } from "./engine/layout.ts";
 import { Lighting } from "./engine/Lighting.tsx";
 import { Manifold } from "./engine/Manifold.tsx";
 import { Shell } from "./engine/Shell.tsx";
+import { ShipPanel } from "./engine/ShipPanel.tsx";
 import { StatusBoard } from "./engine/StatusBoard.tsx";
 import { Switchboard } from "./engine/Switchboard.tsx";
 import { Transmitter } from "./engine/Transmitter.tsx";
 import { Water } from "./engine/Water.tsx";
 
-const SPAWN_X = -2.5;
-const SPAWN_Z = -1.6;
-
-export const ENGINE_LAYOUT: RoomLayout = {
-  bounds: box(0, 0, 10, 8),
-  solids: [
-    box(AT.busPanel[0], -3.85, 1.1, 0.3), // emergency bus panel
-    box(AT.switchboard[0], -3.78, 3.3, 0.45), // switchboard
-    box(AT.statusBoard[0], -3.9, 0.95, 0.2), // status board
-    box(AT.transmitter[0], -3.6, 2.0, 0.85), // transmitter cabinet
-    box(-4.3, -0.9, 1.1, 2.7), // generator
-    box(AT.manifold[0], 3.7, 3.7, 0.65), // valve manifold
-    box(3.4, 3.55, 1.7, 0.8), // workbench
-    box(4.45, -1.85, 0.5, 0.5), // hand pump
-    box(4.85, 1.55, 0.3, 0.7), // abandon lever panel
-    box(4.75, -3.75, 0.3, 0.3), // corner risers
-    box(-4.75, 3.75, 0.3, 0.3),
-  ],
-  spawn: [SPAWN_X, 1.6, SPAWN_Z],
-  // face the EMERGENCY BUS lever (yaw 0 looks toward −Z)
-  spawnYaw: Math.atan2(SPAWN_X - AT.busPanel[0], SPAWN_Z - (AT.busPanel[2] + 0.1)),
-};
+/** Engine Room + doorway + Aux Machinery Room; the bulkhead door is solid
+ * until the room opens (engine/collision.ts). */
+export const ENGINE_LAYOUT: RoomLayout = engineLayout(auxOpenNow);
 
 function useFxRouting(): void {
   useEffect(
@@ -80,6 +68,31 @@ function useFxRouting(): void {
           case "doorOpen":
             kicks.flash = Math.max(kicks.flash, 0.5);
             break;
+          case "gridTrip":
+            spawnSparks(auxGenWorld, 40);
+            kicks.dip = 1;
+            kicks.shudder = Math.max(kicks.shudder, 0.4);
+            break;
+          case "gridReset":
+            kicks.flash = Math.max(kicks.flash, 0.8);
+            break;
+          case "overheat":
+            spawnSteam(auxExhaustWorld, [0.3, 1, 0.3], 16);
+            break;
+          case "breach":
+            kicks.shudder = 1;
+            break;
+          case "compartmentLost":
+            kicks.dip = 1;
+            kicks.shudder = 1.4;
+            break;
+          case "evacCharged":
+            kicks.flash = Math.max(kicks.flash, 0.5);
+            break;
+          case "davitsArmed":
+            if (fx.armed) kicks.flash = Math.max(kicks.flash, 0.4);
+            else kicks.dip = Math.max(kicks.dip, 0.5);
+            break;
           case "phase":
             if (fx.phase !== "LOST") kicks.flash = Math.max(kicks.flash, 0.35);
             break;
@@ -89,10 +102,27 @@ function useFxRouting(): void {
   );
 }
 
+/** Shakes the whole room briefly on a hull breach (kicks.shudder). */
+function useShudder() {
+  const ref = useRef<Group>(null);
+  useFrame((_, rawDt) => {
+    const g = ref.current;
+    if (!g) return;
+    const dt = Math.min(rawDt, 0.1);
+    kicks.shudder = Math.max(0, kicks.shudder - dt * 1.6);
+    const k = useStore.getState().reducedMotion ? 0 : Math.min(1, kicks.shudder);
+    const t = performance.now() / 1000;
+    g.position.set(Math.sin(t * 61) * 0.025 * k, Math.sin(t * 47 + 1) * 0.018 * k, Math.sin(t * 53 + 2) * 0.02 * k);
+    g.rotation.z = Math.sin(t * 37) * 0.006 * k;
+  });
+  return ref;
+}
+
 export function EngineRoom() {
   useFxRouting();
+  const shake = useShudder();
   return (
-    <group>
+    <group ref={shake}>
       <Lighting />
       <Shell />
       <BusPanel />
@@ -102,6 +132,8 @@ export function EngineRoom() {
       <Generator />
       <Manifold />
       <EscapeWall />
+      <ShipPanel />
+      <AuxRoom />
       <Water />
       <Effects />
     </group>

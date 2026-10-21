@@ -3,6 +3,7 @@
 // instruction plate and the rotating alarm beacon.
 
 import { useCallback } from "react";
+import { SHIP_PHASES } from "../../../shared/protocol.ts";
 import { send } from "../../net.ts";
 import { IDS } from "../ids.ts";
 import { Interactable } from "../interact.tsx";
@@ -22,13 +23,17 @@ export function AlarmConsole({ position }: { position: [number, number, number] 
   const busOn = useNav((v) => v.prologue.busOn, false);
   const acked = useNav((v) => v.prologue.acknowledged, false);
   const trend = useNav((v) => v.trend, "STABLE");
+  const act = useNav((v) => v.act, 0);
+  const gridDown = useNav((v) => v.ship.gridDown && SHIP_PHASES.includes(v.phase), false);
+  // whole percent only while it matters (the CASCADE objective)
+  const evac = useNav((v) => (v.phase === "CASCADE" ? Math.floor(v.ship.evac) : 0), 0);
   const { press, depth } = usePress();
 
   const status = useCanvasTexture(
     896,
     448,
-    (ctx, w, h) => (busOn || phase !== "PROLOGUE" ? drawStatus(ctx, w, h, phase, trend, acked) : drawDead(ctx, w, h)),
-    [busOn, phase, trend, acked],
+    (ctx, w, h) => (busOn || phase !== "PROLOGUE" ? drawStatus(ctx, w, h, { phase, act, trend, acknowledged: acked, evac, gridDown }) : drawDead(ctx, w, h)),
+    [busOn, phase, trend, acked, act, evac, gridDown],
   );
 
   const prologue = phase === "PROLOGUE";
@@ -59,7 +64,7 @@ export function AlarmConsole({ position }: { position: [number, number, number] 
   return (
     <group position={position}>
       <ConsoleBody w={W} riserH={RISER}>
-        <Screen map={status} width={0.96} height={0.48} position={[0, 0.9 + RISER - 0.28, RISER_Z]} delay={0.05} />
+        <Screen map={status} width={0.96} height={0.48} position={[0, 0.9 + RISER - 0.28, RISER_Z]} delay={0.05} flashOn={["phase", "gridTrip", "evacCharged"]} />
         <Plate text={plateText} width={1.2} height={0.24} position={[0, 0.9 + 0.33, RISER_Z]} fg={plateFg} border={prologue && !acked ? PALETTE.hazardYellow : PALETTE.brassDark} />
         <Slope position={SLOPE_AT} angle={0.38}>
           <Plate text="ALARM ACKNOWLEDGE" width={0.62} height={0.09} position={[0, 0.15, 0.03]} border={PALETTE.brass} />

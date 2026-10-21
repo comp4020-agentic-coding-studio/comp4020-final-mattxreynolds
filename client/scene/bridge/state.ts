@@ -16,27 +16,31 @@ export function useNav<T>(pick: (v: NavigatorView) => T, fallback: T): T {
   return useStore((s) => (s.view && s.view.you === "NAVIGATOR" ? pick(s.view) : fallback));
 }
 
-const ORDER: Phase[] = ["LOBBY", "PROLOGUE", "POWER", "FLOOD", "RADIO", "ESCAPE", "SURVIVED", "LOST"];
+const ORDER: Phase[] = ["LOBBY", "PROLOGUE", "POWER", "FLOOD", "RADIO", "CASCADE", "ESCAPE", "SURVIVED", "LOST"];
 
 /** How a station for `own` phase should present itself right now. */
 export type StationMode = "dead" | "standby" | "active" | "done";
 
-export function stationMode(phase: Phase, busOn: boolean, own: Phase, reached?: Phase): StationMode {
+/** A station wakes in phase `own` and stays active through `until` (default:
+ * just `own`), matching the phases in which the server accepts its intents
+ * (INTENT_RULES). The flood console, for one, stays live FLOOD → ESCAPE. */
+export function stationMode(phase: Phase, busOn: boolean, own: Phase, reached?: Phase, until: Phase = own): StationMode {
   if (!busOn && (phase === "PROLOGUE" || phase === "LOBBY")) return "dead";
   if (phase === "SURVIVED") return "done";
   // on a loss, stations before the phase that failed are done; the rest never woke
   const p = ORDER.indexOf(phase === "LOST" ? (reached ?? "ESCAPE") : phase);
   const o = ORDER.indexOf(own);
+  const u = ORDER.indexOf(until);
   if (phase === "LOST") return o < p ? "done" : "standby";
-  return p < o ? "standby" : p === o ? "active" : "done";
+  return p < o ? "standby" : p <= u ? "active" : "done";
 }
 
 /** Hook form: subscribes to just phase + busOn (+ phase reached on a loss). */
-export function useStationMode(own: Phase): StationMode {
+export function useStationMode(own: Phase, until: Phase = own): StationMode {
   const phase = useNav((v) => v.phase, "PROLOGUE" as Phase);
   const busOn = useNav((v) => v.prologue.busOn, false);
   const reached = useNav((v) => v.outcome?.phaseReached, undefined as Phase | undefined);
-  return stationMode(phase, busOn, own, reached);
+  return stationMode(phase, busOn, own, reached, until);
 }
 
 // ------------------------------------------------------------ fx clock

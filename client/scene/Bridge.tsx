@@ -11,6 +11,13 @@
 //         D             (spawn)
 //         I
 //   z=+4  O codebook                 [ DOOR RAMS ]
+//
+// The Comms Room (bridge/Comms.tsx) adjoins the starboard bulkhead (x = +5)
+// through a watertight door at z 0…1.2 that opens from Act III (RADIO):
+//
+//   x=5 ─┬─ [ DISTRIBUTION ] ─┐  z=-3
+//   door │                    [EVAC/DAVITS]
+//        └─ [ CALL / ANSWER ] ┘  z=+3      x=10
 
 import { useEffect } from "react";
 import { onFx } from "../store.ts";
@@ -20,7 +27,8 @@ import { FloodConsole } from "./bridge/FloodConsole.tsx";
 import { PowerConsole } from "./bridge/PowerConsole.tsx";
 import { ChartTable, Codebook, RadioDesk } from "./bridge/RadioDesk.tsx";
 import { Decor } from "./bridge/Decor.tsx";
-import { RoomLights, RoomShell } from "./bridge/Room.tsx";
+import { COMMS_DOOR, RoomLights, RoomShell } from "./bridge/Room.tsx";
+import { COMMS, CommsDoor, commsOpen, CommsRoom } from "./bridge/Comms.tsx";
 import { Staged, Warm } from "./bridge/kit.tsx";
 import { fxClock, nowS } from "./bridge/state.ts";
 import { box, type RoomLayout } from "./colliders.ts";
@@ -39,15 +47,31 @@ const DEPTH = 0.8;
 /** ms between staged station mounts */
 const STAGE = 350;
 
+const DOOR_W = COMMS_DOOR[1] - COMMS_DOOR[0];
+const DOOR_Z = (COMMS_DOOR[0] + COMMS_DOOR[1]) / 2;
+
 export const BRIDGE_LAYOUT: RoomLayout = {
-  // the inner faces of the bulkheads (walls are 0.12 m thick)
-  bounds: box(0, 0, 9.76, 7.76),
+  // the inner faces of the bulkheads (walls are 0.12 m thick), plus the
+  // starboard doorway and the Comms Room beyond it
+  bounds: [
+    box(0, 0, 9.76, 7.76),
+    box(4.95, DOOR_Z, 0.3, DOOR_W),
+    box((COMMS.x0 + COMMS.x1) / 2, (COMMS.z0 + COMMS.z1) / 2, COMMS.x1 - COMMS.x0, COMMS.z1 - COMMS.z0),
+  ],
+  // the watertight door is solid until the distress phase (roomOpen COMMS)
+  doors: [{ box: box(4.94, DOOR_Z, 0.14, DOOR_W), open: commsOpen }],
   solids: [
     box(AT.power.x, AT.power.z, AT.power.w, DEPTH),
     box(AT.alarm.x, AT.alarm.z, AT.alarm.w, DEPTH),
     box(AT.flood.x, AT.flood.z, AT.flood.w, DEPTH),
     box(AT.radio.x, AT.radio.z, DEPTH, AT.radio.w),
     box(AT.chart.x, AT.chart.z, 1.24, 1.05),
+    // Comms Room furniture
+    box(COMMS.dist.x, COMMS.dist.z, COMMS.dist.w, DEPTH),
+    box(COMMS.call.x, COMMS.call.z, COMMS.call.w, DEPTH),
+    box(COMMS.x1 - COMMS.evac.d / 2, COMMS.evac.z, COMMS.evac.d, COMMS.evac.w),
+    // the door leaf's pocket on the Comms side once it has slid open
+    box(5.04, COMMS_DOOR[0] - DOOR_W / 2 - 0.05, 0.1, DOOR_W + 0.1),
   ],
   spawn: [0, 1.6, 1.4],
   spawnYaw: 0,
@@ -62,6 +86,7 @@ export function Bridge() {
       <RoomLights />
       <Warm>
         <RoomShell />
+        <CommsDoor />
         <AlarmConsole position={[AT.alarm.x, 0, AT.alarm.z]} />
       </Warm>
       {/* staged mount: see Staged in bridge/kit.tsx */}
@@ -83,6 +108,9 @@ export function Bridge() {
       </Staged>
       <Staged after={STAGE * 6}>
         <Decor />
+      </Staged>
+      <Staged after={STAGE * 7}>
+        <CommsRoom />
       </Staged>
     </group>
   );

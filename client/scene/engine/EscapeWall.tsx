@@ -143,6 +143,7 @@ function AbandonLever() {
   const door = useEV((v) => v.escape.door, 0);
   const you = useEV((v) => v.escape.youAbandon, false);
   const partner = useEV((v) => v.escape.partnerAbandon, false);
+  const armed = useEV((v) => v.ship.armed, false);
   const live = stage === STAGE.ESCAPE;
   const pull = useCallback(() => void send({ t: "abandon" }), []);
   const ready = door >= 100;
@@ -150,8 +151,11 @@ function AbandonLever() {
   if (stage < STAGE.ESCAPE) prompt = "Abandon ship lever — not yet";
   else if (stage > STAGE.ESCAPE) prompt = "Abandon ship lever — PULLED";
   else if (!ready) prompt = `Abandon ship lever — door ${Math.round(door)}% open · door must be fully open`;
+  else if (!armed) prompt = "Abandon ship lever — DAVITS NOT ARMED · the Bridge arms them";
   else if (you) prompt = `Abandon ship lever — PULLED${partner ? "" : " · waiting for the Bridge"}`;
   else prompt = `Abandon ship lever — READY${partner ? " · Bridge has pulled — NOW" : ""} · E to pull`;
+  // with the door open but the davits unarmed the press still goes through,
+  // so the server's davits-not-armed refusal is toasted
   const doIt = live && ready;
 
   return (
@@ -167,7 +171,12 @@ function AbandonLever() {
       <Plate text="YOU" w={0.18} h={0.07} position={[-0.13, 0.78, 0.11]} glow={0.6} />
       <Lamp position={[0.13, 0.88, 0.12]} color={PALETTE.lampAmber} size={0.06} level={() => (ev()?.escape.partnerAbandon ? 1 : 0)} />
       <Plate text="BRIDGE" w={0.2} h={0.07} position={[0.13, 0.78, 0.11]} glow={0.6} />
-      <Plate text={ready ? "PULL TOGETHER" : "DOOR SHUT"} w={0.44} h={0.08} position={[0, 0.66, 0.11]} bg={ready ? "#3a2a10" : PALETTE.plateBg} glow={0.6} />
+      {/* davits: the Bridge's job; lit (and labelled) once armed */}
+      <B p={[0, 2.12, 0.03]} s={[0.6, 0.22, 0.06]} m={m.panel} />
+      <Lamp position={[-0.21, 2.12, 0.07]} color={PALETTE.lampGreen} size={0.06} level={() => (ev()?.ship.armed ? 1 : 0)} />
+      <Plate text={armed ? "DAVITS ARMED" : "DAVITS SAFE"} w={0.42} h={0.13} position={[0.06, 2.12, 0.065]} bg={armed ? "#1d5a33" : PALETTE.plateBg} glow={armed ? 1 : 0.5} />
+      <Plate text="ARMED FROM BRIDGE" w={0.5} h={0.06} position={[0, 1.96, 0.065]} glow={0.45} />
+      <Plate text={!ready ? "DOOR SHUT" : armed ? "PULL TOGETHER" : "WAIT: DAVITS"} w={0.44} h={0.08} position={[0, 0.66, 0.11]} bg={ready ? "#3a2a10" : PALETTE.plateBg} glow={0.6} />
     </group>
   );
 }

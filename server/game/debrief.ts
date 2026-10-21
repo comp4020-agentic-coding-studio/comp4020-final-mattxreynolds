@@ -76,16 +76,17 @@ export function buildDebrief(v: Voyage): Debrief {
   const recovery = v.log.find((e) => e.k === "floodStable");
   if (recovery) highlights.push({ label: "MAJOR RECOVERY", value: fmt(recovery.t), detail: "Every compartment pumped below 20%", tone: "good" });
   if (survived && s.margin !== null) {
+    const m = s.margin;
     highlights.push({
       label: "FINAL ESCAPE MARGIN",
-      value: `${s.margin.toFixed(1)} s`,
+      value: m > 600 ? "10+ min" : m >= 90 ? `${Math.floor(m / 60)} min ${Math.round(m % 60)} s` : `${m.toFixed(1)} s`,
       detail: "How long the ship would have stayed afloat at the rate it was sinking",
       tone: s.margin < 20 ? "bad" : "good",
     });
   }
 
   // lessons: the reasons a crew would give for how it went
-  if (s.powerTrips >= 2) lessons.push(`${s.powerTrips} breaker trips in Act I wore the generator: it could carry ${Math.min(s.powerTrips, 2)} less load for the rest of the voyage.`);
+  if (s.powerTrips >= 1) lessons.push(`${s.powerTrips} breaker trip${s.powerTrips > 1 ? "s" : ""} in Act I wore the generator: it could carry ${Math.min(s.powerTrips, 2)} less load for the rest of the voyage.`);
   if (s.grid.trips) lessons.push(`The generator overloaded ${s.grid.trips} time${s.grid.trips > 1 ? "s" : ""}. Shedding a circuit before the heat gauge reached the red would have kept the pumps running.`);
   if (bursts) lessons.push(`${bursts} relief valve burst${bursts > 1 ? "s" : ""} in flood control left leaking seams that kept adding water in later acts.`);
   if (lost.length) lessons.push(`Losing ${lost.map((c) => COMPARTMENT_LABEL[c]).join(" and ")} added a permanent load of water the pumps could never remove.`);
@@ -93,7 +94,8 @@ export function buildDebrief(v: Voyage): Debrief {
   if (count(v, "wrongStation")) lessons.push("Transmitting to the wrong station cost water. The Engineer's pulse rhythm, matched in the Bridge's codebook, names the right one.");
   if (count(v, "vent")) lessons.push("The door rams vented from over-pressure. The Bridge knows the band; call \"more\" and \"stop\".");
   if (!survived && v.failureCause) lessons.unshift(`${v.failureCause}.`);
-  if (survived && !lessons.length) lessons.push("A clean voyage: no trips, no bursts, no lost compartments.");
+  if (survived && !lessons.length && v.mistakes === 0) lessons.push("A clean voyage: no trips, no bursts, no lost compartments.");
+  if (survived && !lessons.length) lessons.push(`${v.mistakes} small mistake${v.mistakes === 1 ? "" : "s"}, none that wore down the ship's systems.`);
 
   const actTimes: Partial<Record<Act, number>> = {};
   for (const [phase, t] of Object.entries(v.phaseTimes) as [Phase, number][]) {

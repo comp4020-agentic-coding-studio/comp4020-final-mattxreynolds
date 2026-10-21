@@ -136,7 +136,9 @@ describe.skipIf(!testHooks())("a full voyage through the real controls", () => {
     // the debrief reconstruction is built from the real run
     await N.getByTestId("debrief-tab").click();
     await N.getByTestId("debrief").waitFor();
-    expect(await N.getByTestId("debrief").textContent()).toContain("Act IV — Cascade");
+    // the reconstruction plays in over a few seconds, then lists every event
+    await N.getByTestId("debrief").getByText("Act IV — Cascade").waitFor({ timeout: 10_000 });
+    expect(await N.getByTestId("debrief").textContent()).toContain("COAST STATION CALLS");
 
     // Ship's log shows the voyage with both callsigns
     const log = await (await fetch(new URL("/history/", baseUrl))).text();

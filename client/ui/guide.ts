@@ -36,7 +36,7 @@ export const PHASE_GUIDE: Partial<Record<Phase, Record<Role, Guide>>> = {
   FLOOD: {
     ENGINEER: {
       title: "ACT II · FLOOD CONTROL",
-      you: "The BILGE SUCTION MANIFOLD is on the wall opposite the switchboard. The AUX MACHINERY bulkhead behind the generator is open now: the generator's heat gauge and RESET live there.",
+      you: "The BILGE SUCTION MANIFOLD is on the wall opposite the switchboard. The AUX MACHINERY door in the generator wall is open now: the generator's heat gauge and RESET live there.",
       partner: "has the water levels and the pump switches — and sees when a compartment runs dry.",
     },
     NAVIGATOR: {
@@ -53,7 +53,7 @@ export const PHASE_GUIDE: Partial<Record<Phase, Record<Role, Guide>>> = {
     },
     NAVIGATOR: {
       title: "ACT III · MAYDAY",
-      you: "The RADIO DESK is on the left wall, with the chart table and codebook nearby. The COMMS room is open: its distribution panel switches the radio, lighting and evac circuits.",
+      you: "The RADIO DESK is on the left wall, with the chart table and codebook nearby. The COMMS room is open (door on the right-hand bulkhead): its distribution panel switches the radio, lighting and evac circuits.",
       partner: "has the resonance meter, the pulse lamp and the antenna.",
     },
   },

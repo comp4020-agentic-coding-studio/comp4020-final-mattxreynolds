@@ -17,13 +17,13 @@ import {
   SphereGeometry,
   SRGBColorSpace,
 } from "three";
-import type { Fx } from "../../../shared/protocol.ts";
+import { SHIP_PHASES, type Fx } from "../../../shared/protocol.ts";
 import { useStore } from "../../store.ts";
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { PALETTE } from "../palette.ts";
 import type { Glyph } from "../../../shared/glyphs.ts";
 import { MONO, roundel } from "./draw.ts";
-import { fxClock, nowS } from "./state.ts";
+import { fxClock, navView, nowS } from "./state.ts";
 
 // ------------------------------------------------------------ shared assets
 
@@ -117,14 +117,19 @@ function screenBrightness(t: number, delay: number, flashOn: readonly Fx["k"][],
     sweep = k;
     b = reduced ? 0.3 + 0.7 * k : k < 0.15 ? (Math.sin(boot * 90) > 0 ? 0.6 : 0.1) : 0.35 + 0.65 * k;
   }
-  // generator trip: consoles brown out and flicker
-  const trip = fxClock.trip === undefined ? Infinity : t - fxClock.trip;
+  // generator trip (Act I breakers or the later grid): consoles brown out and flicker
+  const trip = Math.min(fxClock.trip === undefined ? Infinity : t - fxClock.trip, fxClock.gridTrip === undefined ? Infinity : t - fxClock.gridTrip);
   if (trip < 1.2) {
     if (reduced) b *= 0.45;
     else b *= 0.25 + 0.75 * (Math.sin(trip * 47 + delay * 13) * Math.sin(trip * 23) > 0.1 ? 1 : 0.15) * Math.min(1, trip / 1.2 + 0.2);
   }
+  // grid down: the Bridge runs on its own emergency battery — readable, dimmer
+  const v = navView();
+  if (v && v.ship.gridDown && SHIP_PHASES.includes(v.phase)) b *= 0.62;
   // power online: a single bright pulse as the generator takes the load
-  const on = fxClock.powerOnline === undefined ? Infinity : t - fxClock.powerOnline - delay * 0.5;
+  // (or the grid comes back after a trip)
+  const lastOn = Math.max(fxClock.powerOnline ?? -Infinity, fxClock.gridReset ?? -Infinity);
+  const on = lastOn === -Infinity ? Infinity : t - lastOn - delay * 0.5;
   if (on >= 0 && on < 0.8) b *= 1 + 0.35 * (1 - on / 0.8);
   for (const k of flashOn) {
     const f = fxClock[k] === undefined ? Infinity : t - fxClock[k]!;

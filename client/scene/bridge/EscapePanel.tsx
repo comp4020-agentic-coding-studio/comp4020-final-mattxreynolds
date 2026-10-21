@@ -23,6 +23,7 @@ export function EscapePanel({ position, rotationY = 0 }: { position: [number, nu
   const d = useMemo(() => ({ ...raw, door: Math.floor(raw.door) }), [raw]);
   const active = mode === "active";
   const doorOpen = d.door >= 100;
+  const armed = useNav((v) => v.ship.armed, false);
 
   const map = useCanvasTexture(
     1024,
@@ -75,6 +76,8 @@ export function EscapePanel({ position, rotationY = 0 }: { position: [number, nu
     ? "Abandon ship lever — not yet"
     : !doorOpen
       ? "Abandon ship lever — Door not open yet"
+      : !armed && !d.youAbandon
+        ? "Abandon ship lever — DAVITS NOT ARMED · arm them in the Comms Room first"
       : d.youAbandon
         ? "Abandon ship lever — PULLED · waiting for the Engine Room"
         : d.partnerAbandon
@@ -119,6 +122,19 @@ export function EscapePanel({ position, rotationY = 0 }: { position: [number, nu
           <Plate text={d.partnerAbandon ? "ENGINE · PULLED" : "ENGINE ROOM"} width={0.22} height={0.05} position={[0.12, -0.06, 0]} />
         </group>
         <Plate text={doorOpen ? "PULL TOGETHER" : "DOOR NOT OPEN"} width={0.42} height={0.06} position={[0, -0.5, 0.025]} fg={doorOpen ? PALETTE.lampAmber : "#9a9586"} />
+      </group>
+
+      {/* davits interlock: ABANDON is refused until the Comms Room arms them */}
+      <group position={[-0.4, 0.72, 0.03]}>
+        <Lamp on={active && armed} r={0.028} position={[-0.47, 0, 0]} />
+        <Plate
+          text={armed ? "DAVITS: ARMED" : "DAVITS: NOT ARMED · ARM IN COMMS"}
+          width={0.86}
+          height={0.07}
+          position={[0.06, 0, 0]}
+          fg={armed ? PALETTE.lampGreen : PALETTE.lampAmber}
+          border={armed ? PALETTE.lampGreen : PALETTE.hazardYellow}
+        />
       </group>
     </group>
   );

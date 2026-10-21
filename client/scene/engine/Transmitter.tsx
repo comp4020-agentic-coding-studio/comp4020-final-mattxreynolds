@@ -125,8 +125,8 @@ function CrankButton({ id, dir, live, antenna, stage }: { id: string; dir: 1 | -
   const prompt =
     stage < STAGE.RADIO
       ? `Antenna ${way} — no power to the rotator yet`
-      : stage > STAGE.RADIO
-        ? `Antenna — pointing ${at} · contact made`
+      : !live
+        ? `Antenna — pointing ${at}`
         : `Antenna — pointing ${at} · E to rotate ${way}`;
   return (
     <Interactable id={id} prompt={prompt} onUse={live ? use : undefined}>
@@ -140,11 +140,13 @@ function CrankButton({ id, dir, live, antenna, stage }: { id: string; dir: 1 | -
 
 export function Transmitter() {
   const m = M();
-  const { stage } = useStage();
+  const { phase, stage } = useStage();
   const live = stage === STAGE.RADIO;
   const coupled = useEV((v) => v.radio.coupled, false);
   const lock = useEV((v) => v.radio.lock, false);
   const contact = useEV((v) => v.radio.contact, false);
+  // the rotator also turns in CASCADE, for the coast-station calls
+  const rotatorLive = (live && !contact) || phase === "CASCADE";
   const antenna = useEV((v) => v.radio.antenna, 0);
   const pulsing = useEV((v) => v.radio.pulse !== null, false);
   const couple = useCallback(() => void send({ t: "couple" }), []);
@@ -203,10 +205,10 @@ export function Transmitter() {
           <Pointer />
         </group>
         <group position={[-0.36, 0.66, 0.01]}>
-          <CrankButton id={IDS.antennaLeft} dir={-1} live={live && !contact} antenna={antenna} stage={stage} />
+          <CrankButton id={IDS.antennaLeft} dir={-1} live={rotatorLive} antenna={antenna} stage={stage} />
         </group>
         <group position={[0.36, 0.66, 0.01]}>
-          <CrankButton id={IDS.antennaRight} dir={1} live={live && !contact} antenna={antenna} stage={stage} />
+          <CrankButton id={IDS.antennaRight} dir={1} live={rotatorLive} antenna={antenna} stage={stage} />
         </group>
         <Plate text={`AIM ${BEARINGS[antenna]}`} w={0.3} h={0.1} position={[0, 0.66, 0.01]} glow={0.7} />
         <Lamp position={[-0.15, 0.36, 0.02]} color={PALETTE.lampGreen} size={0.07} level={() => {

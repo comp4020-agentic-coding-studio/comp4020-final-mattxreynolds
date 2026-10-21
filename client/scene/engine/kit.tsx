@@ -15,7 +15,7 @@ import {
   type Material,
 } from "three";
 import { useShallow } from "zustand/react/shallow";
-import type { EngineerView, Phase } from "../../../shared/protocol.ts";
+import { SHIP_PHASES, type EngineerView, type Phase } from "../../../shared/protocol.ts";
 import { useStore } from "../../store.ts";
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { PALETTE } from "../palette.ts";
@@ -24,7 +24,7 @@ type V3 = [number, number, number];
 
 // ------------------------------------------------------------ state helpers
 
-const ORDER: readonly Phase[] = ["LOBBY", "PROLOGUE", "POWER", "FLOOD", "RADIO", "ESCAPE", "SURVIVED"];
+const ORDER: readonly Phase[] = ["LOBBY", "PROLOGUE", "POWER", "FLOOD", "RADIO", "CASCADE", "ESCAPE", "SURVIVED"];
 
 /** How far the voyage got: index in ORDER (LOST counts as the phase reached). */
 export function stageOf(v: EngineerView | null): number {
@@ -32,7 +32,10 @@ export function stageOf(v: EngineerView | null): number {
   const p = v.phase === "LOST" ? (v.outcome?.phaseReached ?? "PROLOGUE") : v.phase;
   return ORDER.indexOf(p);
 }
-export const STAGE = { PROLOGUE: 1, POWER: 2, FLOOD: 3, RADIO: 4, ESCAPE: 5, SURVIVED: 6 } as const;
+export const STAGE = { PROLOGUE: 1, POWER: 2, FLOOD: 3, RADIO: 4, CASCADE: 5, ESCAPE: 6, SURVIVED: 7 } as const;
+
+/** The ship's continuous systems (water, grid, valves) are live in this phase. */
+export const shipLive = (phase: Phase): boolean => SHIP_PHASES.includes(phase);
 
 /** Latest engineer view, for useFrame (no re-render). */
 export function ev(): EngineerView | null {
@@ -182,6 +185,24 @@ function makeMats() {
 }
 export function M(): NonNullable<typeof mats> {
   return (mats ??= makeMats());
+}
+
+const repeated = new Map<string, MeshStandardMaterial>();
+/** A clone of a textured kit material with its own texture repeat (cached),
+ * so a wall or deck of any size keeps the same tile scale. */
+export function MR(name: "wall10" | "deck", rx: number, ry: number): MeshStandardMaterial {
+  const key = `${name}:${rx}:${ry}`;
+  let mat = repeated.get(key);
+  if (!mat) {
+    const base = M()[name];
+    mat = base.clone();
+    const map = base.map!.clone();
+    map.repeat.set(rx, ry);
+    map.needsUpdate = true;
+    mat.map = map;
+    repeated.set(key, mat);
+  }
+  return mat;
 }
 
 // ------------------------------------------------------------ geometries (module singletons)

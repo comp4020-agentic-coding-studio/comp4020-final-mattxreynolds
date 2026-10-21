@@ -1,32 +1,37 @@
-// Water on the engine-room deck. During FLOOD the height tracks the ENGINE
-// BAY level (0..100 → 0..0.6 m); before FLOOD it creeps up with danger; after
-// FLOOD it settles to a low film that still rises with danger. Translucent,
-// with a gentle vertex ripple (none in reduced motion).
+// Water on the engine-room deck (and in the Aux Machinery Room once its door
+// is open: same compartment). From FLOOD to ESCAPE the water is live and the
+// height tracks the ENGINE compartment level (0..100 → 0..0.6 m); a lost
+// ENGINE compartment stands deep (0.9 m, capped so the controls stay
+// visible). Before FLOOD it creeps up with danger. Translucent, with a
+// gentle vertex ripple (none in reduced motion).
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { Color, DoubleSide, type Mesh, MeshStandardMaterial, PlaneGeometry } from "three";
 import { useStore } from "../../store.ts";
 import { PALETTE } from "../palette.ts";
-import { ev, stageOf, STAGE } from "./kit.tsx";
-import { ROOM } from "./layout.ts";
+import { auxOpenNow } from "./AuxRoom.tsx";
+import { ev, shipLive } from "./kit.tsx";
+import { AUX_CX, AUX_CZ, AUX_D, AUX_W, ROOM } from "./layout.ts";
 
 export const WATER_MAX_M = 0.6;
+/** a lost compartment: deep, but the valve handwheels (1.05 m) stay clear */
+export const WATER_LOST_M = 0.9;
 
 /** Target water height in metres from the current view. */
 export function waterTarget(): number {
   const v = ev();
   if (!v) return 0;
-  const stage = stageOf(v);
-  const d = v.danger / 100;
-  if (stage === STAGE.FLOOD && v.phase !== "LOST") return 0.03 + (v.flood.engineLevel / 100) * (WATER_MAX_M - 0.03);
   if (v.phase === "LOST") return 1.2;
-  if (stage < STAGE.FLOOD) return 0.02 + d * 0.3;
-  return 0.03 + d * 0.22;
+  if (v.phase === "SURVIVED") return 0.03;
+  if (v.ship.lost.ENGINE) return WATER_LOST_M;
+  if (shipLive(v.phase)) return 0.03 + (Math.min(100, v.flood.engineLevel) / 100) * (WATER_MAX_M - 0.03);
+  return 0.02 + (v.danger / 100) * 0.3;
 }
 
 export function Water() {
   const ref = useRef<Mesh>(null);
+  const aux = useRef<Mesh>(null);
   const h = useRef(0.02);
   const lastRipple = useRef(-1);
   const flat = useRef(false);
@@ -51,6 +56,10 @@ export function Water() {
     if (!mesh) return;
     h.current += (waterTarget() - h.current) * Math.min(1, dt * 0.8);
     mesh.position.y = h.current;
+    if (aux.current) {
+      aux.current.position.y = h.current;
+      aux.current.visible = auxOpenNow();
+    }
     mat.opacity = 0.42 + Math.min(0.25, h.current * 0.5);
     // ripple at ~20 Hz (vertex rewrite + normals is the costly part); once
     // flat under reduced motion, leave the geometry alone
@@ -71,5 +80,13 @@ export function Water() {
     geo.computeVertexNormals();
   });
 
-  return <mesh ref={ref} geometry={geo} material={mat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null} renderOrder={2} />;
+  return (
+    <group>
+      <mesh ref={ref} geometry={geo} material={mat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null} renderOrder={2} />
+      {/* the aux room (and the doorway): flat, sharing the material */}
+      <mesh ref={aux} material={mat} rotation={[-Math.PI / 2, 0, 0]} position={[AUX_CX + 0.15, 0.02, AUX_CZ]} raycast={() => null} renderOrder={2} visible={false}>
+        <planeGeometry args={[AUX_W + 0.3, AUX_D]} />
+      </mesh>
+    </group>
+  );
 }
