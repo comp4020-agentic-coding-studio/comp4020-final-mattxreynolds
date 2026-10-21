@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Db } from "./db.ts";
 import type { Manager, SeatError } from "./manager.ts";
-import { historyPage, notFoundPage, readmePage } from "./pages.ts";
+import { debriefPage, historyPage, notFoundPage, readmePage } from "./pages.ts";
 
 const SEAT_ERROR_STATUS: Record<SeatError, number> = {
   "bad-callsign": 400,
@@ -35,7 +35,7 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
 
   // Express matches a trailing slash loosely, so redirect the bare form by hand.
   app.use((req, res, next) => {
-    if (req.path === "/readme" || req.path === "/history") res.redirect(301, req.path + "/");
+    if (req.path === "/readme" || req.path === "/history" || /^\/log\/[A-Za-z0-9]{3,8}$/.test(req.path)) res.redirect(301, req.path + "/");
     else next();
   });
   app.get("/readme/", (_req, res) => {
@@ -47,6 +47,14 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
 
   app.get("/history/", (_req, res) => {
     res.type("html").send(historyPage(db.history(100), db.stats()));
+  });
+  app.get("/log/:code/", (req, res) => {
+    const code = String(req.params.code).toUpperCase().slice(0, 8);
+    const v = db.endedVoyage(code);
+    if (!v?.debrief) return void res.status(404).type("html").send(notFoundPage());
+    const seats = db.seats(v.id);
+    const name = (r: string) => seats.find((s) => s.role === r)?.callsign ?? null;
+    res.type("html").send(debriefPage(v.code, v.debrief, { engineer: name("ENGINEER"), navigator: name("NAVIGATOR") }));
   });
   app.get("/api/history", (_req, res) => {
     res.json({ voyages: db.history(100), stats: db.stats() });

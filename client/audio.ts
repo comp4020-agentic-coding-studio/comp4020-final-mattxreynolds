@@ -17,6 +17,8 @@ let pumpHum: { gain: GainNode; osc: OscillatorNode } | null = null;
 let gurgle: GainNode | null = null;
 /** Both: the watertight door's rams grinding while the door moves. */
 let grind: GainNode | null = null;
+/** Engineer: the generator straining as its heat climbs. */
+let whine: { gain: GainNode; osc: OscillatorNode } | null = null;
 let lastDoorMoveAt = -1e9;
 let started = false;
 
@@ -143,6 +145,24 @@ export const sfx = {
   slosh: () => noise(0.6, 380, 1.2, 0.22, "lowpass"),
   /** Pump motor spinning up / winding down (Engineer hears the remote pump). */
   motor: (up: boolean) => tone(up ? 45 : 80, 0.7, 0.2, "sawtooth", 0, up ? 80 : 40),
+  /** A coast station is calling: two-tone telephone ring. */
+  ring: () => {
+    for (let i = 0; i < 2; i++) {
+      tone(1200, 0.18, 0.08, "square", i * 0.25);
+      tone(1450, 0.18, 0.06, "square", i * 0.25 + 0.09);
+    }
+  },
+  /** Hull plating gives way: a deep bang and rushing water. */
+  breach: () => {
+    tone(38, 1.6, 0.6, "sawtooth", 0, 24);
+    noise(0.3, 160, 1, 0.8, "lowpass");
+    noise(2.6, 900, 0.6, 0.3, "bandpass", 0.15);
+  },
+  /** Grid dies: everything spins down. */
+  blackout: () => {
+    tone(160, 1.4, 0.3, "sawtooth", 0, 30);
+    noise(0.08, 1400, 4, 0.6);
+  },
   /** Rising ping: in band / locked. */
   ping: () => tone(1320, 0.25, 0.1, "sine"),
   stroke: () => {
@@ -191,11 +211,22 @@ function setLoops(view: View | null): void {
   }
   if (!gurgle) gurgle = loopedNoise(420, 1.5, "lowpass");
   if (!grind) grind = loopedNoise(160, 3, "bandpass");
+  if (!whine) {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = 300;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain).connect(master);
+    osc.start();
+    whine = { gain, osc };
+  }
   const phase = view?.phase;
   const playing = phase && phase !== "LOBBY" && phase !== "SURVIVED" && phase !== "LOST";
   const danger = view?.danger ?? 0;
   const engine = view?.you === "ENGINEER";
-  const powered = phase !== "PROLOGUE" && phase !== "POWER";
+  const gridDown = Boolean(view?.ship?.gridDown);
+  const powered = phase !== "PROLOGUE" && phase !== "POWER" && !gridDown;
   rumble.gain.gain.setTargetAtTime(playing ? (engine ? (powered ? 0.5 : 0.25) : 0.15) : 0, t, 0.5);
   rumble.filter.frequency.setTargetAtTime(powered ? 160 : 90, t, 0.5);
   const alarmOn = playing && (phase === "PROLOGUE" ? !view!.prologue.acknowledged : danger >= 75);
@@ -206,15 +237,18 @@ function setLoops(view: View | null): void {
   let strain = 0;
   let back = 0;
   let running = 0;
-  if (view?.you === "ENGINEER" && phase === "FLOOD") {
+  // water is live from Act II to the end, so the lines are too
+  if (view?.you === "ENGINEER" && waterLive(phase) && !gridDown) {
     for (const [c, { pressure }] of Object.entries(view.flood.valves)) {
       if (pressure > 0) strain = Math.max(strain, pressure);
       else if (pressure < 0) back++;
       if (lineDriven[c]) running++;
     }
-  } else if (view?.you === "ENGINEER" && (phase === "RADIO" || phase === "ESCAPE")) {
-    running = 2; // pumps lock running once flooding is stabilised
   }
+  // the generator's heat is heard as a rising whine (its gauge is in the Aux room)
+  const heat = view?.you === "ENGINEER" && waterLive(phase) && !gridDown ? view.grid.heat : 0;
+  whine.gain.gain.setTargetAtTime(heat > 40 ? ((heat - 40) / 60) * 0.06 : 0, t, 0.3);
+  whine.osc.frequency.setTargetAtTime(280 + heat * 4, t, 0.3);
   const humLevel = running > 0 || strain > 0 ? 0.04 + Math.min(running, 2) * 0.03 + (strain / 100) * 0.1 : 0;
   pumpHum.gain.gain.setTargetAtTime(humLevel, t, 0.3);
   pumpHum.osc.frequency.setTargetAtTime(48 + (strain / 100) * 30, t, 0.3);
@@ -237,6 +271,8 @@ function loopedNoise(freq: number, q: number, type: BiquadFilterType): GainNode 
   src.start();
   return gain;
 }
+
+const waterLive = (p: string | undefined): boolean => p === "FLOOD" || p === "RADIO" || p === "CASCADE" || p === "ESCAPE";
 
 // ------------------------------------------------ pulse-lamp beeps (Engineer)
 
@@ -277,17 +313,22 @@ function onViewChange(v: View | null, prev: View | null): void {
     // Engineer closed/opened a breaker → a system lamp changed
     if (v.phase === "POWER" && !v.power.tripped && JSON.stringify(v.power.fed) !== JSON.stringify(prev.power.fed)) sfx.tick(1300);
     // Engineer opened/shut a valve → a trend arrow flipped
-    if (v.phase === "FLOOD" && JSON.stringify(v.flood.trends) !== JSON.stringify(prev.flood.trends)) sfx.slosh();
+    if (waterLive(v.phase) && JSON.stringify(v.flood.trends) !== JSON.stringify(prev.flood.trends)) sfx.slosh();
     // Engineer turned the antenna → signal meter moved
     if (v.phase === "RADIO" && Math.abs(v.radio.signal - prev.radio.signal) > 0.05) sfx.tick(900 + v.radio.signal * 1500);
+    // Engineer reset the generator → the distribution panel has supply again
+    if (prev.ship.gridDown && !v.ship.gridDown) sfx.powerUp();
     // Engineer pumped the rams → band status changed
     if (v.phase === "ESCAPE" && v.escape.status !== prev.escape.status) (v.escape.status === "OK" ? sfx.ping : () => sfx.tick(700))();
   } else if (v.you === "ENGINEER" && prev.you === "ENGINEER") {
     // Bridge tuned the carrier → resonance needle moved (hotter = higher tick)
     if (v.phase === "RADIO" && v.radio.resonance !== prev.radio.resonance) sfx.tick(600 + v.radio.resonance * 2400);
     if (v.phase === "RADIO" && v.radio.lock && !prev.radio.lock) sfx.ping();
+    // Bridge switched a circuit → a relay clacks in the Engine Room's switchboard
+    if (JSON.stringify(v.ship.circuits) !== JSON.stringify(prev.ship.circuits)) sfx.relay();
+    if (v.ship.armed && !prev.ship.armed) sfx.clunk();
     // Bridge started/stopped a pump → a suction line came alive or went slack
-    if (v.phase === "FLOOD") {
+    if (waterLive(v.phase)) {
       for (const c of Object.keys(v.flood.valves) as (keyof typeof v.flood.valves)[]) {
         const a = prev.flood.valves[c];
         const b = v.flood.valves[c];
@@ -305,6 +346,7 @@ function onViewChange(v: View | null, prev: View | null): void {
 
 let alarmPhase = 0;
 let lastGroan = 0;
+let lastRing = 0;
 function loop(): void {
   if (!ctx) return;
   const view = useStore.getState().view;
@@ -315,6 +357,11 @@ function loop(): void {
   }
   const danger = view?.danger ?? 0;
   const now = performance.now();
+  // a ringing coast station keeps ringing (its lamp flashes on the Bridge)
+  if (view?.ship?.calling && Math.floor(now / 2700) !== lastRing) {
+    lastRing = Math.floor(now / 2700);
+    sfx.ring();
+  }
   if (view && view.phase !== "LOBBY" && danger > 20 && now - lastGroan > 9000 - danger * 50 && Math.random() < 0.3) {
     lastGroan = now;
     sfx.groan();
@@ -335,12 +382,21 @@ const FX_SOUND: Partial<Record<Fx["k"], (fx: Fx) => void>> = {
     if (fx.k === "reply") (fx.result === "contact" ? sfx.success : sfx.wrong)();
   },
   vent: () => sfx.steam(),
+  gridTrip: () => sfx.blackout(),
+  gridReset: () => sfx.powerUp(),
+  overheat: () => (useStore.getState().view?.you === "ENGINEER" ? sfx.steam() : undefined),
+  breach: () => sfx.breach(),
+  compartmentLost: () => (sfx.groan(), sfx.breach()),
+  call: () => sfx.ring(),
+  callResult: (fx) => (fx.k === "callResult" && fx.answered ? (sfx.static(), sfx.success()) : sfx.wrong()),
+  evacCharged: () => sfx.chime(),
+  davitsArmed: (fx) => (fx.k === "davitsArmed" && fx.armed ? sfx.clunk() : sfx.powerDown()),
   doorOpen: () => sfx.door(),
   abandonPulled: () => sfx.clunk(),
   rejected: () => sfx.reject(),
   phase: (fx) => {
     if (fx.k !== "phase") return;
-    if (fx.phase === "POWER" || fx.phase === "FLOOD" || fx.phase === "RADIO" || fx.phase === "ESCAPE") sfx.chime();
+    if (fx.phase === "POWER" || fx.phase === "FLOOD" || fx.phase === "RADIO" || fx.phase === "CASCADE" || fx.phase === "ESCAPE") sfx.chime();
     if (fx.phase === "SURVIVED") sfx.success();
     if (fx.phase === "LOST") (sfx.groan(), sfx.door());
   },

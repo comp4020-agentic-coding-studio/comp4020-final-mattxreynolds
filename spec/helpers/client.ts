@@ -125,7 +125,7 @@ export function nextEvent<T = any>(socket: Socket, event: string, ms = 5000): Pr
   });
 }
 
-export type VoyageEvent = { at: number; kind: string; detail: string | null };
+export type VoyageEvent = { at: number; kind: string; detail: string | null; seq: number | null };
 
 /** Test hook: the voyage's public event log, oldest first. */
 export async function events(baseUrl: string, code: string): Promise<VoyageEvent[]> {

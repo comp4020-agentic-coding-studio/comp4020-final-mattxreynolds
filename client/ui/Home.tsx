@@ -11,13 +11,18 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
   const [joinCode, setJoinCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // /?ship=123: replay a specific ship (from a debrief's "replay this ship")
+  const [ship] = useState<number | undefined>(() => {
+    const n = Number(new URLSearchParams(location.search).get("ship"));
+    return Number.isInteger(n) && n > 0 ? n : undefined;
+  });
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
     const err = callsignError(callsign);
     if (err) return setError(err);
     setBusy(true);
-    const r = await createVoyage(callsign);
+    const r = await createVoyage(callsign, ship);
     setBusy(false);
     if ("error" in r) setError(r.error === "network" ? "Can't reach the ship's server. Check your connection." : "That callsign won't work.");
     else onVoyage(r.code);
@@ -42,7 +47,8 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
         </p>
         <p className="need">
           <span aria-hidden>🎧</span> Needs <b>two players</b> in separate browsers, <b>talking</b> by voice call or in
-          the same room. There is no in-game chat. That's the point. About 10–15 minutes.
+          the same room. There is no in-game chat. That's the point. A full voyage runs five acts, about 15–20 minutes,
+          and most crews need a few attempts to get off alive.
         </p>
       </header>
 
@@ -65,6 +71,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
             {busy ? "Launching…" : "Create voyage"}
           </button>
           <p className="hint">You'll be the Engineer and get a code to send your partner.</p>
+          {ship && <p className="hint" data-testid="replay-ship">Replaying ship No. {ship}: same faults, same configuration.</p>}
         </form>
 
         <form className="card" onSubmit={join} aria-labelledby="join-h">

@@ -35,38 +35,50 @@ export const PHASE_GUIDE: Partial<Record<Phase, Record<Role, Guide>>> = {
   },
   FLOOD: {
     ENGINEER: {
-      title: "FLOOD CONTROL",
-      you: "The BILGE SUCTION MANIFOLD is on the wall opposite the switchboard.",
-      partner: "has the water levels and the pump switches.",
+      title: "ACT II · FLOOD CONTROL",
+      you: "The BILGE SUCTION MANIFOLD is on the wall opposite the switchboard. The AUX MACHINERY bulkhead behind the generator is open now: the generator's heat gauge and RESET live there.",
+      partner: "has the water levels and the pump switches — and sees when a compartment runs dry.",
     },
     NAVIGATOR: {
-      title: "FLOOD CONTROL",
-      you: "The DAMAGE CONTROL map and pump switches are on the right-hand console under the windows.",
-      partner: "has the suction valves and their pressure gauges.",
+      title: "ACT II · FLOOD CONTROL",
+      you: "The DAMAGE CONTROL map and pump switches are on the right-hand console under the windows. Warn the Engineer when a compartment runs dry.",
+      partner: "has the suction valves and their pressure gauges, and the generator.",
     },
   },
   RADIO: {
     ENGINEER: {
-      title: "DISTRESS SIGNAL",
+      title: "ACT III · MAYDAY",
       you: "The W/T TRANSMITTER cabinet is at the far end of the switchboard wall.",
       partner: "has the tuner, the station chart and the codebook.",
     },
     NAVIGATOR: {
-      title: "DISTRESS SIGNAL",
-      you: "The RADIO DESK is on the left wall, with the chart table and codebook nearby.",
+      title: "ACT III · MAYDAY",
+      you: "The RADIO DESK is on the left wall, with the chart table and codebook nearby. The COMMS room is open: its distribution panel switches the radio, lighting and evac circuits.",
       partner: "has the resonance meter, the pulse lamp and the antenna.",
+    },
+  },
+  CASCADE: {
+    ENGINEER: {
+      title: "ACT IV · CASCADE",
+      you: "Keep the generator out of the red (Aux Machinery), keep the right valves open as the hull gives way, and turn the antenna when a coast station calls.",
+      partner: "is charging the evac accumulator, sees where the hull breaches and which bearing a station calls from.",
+    },
+    NAVIGATOR: {
+      title: "ACT IV · CASCADE",
+      you: "Switch on the EVAC accumulator in the COMMS room and keep it charging. Shed load the generator can't carry, chase breaches with the pumps, answer calls.",
+      partner: "sees the generator's heat and output, and turns the antenna.",
     },
   },
   ESCAPE: {
     ENGINEER: {
       title: "ABANDON SHIP",
-      you: "The hand pump, watertight door and ABANDON lever share the end wall, away from the generator.",
-      partner: "knows the pressure the door rams need, and holds the release.",
+      you: "The hand pump, watertight door and ABANDON lever share the end wall, away from the generator. The water is still coming: keep the grid up.",
+      partner: "knows the pressure the door rams need, holds the release, and must arm the lifeboat davits.",
     },
     NAVIGATOR: {
       title: "ABANDON SHIP",
-      you: "The DOOR RAMS panel is on the back wall, opposite the windows.",
-      partner: "pumps the pressure and sees the door itself.",
+      you: "ARM DAVITS in the COMMS room first (needs the accumulator powered and half charged), then the DOOR RAMS panel on the back wall.",
+      partner: "pumps the pressure, sees the door itself and keeps the generator alive.",
     },
   },
 };

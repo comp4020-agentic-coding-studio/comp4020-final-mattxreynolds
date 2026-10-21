@@ -185,7 +185,7 @@ describe("the Ship's Log keeps finished voyages across a restart", () => {
     const tr = html.match(new RegExp(`<tr data-code="${eng.code}">([\\s\\S]*?)</tr>`))?.[1];
     expect(tr).toContain("LOST");
     expect(tr).toContain("No distress call reached shore");
-    expect(tr).toContain("Distress Signal"); // RADIO's display name
+    expect(tr).toContain("Act III · Mayday"); // RADIO's display name
     expectNoSecrets(html, [eng, nav]);
   });
 });

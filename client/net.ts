@@ -7,6 +7,8 @@ import { playUse } from "./audio.ts";
 import { emitFx, toast, useStore } from "./store.ts";
 
 const KEY = (code: string) => `btw.seat.${code}`;
+/** The most recent voyage this browser holds a seat in (crew lineage). */
+const LAST = "btw.lastVoyage";
 
 export function savedToken(code: string): string | null {
   try {
@@ -18,6 +20,7 @@ export function savedToken(code: string): string | null {
 function saveToken(code: string, token: string): void {
   try {
     localStorage.setItem(KEY(code), token);
+    localStorage.setItem(LAST, code);
   } catch {
     // private mode with storage disabled: the seat lasts this tab only
   }
@@ -62,12 +65,12 @@ export const REJECT_TEXT: Record<RejectReason, string> = {
 
 export type SeatResult = { code: string; token: string; role: string } | { error: string };
 
-async function seatRequest(url: string, callsign: string): Promise<SeatResult> {
+async function seatRequest(url: string, callsign: string, extra: Record<string, unknown> = {}): Promise<SeatResult> {
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ callsign }),
+      body: JSON.stringify({ callsign, ...extra }),
     });
     return (await res.json()) as SeatResult;
   } catch {
@@ -75,8 +78,18 @@ async function seatRequest(url: string, callsign: string): Promise<SeatResult> {
   }
 }
 
-export async function createVoyage(callsign: string): Promise<SeatResult> {
-  const r = await seatRequest("/api/voyages", callsign);
+/** Creating from a browser that already sailed keeps that crew's unlocks;
+ * `ship` replays a specific ship number (seed). */
+export async function createVoyage(callsign: string, ship?: number): Promise<SeatResult> {
+  let from: { code: string; token: string } | undefined;
+  try {
+    const code = localStorage.getItem(LAST);
+    const token = code ? savedToken(code) : null;
+    if (code && token) from = { code, token };
+  } catch {
+    /* storage disabled: a fresh crew */
+  }
+  const r = await seatRequest("/api/voyages", callsign, { from, ship });
   if ("token" in r) saveToken(r.code, r.token);
   return r;
 }

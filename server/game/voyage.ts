@@ -78,10 +78,12 @@ function enter(v: Voyage, to: Phase, now: number, fx: Fx[]): void {
   }
   if (to === "POWER" && v.danger < DANGER.start) v.danger = DANGER.start;
   if (to === "CASCADE") v.ship.cascadeAtMs = v.elapsedMs;
-  if (to === "SURVIVED") finish(v, now);
   const act = ACT_OF[to];
   if (act && to === ACT_START[act]) note(v, "SHIP", "act", `Act ${ROMAN[act]} — ${ACT_TITLE[act]}`);
-  if (to === "SURVIVED") note(v, "SHIP", "survived", "Both crew abandoned ship together — survived", "good");
+  if (to === "SURVIVED") {
+    note(v, "SHIP", "survived", "Both crew abandoned ship together — survived", "good");
+    finish(v, now);
+  }
   fx.push({ k: "phase", phase: to });
 }
 

@@ -1,6 +1,7 @@
 // The in-voyage screen: 3D scene + HUD + briefing/pause card.
 
 import { useEffect, useRef, useState } from "react";
+import { MODE_RULES } from "../../shared/config.ts";
 import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE, type Phase } from "../../shared/protocol.ts";
 import { Scene } from "../scene/Scene.tsx";
 import { useStore } from "../store.ts";
@@ -29,11 +30,12 @@ function usePhaseBanner(phase: Phase, locked: boolean): Phase | null {
 }
 
 const PHASE_LABEL: Record<string, string> = {
-  PROLOGUE: "PROLOGUE",
-  POWER: "1 · EMERGENCY POWER",
-  FLOOD: "2 · FLOOD CONTROL",
-  RADIO: "3 · DISTRESS SIGNAL",
-  ESCAPE: "FINAL · ABANDON SHIP",
+  PROLOGUE: "ACT I · IMPACT",
+  POWER: "ACT I · EMERGENCY POWER",
+  FLOOD: "ACT II · STABILISATION",
+  RADIO: "ACT III · MAYDAY",
+  CASCADE: "ACT IV · CASCADE",
+  ESCAPE: "ACT V · ABANDON SHIP",
   SURVIVED: "SURVIVED",
   LOST: "LOST",
 };
@@ -107,7 +109,11 @@ export function Game({ ended = false }: { ended?: boolean }) {
         <>
           <div className="hud-top">
             <div className="phase">
-              <span className="phase-name">{PHASE_LABEL[view.phase]}</span>
+              <span className="phase-name">
+                {PHASE_LABEL[view.phase]}
+                {view.practice && <span className="tag practice" data-testid="practice-tag">PRACTICE</span>}
+                {view.mode !== "STANDARD" && <span className="tag mode">{MODE_RULES[view.mode].title.toUpperCase()}</span>}
+              </span>
               <span className="objective" data-testid="objective">{PHASE_OBJECTIVE[view.phase][view.you]}</span>
             </div>
             <div className={`flood ${view.trend.toLowerCase()}`} data-testid="flood">
@@ -131,6 +137,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
               <p><b>{partner?.callsign ?? "Partner"}</b> in the {partnerRoom} {banner.partner}</p>
             </div>
           )}
+          <ShipStrip />
           {muted && <div className="muted-tag">MUTED (M)</div>}
           {!locked && (
             <div className="overlay" onClick={(e) => e.target === e.currentTarget && lockCanvas()}>
@@ -178,6 +185,29 @@ export function Game({ ended = false }: { ended?: boolean }) {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** A compact strip of the ship-wide systems both seats may see: grid state,
+ * evac charge, davits, lost compartments, coast-station calls. Text and
+ * symbols, never colour alone. */
+function ShipStrip() {
+  const phase = useStore((s) => s.view?.phase);
+  const ship = useStore((s) => s.view?.ship);
+  if (!ship || !phase || !["FLOOD", "RADIO", "CASCADE", "ESCAPE"].includes(phase)) return null;
+  const lost = Object.entries(ship.lost).filter(([, l]) => l).map(([c]) => c);
+  return (
+    <div className="ship-strip" data-testid="ship-strip">
+      <span className={ship.gridDown ? "bad" : ""}>{ship.gridDown ? "⚠ GRID DOWN" : "GRID ✓"}</span>
+      {(phase === "CASCADE" || phase === "ESCAPE") && (
+        <span>
+          EVAC {Math.round(ship.evac)}%{ship.evacOnline ? " ▲" : ""}
+        </span>
+      )}
+      {phase === "ESCAPE" && <span className={ship.armed ? "" : "bad"}>{ship.armed ? "DAVITS ARMED ✓" : "DAVITS NOT ARMED"}</span>}
+      {ship.calling && <span className="bad blink">☎ COAST STATION CALLING</span>}
+      {lost.length > 0 && <span className="bad">LOST: {lost.join(", ")}</span>}
     </div>
   );
 }

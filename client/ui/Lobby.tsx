@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ROLE_ROOM, ROLE_TITLE, ROLES } from "../../shared/protocol.ts";
+import { MODE_RULES, MODES } from "../../shared/config.ts";
+import { ACT_TITLE, ROLE_ROOM, ROLE_TITLE, ROLES, type Act } from "../../shared/protocol.ts";
 import { send } from "../net.ts";
 import { useStore } from "../store.ts";
 
@@ -63,6 +64,8 @@ export function Lobby({ onHome }: { onHome: () => void }) {
         })}
       </div>
 
+      {view.lobby && <VoyageSettings />}
+
       <div className="card center">
         <button
           className="primary big"
@@ -74,6 +77,69 @@ export function Lobby({ onHome }: { onHome: () => void }) {
         </button>
         <p className="hint">The voyage starts when both crew are ready.</p>
         <p><button className="link" onClick={onHome}>← Leave</button></p>
+      </div>
+    </div>
+  );
+}
+
+const ROMAN = ["", "I", "II", "III", "IV", "V"];
+
+/** Mode and starting act. Either seat may change them; any change un-readies
+ * both, so nobody starts on terms they didn't agree to. */
+function VoyageSettings() {
+  const lobby = useStore((s) => s.view?.lobby)!;
+  const practice = lobby.practice;
+  return (
+    <div className="card settings" data-testid="settings">
+      <h2>Voyage</h2>
+      <div className="choices" role="radiogroup" aria-label="Starting point">
+        {([1, 2, 3, 4, 5] as Act[]).map((a) => {
+          const open = a <= lobby.unlockedActs;
+          const on = (practice ?? 1) === a;
+          return (
+            <button
+              key={a}
+              role="radio"
+              aria-checked={on}
+              className={`choice ${on ? "on" : ""}`}
+              disabled={!open}
+              data-testid={`start-act-${a}`}
+              onClick={() => send({ t: "setStart", act: a })}
+              title={open ? undefined : "Reach this act on a full voyage to practise it"}
+            >
+              <b>{a === 1 ? "FULL VOYAGE" : `PRACTICE · ACT ${ROMAN[a]}`}</b>
+              <span>{a === 1 ? "From the collision. The only way to a real escape." : ACT_TITLE[a]}</span>
+              {!open && <span className="lock">🔒 locked</span>}
+            </button>
+          );
+        })}
+      </div>
+      {practice && (
+        <p className="hint practice-note">
+          <b>Practice</b> starts at Act {ROMAN[practice]} with the earlier acts set up as a clean crew would leave them. It is
+          logged as practice and never counts as surviving the voyage.
+        </p>
+      )}
+      <div className="choices modes" role="radiogroup" aria-label="Mode">
+        {MODES.map((m) => {
+          const open = lobby.unlockedModes.includes(m);
+          const on = lobby.mode === m;
+          return (
+            <button
+              key={m}
+              role="radio"
+              aria-checked={on}
+              className={`choice ${on ? "on" : ""}`}
+              disabled={!open}
+              data-testid={`mode-${m}`}
+              onClick={() => send({ t: "setMode", mode: m })}
+            >
+              <b>{MODE_RULES[m].title}</b>
+              <span>{open ? MODE_RULES[m].blurb : m === "NIGHTMARE" ? "Survive two challenge modes to unlock." : "Survive a Standard Voyage to unlock."}</span>
+              {!open && <span className="lock">🔒 locked</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
