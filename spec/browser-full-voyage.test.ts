@@ -117,6 +117,9 @@ describe.skipIf(!testHooks())("a full voyage through the real controls", () => {
     await use(N, "arm-davits");
     await waitView(E, "v.ship.armed === true");
     const [lo] = cfg.config.escape.band as [number, number];
+    // the radio isn't needed any more: shed it so the davits' load fits
+    await use(N, "circuit-RADIO");
+    await waitView(N, "v.ship.circuits.RADIO === false");
     await use(N, "door-release", true);
     for (let i = 0; i < 400; i++) {
       const v = await viewOf(E);
@@ -126,7 +129,20 @@ describe.skipIf(!testHooks())("a full voyage through the real controls", () => {
     }
     await use(N, "door-release", false);
     await waitView(N, "v.escape.door >= 100");
-    await Promise.all([use(E, "abandon-engineer"), use(N, "abandon-navigator")]);
+    // a crew keeps the ship alive until both are off: grid reset and re-arm
+    // if a trip dropped the davits, then pull together (again if refused)
+    for (let i = 0; i < 40; i++) {
+      const n = await viewOf(N);
+      if (n.phase !== "ESCAPE") break;
+      if (n.ship.gridDown) {
+        if ((await viewOf(E)).grid.resetReady) await use(E, "grid-reset");
+      } else if (!n.ship.armed) {
+        await use(N, "arm-davits");
+      } else {
+        await Promise.all([use(E, "abandon-engineer"), use(N, "abandon-navigator")]);
+      }
+      await E.waitForTimeout(500);
+    }
     await waitView(E, "v.phase === 'SURVIVED'");
     await waitView(N, "v.phase === 'SURVIVED'");
     // the ending cinematic, then the ending card

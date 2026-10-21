@@ -74,7 +74,10 @@ export class Manager {
     const now = this.clock();
     const awaySince: Partial<Record<Role, number>> = {};
     for (const r of ROLES) if (v.seats[r]) awaySince[r] = now;
-    return { v, rev: 0, conns: new Map(), awaySince, lastPersist: now, loggedSeq: this.db.maxSeq(v.id) };
+    // rev is seeded from the clock, not 0: a client that stays open across a
+    // server restart drops views whose rev is lower than the last it saw, and
+    // a voyage pushes at most ~5 views/s, far fewer than 1 per ms
+    return { v, rev: Math.floor(now), conns: new Map(), awaySince, lastPersist: now, loggedSeq: this.db.maxSeq(v.id) };
   }
 
   /** What this pair has earned across every voyage they've sailed together. */

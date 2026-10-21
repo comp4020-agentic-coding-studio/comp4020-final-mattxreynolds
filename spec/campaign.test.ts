@@ -170,6 +170,7 @@ describe("an active Act IV voyage survives a hard restart", () => {
     expect((await nav.send({ t: "setCircuit", circuit: "RADIO", on: false })).ok).toBe(true);
     await nav.waitFor((v) => !v.ship.circuits.RADIO);
     const before = (await hidden(server.url, eng.code)) as { ship: { evac: number }; seq: number };
+    const revBefore = nav.view!.rev;
     await new Promise((r) => setTimeout(r, 2300)); // let the periodic persist land
     await server.kill();
     await server.restart();
@@ -179,6 +180,9 @@ describe("an active Act IV voyage survives a hard restart", () => {
     expect(ev.you).toBe("ENGINEER");
     expect(nv.you).toBe("NAVIGATOR");
     expect(ev.phase).toBe("CASCADE");
+    // a browser that kept its page open drops views with a lower rev than the
+    // last it saw: after a restart revs must keep rising (regression)
+    expect(nv.rev).toBeGreaterThan(revBefore);
     expect(nv.ship.circuits).toEqual({ LIGHTS: false, RADIO: false, EVAC: true });
     expect(ev.grid.wear).toBe(1);
     const after = (await hidden(server.url, eng.code)) as { ship: { evac: number }; seq: number };

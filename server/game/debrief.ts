@@ -93,7 +93,10 @@ export function buildDebrief(v: Voyage): Debrief {
   if (s.callsMissed) lessons.push(`${s.callsMissed} coast-station call${s.callsMissed > 1 ? "s were" : " was"} missed. The Bridge sees the caller's bearing; the Engineer has to aim the antenna there before the Bridge answers.`);
   if (count(v, "wrongStation")) lessons.push("Transmitting to the wrong station cost water. The Engineer's pulse rhythm, matched in the Bridge's codebook, names the right one.");
   if (count(v, "vent")) lessons.push("The door rams vented from over-pressure. The Bridge knows the band; call \"more\" and \"stop\".");
-  if (!survived && v.failureCause) lessons.unshift(`${v.failureCause}.`);
+  if (!survived && v.failureCause) {
+    const act = ACT_OF[v.deepestPhase === "LOST" ? "ESCAPE" : v.deepestPhase];
+    lessons.unshift(`${v.failureCause}${act ? ` (Act ${["", "I", "II", "III", "IV", "V"][act]})` : ""}.`);
+  }
   if (survived && !lessons.length && v.mistakes === 0) lessons.push("A clean voyage: no trips, no bursts, no lost compartments.");
   if (survived && !lessons.length) lessons.push(`${v.mistakes} small mistake${v.mistakes === 1 ? "" : "s"}, none that wore down the ship's systems.`);
 
