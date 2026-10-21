@@ -3,6 +3,7 @@
 
 import { io, type Socket } from "socket.io-client";
 import type { HelloAck, Intent, IntentAck, RejectReason, View, Fx } from "../shared/protocol.ts";
+import { playUse } from "./audio.ts";
 import { emitFx, toast, useStore } from "./store.ts";
 
 const KEY = (code: string) => `btw.seat.${code}`;
@@ -133,6 +134,7 @@ export function disconnect(): void {
 
 /** Sends an intent. Feedback for rejections is shown automatically. */
 export function send(intent: Intent): Promise<IntentAck> {
+  if (intent.t !== "setReady" && intent.t !== "sailAgain") playUse();
   return new Promise((resolve) => {
     if (!socket?.connected) {
       toast("Reconnecting to the ship…", "warn");
