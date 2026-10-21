@@ -108,6 +108,12 @@ describe("health and errors", () => {
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "not-found" });
   });
+
+  it("the join screen's soft lookup answers a miss without an error status", async () => {
+    const res = await get("/api/voyages/ZZZZ?soft=1");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ found: false });
+  });
 });
 
 describe("join links serve the game", () => {

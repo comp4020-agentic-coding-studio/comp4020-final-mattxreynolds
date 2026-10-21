@@ -82,8 +82,9 @@ export async function joinVoyage(code: string, callsign: string): Promise<SeatRe
 export type Peek = { code: string; phase: string; crew: { role: string; callsign: string }[] };
 export async function peekVoyage(code: string): Promise<Peek | null> {
   try {
-    const res = await fetch(`/api/voyages/${encodeURIComponent(code)}`);
-    return res.ok ? ((await res.json()) as Peek) : null;
+    const res = await fetch(`/api/voyages/${encodeURIComponent(code)}?soft=1`);
+    const body = res.ok ? ((await res.json()) as Peek | { found: false }) : null;
+    return body && "code" in body ? body : null;
   } catch {
     return null;
   }

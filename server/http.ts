@@ -64,7 +64,10 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
   });
   app.get("/api/voyages/:code", (req: Request, res: Response) => {
     const p = manager.peek(req.params.code);
-    if (!p) res.status(404).json({ error: "not-found" });
+    // ?soft=1: the join screen asks "does this exist?" — a miss is an answer,
+    // not an error, so it shouldn't print a 404 in the visitor's console
+    if (!p && req.query.soft === "1") res.json({ found: false });
+    else if (!p) res.status(404).json({ error: "not-found" });
     else res.json(p);
   });
 
