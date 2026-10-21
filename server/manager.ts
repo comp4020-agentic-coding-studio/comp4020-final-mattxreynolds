@@ -2,8 +2,9 @@
 // pushing each seat its own view. Game rules live in game/voyage.ts.
 
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { ABANDON_AFTER_MS, CALLSIGN_MAX, DISCONNECT_PAUSE_MS, PERSIST_EVERY_MS, TICK_MS } from "../shared/config.ts";
+import { ABANDON_AFTER_MS, CALLSIGN_MAX, DISCONNECT_PAUSE_MS, MODES, NIGHTMARE_AFTER, PERSIST_EVERY_MS, TICK_MS, type Mode } from "../shared/config.ts";
 import {
+  ACT_OF,
   isEnded,
   isPlaying,
   ROLES,
@@ -11,11 +12,13 @@ import {
   type HelloAck,
   type Intent,
   type IntentAck,
+  type Act,
+  type Phase,
   type Role,
 } from "../shared/protocol.ts";
 import { hashToken, type Db } from "./db.ts";
 import { log } from "./log.ts";
-import { advance, applyIntent, bothSeatsReady, createVoyage, tick, type Voyage } from "./game/voyage.ts";
+import { advance, applyIntent, bothSeatsReady, createVoyage, tick, upgradeVoyage, type Voyage } from "./game/voyage.ts";
 import { viewFor, type Presence } from "./game/views.ts";
 
 /** The slice of a Socket.IO socket the manager uses (fakeable in tests). */
@@ -28,6 +31,8 @@ type Live = {
   /** When each seat last went from connected to disconnected. */
   awaySince: Partial<Record<Role, number>>;
   lastPersist: number;
+  /** the highest voyage-log seq already copied to the events table */
+  loggedSeq: number;
 };
 
 export type SeatGrant = { code: string; token: string; role: Role };
@@ -56,7 +61,8 @@ export class Manager {
   constructor(db: Db, clock: () => number = Date.now) {
     this.db = db;
     this.clock = clock;
-    for (const v of db.loadLive()) {
+    for (const saved of db.loadLive()) {
+      const v = upgradeVoyage(saved);
       // Time the server was down is a pause, not a flood (MAX_TICK_DT_S).
       v.lastTickAt = null;
       this.live.set(v.code, this.wrap(v));
@@ -68,7 +74,32 @@ export class Manager {
     const now = this.clock();
     const awaySince: Partial<Record<Role, number>> = {};
     for (const r of ROLES) if (v.seats[r]) awaySince[r] = now;
-    return { v, rev: 0, conns: new Map(), awaySince, lastPersist: now };
+    return { v, rev: 0, conns: new Map(), awaySince, lastPersist: now, loggedSeq: this.db.maxSeq(v.id) };
+  }
+
+  /** What this pair has earned across every voyage they've sailed together. */
+  private unlocksFor(crewId: string): Voyage["unlocks"] {
+    const rows = this.db.crewRecords(crewId);
+    let acts = 1;
+    const survivedModes = new Set<string>();
+    for (const r of rows) {
+      if (r.practice !== null) continue; // practice never unlocks anything
+      const act = r.outcome === "SURVIVED" ? 5 : ACT_OF[r.deepest_phase as Phase] || 1;
+      acts = Math.max(acts, act);
+      if (r.outcome === "SURVIVED") survivedModes.add(r.mode);
+    }
+    const modes: Mode[] = ["STANDARD"];
+    if (survivedModes.has("STANDARD")) modes.push("ROUGH_SEAS", "BLACKOUT", "RAPID_FLOOD", "CHAIN_REACTION");
+    const challenges = [...survivedModes].filter((m) => m !== "STANDARD" && m !== "NIGHTMARE").length;
+    if (challenges >= NIGHTMARE_AFTER) modes.push("NIGHTMARE");
+    return { modes: MODES.filter((m) => modes.includes(m)), acts: acts as Act };
+  }
+
+  private refreshUnlocks(v: Voyage): void {
+    if (v.phase !== "LOBBY") return;
+    v.unlocks = this.unlocksFor(v.crewId);
+    if (!v.unlocks.modes.includes(v.mode)) v.mode = "STANDARD";
+    if (v.practice !== null && v.practice > v.unlocks.acts) v.practice = null;
   }
 
   start(): void {
@@ -95,12 +126,21 @@ export class Manager {
     }
   }
 
-  create(rawCallsign: unknown): SeatGrant | SeatError {
+  /** `from` = a previous voyage this browser holds a seat in: the new
+   * voyage joins that crew's lineage, so its unlocks carry over. */
+  create(rawCallsign: unknown, from?: { code: unknown; token: unknown }, rawShip?: unknown): SeatGrant | SeatError {
     const callsign = cleanCallsign(rawCallsign);
     if (!callsign) return "bad-callsign";
     const now = this.clock();
-    const v = createVoyage(randomUUID(), this.newCode(), randomInt(2 ** 31), now);
+    let crewId: string | undefined;
+    if (from && typeof from.token === "string") {
+      const prev = this.db.loadByCode(normaliseCode(from.code));
+      if (prev && this.db.roleForToken(prev.id, from.token)) crewId = this.db.crewOf(prev.voyage.code) ?? undefined;
+    }
+    const ship = typeof rawShip === "number" && Number.isInteger(rawShip) && rawShip >= 0 && rawShip < 2 ** 31 ? rawShip : randomInt(2 ** 31);
+    const v = createVoyage(randomUUID(), this.newCode(), ship, now, { crewId });
     v.seats.ENGINEER = { callsign, ready: false };
+    this.refreshUnlocks(v);
     const token = randomBytes(32).toString("base64url");
     this.db.insertVoyage(v);
     this.db.insertSeat(v.id, "ENGINEER", callsign, hashToken(token));
@@ -119,6 +159,7 @@ export class Manager {
     if (isEnded(l.v.phase)) return "ended";
     if (l.v.seats.NAVIGATOR) return "full";
     l.v.seats.NAVIGATOR = { callsign, ready: false };
+    this.refreshUnlocks(l.v);
     const token = randomBytes(32).toString("base64url");
     this.db.insertSeat(l.v.id, "NAVIGATOR", callsign, hashToken(token));
     this.db.saveVoyage(l.v);
@@ -145,7 +186,7 @@ export class Manager {
     if (hit) return hit;
     const row = code ? this.db.loadByCode(code) : null;
     if (!row || row.status === "ABANDONED") return null;
-    const l = this.wrap(row.voyage);
+    const l = this.wrap(upgradeVoyage(row.voyage));
     this.live.set(code, l);
     return l;
   }
@@ -203,7 +244,7 @@ export class Manager {
     const seat = l?.conns.get(conn.id);
     if (!l || !seat) return { ok: false, reason: "not-seated", rev: 0 };
     const now = this.clock();
-    if (intent?.t === "sailAgain") return this.sailAgain(l, seat.role);
+    if (intent?.t === "sailAgain") return this.sailAgain(l, seat.role, intent.sameShip === true);
 
     // bring the simulation up to date first, so the intent lands on current state
     const tickFx = tick(l.v, now);
@@ -213,7 +254,13 @@ export class Manager {
       return { ok: false, reason: res.reason, rev: l.rev };
     }
     const fx = [...tickFx, ...res.fx];
-    if (l.v.phase === "LOBBY") this.maybeStart(l, now, fx);
+    if (l.v.phase === "LOBBY") {
+      if (intent.t === "setMode" || intent.t === "setStart") {
+        this.db.event(l.v.id, "settings", `${l.v.mode} ${l.v.practice ? `practice act ${l.v.practice}` : "full voyage"}`);
+        log("voyage.settings", { code: l.v.code, mode: l.v.mode, practice: l.v.practice ?? "none", by: seat.role });
+      }
+      this.maybeStart(l, now, fx);
+    }
     this.afterChange(l, fx);
     return { ok: true, rev: l.rev };
   }
@@ -221,12 +268,18 @@ export class Manager {
   private maybeStart(l: Live, now: number, fx: Fx[]): void {
     const p = this.presence(l);
     if (bothSeatsReady(l.v) && p.ENGINEER && p.NAVIGATOR && advance(l.v, "LOBBY", now, fx)) {
-      this.db.event(l.v.id, "started");
-      log("voyage.started", { code: l.v.code });
+      this.db.event(l.v.id, "started", `${l.v.mode}${l.v.practice ? ` practice from act ${l.v.practice}` : ""}`);
+      log("voyage.started", { code: l.v.code, mode: l.v.mode, practice: l.v.practice ?? "none" });
     }
   }
 
   private afterChange(l: Live, fx: Fx[]): void {
+    // copy newly recorded significant events to the ordered events table
+    for (const e of l.v.log) {
+      if (e.seq <= l.loggedSeq) continue;
+      this.db.event(l.v.id, `log.${e.k}`, e.text, e.seq);
+      l.loggedSeq = e.seq;
+    }
     for (const f of fx) {
       if (f.k === "phase") {
         this.db.event(l.v.id, "phase", f.phase);
@@ -242,21 +295,23 @@ export class Manager {
     this.broadcast(l, fx);
   }
 
-  private sailAgain(l: Live, role: Role): IntentAck {
+  private sailAgain(l: Live, role: Role, sameShip: boolean): IntentAck {
     if (!isEnded(l.v.phase)) return { ok: false, reason: "wrong-phase", rev: l.rev };
     if (!l.v.nextCode) {
       const now = this.clock();
-      const next = createVoyage(randomUUID(), this.newCode(), randomInt(2 ** 31), now);
+      const seed = sameShip ? l.v.seed : randomInt(2 ** 31);
+      const next = createVoyage(randomUUID(), this.newCode(), seed, now, { crewId: l.v.crewId, mode: l.v.mode, practice: l.v.practice });
       for (const r of ROLES) {
         if (l.v.seats[r]) next.seats[r] = { callsign: l.v.seats[r]!.callsign, ready: false };
       }
-      this.db.insertVoyage(next, l.v.code);
+      this.refreshUnlocks(next);
+      this.db.insertVoyage(next, l.v.code, sameShip);
       for (const s of this.db.seats(l.v.id)) this.db.insertSeat(next.id, s.role, s.callsign, s.token_hash);
-      this.db.event(next.id, "created", `sail again from ${l.v.code}`);
+      this.db.event(next.id, "created", `${sameShip ? "same ship again" : "sail again"} from ${l.v.code}`);
       l.v.nextCode = next.code;
       this.db.saveVoyage(l.v);
       this.live.set(next.code, this.wrap(next));
-      log("voyage.created", { code: next.code, from: l.v.code, by: role });
+      log("voyage.created", { code: next.code, from: l.v.code, by: role, sameShip });
     }
     for (const { conn } of l.conns.values()) conn.emit("moved", { code: l.v.nextCode, by: role });
     return { ok: true, rev: l.rev };

@@ -26,36 +26,66 @@ function setup(seed = 42): { v: Voyage; t: { now: number }; act: (r: Role, i: In
   return { v, t, act, run };
 }
 
+/** Pumps follow the Bridge's map: the two fullest compartments above the
+ * dry line get a pump and an open valve; anything near empty is shut. */
+export function floodStep(s: ReturnType<typeof setup>, keep = 9) {
+  const { v, act } = s;
+  const pumpOf = (c: string) => v.config.flood.pumpTo.indexOf(c as never);
+  const want = COMPARTMENTS.filter((c) => !v.ship.lost[c] && v.flood.levels[c] > keep)
+    .sort((a, b) => v.flood.levels[b] - v.flood.levels[a])
+    .slice(0, 2);
+  for (const c of COMPARTMENTS) {
+    if (want.includes(c)) continue;
+    act("NAVIGATOR", { t: "setPump", pump: pumpOf(c), on: false });
+    act("ENGINEER", { t: "setValve", compartment: c, open: false });
+  }
+  for (const c of want) {
+    act("ENGINEER", { t: "setValve", compartment: c, open: true });
+    act("NAVIGATOR", { t: "setPump", pump: pumpOf(c), on: true });
+  }
+}
+
+export function floodCrew(s: ReturnType<typeof setup>, until: () => boolean, maxS = 200) {
+  for (let i = 0; i < maxS * 2 && until(); i++) {
+    floodStep(s);
+    s.run(0.5);
+  }
+}
+
 export function solveToRadio(seed = 42) {
   const s = setup(seed);
   const { v, act, run } = s;
   act("ENGINEER", { t: "prologueBreaker" });
   act("NAVIGATOR", { t: "prologueAck" });
   for (const i of v.config.power.solution) act("ENGINEER", { t: "setBreaker", index: i, closed: true });
-  // flood: drain two compartments, then hand a pump to the third
-  const order = COMPARTMENTS.slice();
-  const pumpOf = (c: string) => v.config.flood.pumpTo.indexOf(c as never);
-  for (const c of order.slice(0, 2)) {
-    act("ENGINEER", { t: "setValve", compartment: c, open: true });
-    act("NAVIGATOR", { t: "setPump", pump: pumpOf(c), on: true });
-  }
-  run(25);
-  const [first] = order;
-  act("NAVIGATOR", { t: "setPump", pump: pumpOf(first), on: false });
-  act("ENGINEER", { t: "setValve", compartment: first, open: false });
-  act("ENGINEER", { t: "setValve", compartment: order[2], open: true });
-  act("NAVIGATOR", { t: "setPump", pump: pumpOf(order[2]), on: true });
-  for (let i = 0; i < 60 && v.phase === "FLOOD"; i++) {
-    run(1);
-    // keep the first compartment from creeping back over the line
-    if (v.phase === "FLOOD" && v.flood.levels[first] > 18 && v.flood.levels[order[2]] < 15) {
-      act("NAVIGATOR", { t: "setPump", pump: pumpOf(order[2]), on: false });
-      act("ENGINEER", { t: "setValve", compartment: order[2], open: false });
-      act("ENGINEER", { t: "setValve", compartment: first, open: true });
-      act("NAVIGATOR", { t: "setPump", pump: pumpOf(first), on: true });
-    }
-  }
+  // flood: a talking crew pumps the two fullest compartments and shuts a
+  // line when the Bridge calls it nearly dry (a pump left on an empty
+  // compartment seizes)
+  floodCrew(s, () => v.phase === "FLOOD");
   return s;
+}
+
+/** Act IV as a talking crew plays it: shed lights, charge the accumulator,
+ * keep the two breached compartments the Bridge names on the pumps, aim the
+ * antenna at each caller and answer. Returns when the act ends. */
+export function solveCascade(s: ReturnType<typeof setup>) {
+  const { v, act, run } = s;
+  act("NAVIGATOR", { t: "setCircuit", circuit: "LIGHTS", on: false });
+  act("NAVIGATOR", { t: "setCircuit", circuit: "EVAC", on: true });
+  for (let i = 0; i < 400 && v.phase === "CASCADE"; i++) {
+    floodStep(s);
+    // the grid: radio only while a station calls, never over capacity
+    const calling = v.ship.call !== null;
+    act("NAVIGATOR", { t: "setCircuit", circuit: "RADIO", on: calling });
+    if (calling) {
+      const call = v.config.cascade.calls[v.ship.call!];
+      act("ENGINEER", { t: "setAntenna", bearing: call.bearing });
+      act("NAVIGATOR", { t: "answerCall" });
+    }
+    if (v.ship.grid.down) act("ENGINEER", { t: "gridReset" });
+    run(0.6);
+  }
+  act("NAVIGATOR", { t: "setCircuit", circuit: "RADIO", on: false });
 }
 
 describe("puzzle generation", () => {
@@ -104,7 +134,11 @@ describe("a full voyage", () => {
       const target = v.config.radio.stations[v.config.radio.target];
       act("ENGINEER", { t: "setAntenna", bearing: target.bearing });
       act("NAVIGATOR", { t: "transmit" });
-      expect(v.phase).toBe("ESCAPE");
+      expect(v.phase).toBe("CASCADE");
+      solveCascade(s);
+      expect(v.phase, `seed ${seed}`).toBe("ESCAPE");
+      act("NAVIGATOR", { t: "armDavits" });
+      expect(v.ship.armed).toBe(true);
       // pressurise into band, hold the door, keep pumping
       const [lo] = v.config.escape.band;
       act("NAVIGATOR", { t: "holdDoor", held: true });
@@ -120,7 +154,7 @@ describe("a full voyage", () => {
       t.now += 1500;
       act("NAVIGATOR", { t: "abandon" });
       expect(v.phase).toBe("SURVIVED");
-      expect(Object.keys(v.phaseTimes)).toEqual(["PROLOGUE", "POWER", "FLOOD", "RADIO", "ESCAPE", "SURVIVED"]);
+      expect(Object.keys(v.phaseTimes)).toEqual(["PROLOGUE", "POWER", "FLOOD", "RADIO", "CASCADE", "ESCAPE", "SURVIVED"]);
       expect(v.danger).toBeLessThan(100);
     }
   });

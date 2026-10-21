@@ -194,7 +194,7 @@ describe("stale inputs are refused", () => {
 describe("simultaneous inputs are serialised; transitions fire once", () => {
   it("both pull ABANDON at the same instant → exactly one SURVIVED", async () => {
     const [eng, nav] = track(await launch(server.url));
-    await jump(server.url, [eng, nav], { phase: "ESCAPE", deepestPhase: "ESCAPE", escape: { door: 100 } });
+    await jump(server.url, [eng, nav], { phase: "ESCAPE", deepestPhase: "ESCAPE", escape: { door: 100 }, ship: { armed: true, evac: 100, circuits: { EVAC: true } } });
     const acks = await Promise.all([
       ...Array.from({ length: 5 }, () => eng.send({ t: "abandon" })),
       ...Array.from({ length: 5 }, () => nav.send({ t: "abandon" })),

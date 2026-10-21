@@ -50,6 +50,14 @@ export const REJECT_TEXT: Record<RejectReason, string> = {
   "door-not-open": "The escape door isn't open yet",
   "too-fast": "Steady strokes",
   paused: "Ship systems holding — partner disconnected",
+  "pump-seized": "That pump seized running dry — it needs a few seconds",
+  "grid-down": "Generator tripped — the Engineer must reset it",
+  "radio-unpowered": "No power to the radio circuit",
+  "evac-offline": "Evac accumulator isn't powered",
+  "evac-low": "Accumulator charge too low to hold the davits",
+  "no-call": "No station is calling",
+  "davits-not-armed": "Lifeboat davits aren't armed — the Bridge must arm them",
+  locked: "Not unlocked yet",
 };
 
 export type SeatResult = { code: string; token: string; role: string } | { error: string };

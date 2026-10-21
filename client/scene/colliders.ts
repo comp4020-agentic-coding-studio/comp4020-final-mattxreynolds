@@ -2,7 +2,17 @@
 // The player is a circle; we resolve against boxes axis by axis.
 
 export type Box = { minX: number; maxX: number; minZ: number; maxZ: number };
-export type RoomLayout = { bounds: Box; solids: Box[]; spawn: [number, number, number]; spawnYaw: number };
+/** A doorway that is solid until `open()` says otherwise (read every frame). */
+export type Door = { box: Box; open: () => boolean };
+/** `bounds` may be several walkable boxes (rooms joined by doorways): the
+ * player may stand anywhere inside their union. */
+export type RoomLayout = {
+  bounds: Box | Box[];
+  solids: Box[];
+  doors?: Door[];
+  spawn: [number, number, number];
+  spawnYaw: number;
+};
 
 export const PLAYER_RADIUS = 0.3;
 
@@ -20,15 +30,27 @@ function hits(x: number, z: number, b: Box, r: number): boolean {
   return (x - cx) ** 2 + (z - cz) ** 2 < r * r;
 }
 
+/** The circle at (x, z) lies wholly inside the union of the walkable boxes.
+ * Checked at the centre and the four compass extremes, which is exact for
+ * axis-aligned boxes that overlap where rooms join. */
+function walkable(bounds: Box[], x: number, z: number, r: number): boolean {
+  const inside = (px: number, pz: number) => bounds.some((b) => px >= b.minX && px <= b.maxX && pz >= b.minZ && pz <= b.maxZ);
+  return inside(x - r, z) && inside(x + r, z) && inside(x, z - r) && inside(x, z + r);
+}
+
+function blocked(layout: RoomLayout, x: number, z: number, r: number): boolean {
+  const bounds = Array.isArray(layout.bounds) ? layout.bounds : [layout.bounds];
+  if (!walkable(bounds, x, z, r)) return true;
+  if (layout.solids.some((s) => hits(x, z, s, r))) return true;
+  return Boolean(layout.doors?.some((d) => !d.open() && hits(x, z, d.box, r)));
+}
+
 /** Moves from (x, z) by (dx, dz), sliding along walls and solids. */
 export function moveWithCollision(layout: RoomLayout, x: number, z: number, dx: number, dz: number): [number, number] {
   const r = PLAYER_RADIUS;
-  const b = layout.bounds;
-  const clampX = (v: number) => Math.max(b.minX + r, Math.min(b.maxX - r, v));
-  const clampZ = (v: number) => Math.max(b.minZ + r, Math.min(b.maxZ - r, v));
-  let nx = clampX(x + dx);
-  if (layout.solids.some((s) => hits(nx, z, s, r))) nx = x;
-  let nz = clampZ(z + dz);
-  if (layout.solids.some((s) => hits(nx, nz, s, r))) nz = z;
+  let nx = x + dx;
+  if (blocked(layout, nx, z, r)) nx = x;
+  let nz = z + dz;
+  if (blocked(layout, nx, nz, r)) nz = z;
   return [nx, nz];
 }

@@ -38,13 +38,15 @@ const ENGINEER_MUST_NOT_HAVE = [
   "levels", "trends", "pumps", "pumpTo", "pumpGlyphs",
   "channel", "stations", "bearing", "target", "signal", "lastReply",
   "band", "status", "held",
+  "draw", "breached", "call", "dry",
 ];
 const NAVIGATOR_MUST_NOT_HAVE = [
   "breakers", "load",
   "valves", "pressure", "engineLevel",
   "resonance", "lock", "pulse", "antenna",
+  "heat", "output", "wear", "resetReady", "grid",
 ];
-const NOBODY_GETS = ["config", "seed", "token", "token_hash", "solution", "inflow", "abandonAt", "lastTickAt", "id"];
+const NOBODY_GETS = ["config", "seed", "token", "token_hash", "solution", "inflow", "abandonAt", "lastTickAt", "id", "breaches", "calls", "cascadeAtMs", "seizedUntil"];
 
 // Every live phase, plus the lobby and both endings.
 const CHECKED: Phase[] = [...PHASES];
@@ -114,6 +116,11 @@ describe("each role's view holds only its half of the puzzle, in every phase", (
       expect(Object.keys((n as any).power).sort()).toEqual(["capacity", "diagram", "fed", "online", "shorted", "tripped"]);
       expect(Object.keys((n as any).radio).sort()).toEqual(["channel", "contact", "coupled", "lastReply", "signal", "stations"]);
       expect(Object.keys((n as any).escape).sort()).toEqual(["band", "door", "held", "partnerAbandon", "status", "youAbandon"]);
+      // ship systems: the generator's output and heat are the Engineer's; what
+      // each circuit draws, the breaches and the caller's bearing are the Bridge's
+      expect(Object.keys((e as any).grid).sort()).toEqual(["heat", "load", "output", "resetReady", "tripped", "wear"]);
+      expect(Object.keys((n as any).dist.draw).sort()).toEqual(["DAVITS", "EVAC", "LIGHTS", "PUMPS", "RADIO"]);
+      expect((e as any).call).toBeUndefined();
       // the target is not marked among the stations
       for (const s of (n as any).radio.stations) expect(Object.keys(s).sort()).toEqual(["bearing", "glyph", "pattern"]);
 

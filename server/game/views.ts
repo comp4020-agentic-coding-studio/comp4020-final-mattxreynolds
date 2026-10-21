@@ -1,9 +1,10 @@
 // The secrecy boundary: canonical Voyage → what one role is allowed to see.
 // Anything not copied here never leaves the server (CLAUDE.md invariant 2).
 
-import { DANGER } from "../../shared/config.ts";
+import { CASCADE, DANGER, MODES } from "../../shared/config.ts";
 import { BEARINGS, COMPARTMENTS, type Compartment } from "../../shared/glyphs.ts";
 import {
+  ACT_OF,
   ROLES,
   type CommonView,
   type EngineerView,
@@ -12,6 +13,7 @@ import {
   type Role,
   type View,
 } from "../../shared/protocol.ts";
+import { cascadeSeconds, evacLive, gridDraw, gridLoad, gridOutput, gridWear } from "./ship.ts";
 import { escapeInBand, powerLoad, powerTripped, resonance, stationAt, systemsFed, type Voyage } from "./voyage.ts";
 
 export type Presence = Partial<Record<Role, boolean>>;
@@ -48,9 +50,33 @@ function common(v: Voyage, you: Role, presence: Presence, rev: number): CommonVi
             durationMs: Math.round(v.elapsedMs),
             mistakes: v.mistakes,
             nextCode: v.nextCode,
+            debrief: v.debrief,
           }
         : null,
     prologue: { ...v.prologue },
+    act: ACT_OF[v.phase],
+    mode: v.mode,
+    practice: v.practice,
+    lobby:
+      v.phase === "LOBBY"
+        ? {
+            mode: v.mode,
+            practice: v.practice,
+            unlockedModes: MODES.filter((m) => v.unlocks.modes.includes(m)),
+            unlockedActs: v.unlocks.acts,
+          }
+        : null,
+    ship: {
+      gridDown: v.ship.grid.down,
+      circuits: { ...v.ship.circuits },
+      evac: round(v.ship.evac),
+      evacOnline: evacLive(v),
+      armed: v.ship.armed,
+      lost: { ...v.ship.lost },
+      callsAnswered: v.ship.callsAnswered,
+      callsMissed: v.ship.callsMissed,
+      calling: v.ship.call !== null,
+    },
   };
 }
 
@@ -90,6 +116,14 @@ export function engineerView(v: Voyage, presence: Presence, rev: number, now: nu
       youAbandon: v.escape.abandonAt.ENGINEER !== undefined,
       partnerAbandon: v.escape.abandonAt.NAVIGATOR !== undefined,
     },
+    grid: {
+      load: gridLoad(v),
+      output: gridOutput(v),
+      heat: Math.round(v.ship.grid.heat),
+      tripped: v.ship.grid.down,
+      resetReady: v.ship.grid.down && now >= v.ship.grid.trippedUntil,
+      wear: gridWear(v),
+    },
   };
 }
 
@@ -118,6 +152,8 @@ export function navigatorView(v: Voyage, presence: Presence, rev: number, now: n
     flood: {
       levels: Object.fromEntries(COMPARTMENTS.map((c) => [c, round(v.flood.levels[c])])) as NavigatorView["flood"]["levels"],
       trends: Object.fromEntries(COMPARTMENTS.map((c) => [c, trend(c)])) as NavigatorView["flood"]["trends"],
+      dry: Object.fromEntries(COMPARTMENTS.map((c) => [c, v.flood.dry[c] > 0])) as NavigatorView["flood"]["dry"],
+      held: round(v.flood.held),
       pumps: v.config.flood.pumpGlyphs.map((glyph, i) => ({ glyph, on: v.flood.pumps[i] })),
       stable: v.flood.stable,
     },
@@ -137,6 +173,17 @@ export function navigatorView(v: Voyage, presence: Presence, rev: number, now: n
       youAbandon: v.escape.abandonAt.NAVIGATOR !== undefined,
       partnerAbandon: v.escape.abandonAt.ENGINEER !== undefined,
     },
+    dist: { draw: gridDraw(v) },
+    hull: {
+      breached: Object.fromEntries(COMPARTMENTS.map((c) => [c, v.ship.breach[c] > 0])) as NavigatorView["hull"]["breached"],
+    },
+    call:
+      v.ship.call === null
+        ? null
+        : {
+            bearing: BEARINGS[v.config.cascade.calls[v.ship.call].bearing],
+            remainingS: Math.max(0, Math.round(v.config.cascade.calls[v.ship.call].atS + CASCADE.callWindowS - cascadeSeconds(v))),
+          },
   };
 }
 

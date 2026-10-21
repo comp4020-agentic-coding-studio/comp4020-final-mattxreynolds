@@ -57,7 +57,8 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
     else res.status(201).json(r);
   };
   app.post("/api/voyages", (req: Request, res: Response) => {
-    seatReply(res, manager.create(req.body?.callsign));
+    const b = req.body ?? {};
+    seatReply(res, manager.create(b.callsign, b.from && typeof b.from === "object" ? b.from : undefined, b.ship));
   });
   app.post("/api/voyages/:code/join", (req: Request, res: Response) => {
     seatReply(res, manager.join(req.params.code, req.body?.callsign));
@@ -114,7 +115,8 @@ function deepMerge(target: Record<string, unknown>, patch: Record<string, unknow
 /** Production: serve dist/, with the SPA shell for / and /v/:code. */
 export function staticClient(root: string) {
   return (app: express.Express): void => {
-    const dist = resolve(root, "dist");
+    // CLIENT_DIST lets parallel dev builds (screenshots) serve their own output
+    const dist = resolve(root, process.env.CLIENT_DIST ?? "dist");
     const indexFile = join(dist, "index.html");
     app.use(express.static(dist, { index: false, maxAge: "1h" }));
     const sendIndex = (_req: Request, res: Response): void => {

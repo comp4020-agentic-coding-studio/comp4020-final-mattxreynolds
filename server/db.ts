@@ -43,6 +43,14 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX voyages_status ON voyages(status);
    CREATE INDEX events_voyage ON events(voyage_id);`,
+  // second production cycle: modes, practice runs, crew lineage (unlocks)
+  `ALTER TABLE voyages ADD COLUMN mode TEXT NOT NULL DEFAULT 'STANDARD';
+   ALTER TABLE voyages ADD COLUMN practice INTEGER;
+   ALTER TABLE voyages ADD COLUMN crew_id TEXT;
+   ALTER TABLE voyages ADD COLUMN rerun INTEGER NOT NULL DEFAULT 0;
+   UPDATE voyages SET crew_id = id WHERE crew_id IS NULL;
+   CREATE INDEX voyages_crew ON voyages(crew_id);
+   ALTER TABLE events ADD COLUMN seq INTEGER;`,
 ];
 
 export const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
@@ -57,9 +65,14 @@ export type HistoryRow = {
   ended_at: number | null;
   duration_ms: number | null;
   mistakes: number;
+  mode: string;
+  practice: number | null;
+  rerun: number;
   engineer: string | null;
   navigator: string | null;
 };
+
+export type CrewRecord = { outcome: string | null; deepest_phase: string; mode: string; practice: number | null; rerun: number };
 
 export type Db = ReturnType<typeof openDb>;
 
@@ -80,14 +93,20 @@ export function openDb(path: string) {
 
   const stmts = {
     insertVoyage: db.prepare(
-      `INSERT INTO voyages (id, code, seed, status, phase, deepest_phase, created_at, prev_code, state_json, updated_at)
-       VALUES (?, ?, ?, 'LOBBY', 'LOBBY', 'LOBBY', ?, ?, ?, ?)`,
+      `INSERT INTO voyages (id, code, seed, status, phase, deepest_phase, created_at, prev_code, state_json, updated_at, crew_id, rerun)
+       VALUES (?, ?, ?, 'LOBBY', 'LOBBY', 'LOBBY', ?, ?, ?, ?, ?, ?)`,
     ),
     saveVoyage: db.prepare(
       `UPDATE voyages SET status = ?, phase = ?, deepest_phase = ?, outcome = ?, failure_cause = ?,
-         started_at = ?, ended_at = ?, duration_ms = ?, mistakes = ?, state_json = ?, updated_at = ?
+         started_at = ?, ended_at = ?, duration_ms = ?, mistakes = ?, state_json = ?, updated_at = ?,
+         mode = ?, practice = ?
        WHERE id = ?`,
     ),
+    crewRecords: db.prepare(
+      `SELECT outcome, deepest_phase, mode, practice, rerun FROM voyages
+       WHERE crew_id = ? AND status IN ('ACTIVE', 'ENDED', 'ABANDONED') AND started_at IS NOT NULL`,
+    ),
+    crewOf: db.prepare("SELECT crew_id FROM voyages WHERE code = ?"),
     insertSeat: db.prepare(
       "INSERT INTO seats (voyage_id, role, callsign, token_hash, joined_at) VALUES (?, ?, ?, ?, ?)",
     ),
@@ -97,10 +116,12 @@ export function openDb(path: string) {
     codeExists: db.prepare("SELECT 1 FROM voyages WHERE code = ?"),
     live: db.prepare("SELECT state_json FROM voyages WHERE status IN ('LOBBY', 'ACTIVE')"),
     abandon: db.prepare("UPDATE voyages SET status = 'ABANDONED', updated_at = ? WHERE id = ?"),
-    event: db.prepare("INSERT INTO events (voyage_id, at, kind, detail) VALUES (?, ?, ?, ?)"),
+    event: db.prepare("INSERT INTO events (voyage_id, at, kind, detail, seq) VALUES (?, ?, ?, ?, ?)"),
+    maxSeq: db.prepare("SELECT MAX(seq) AS m FROM events WHERE voyage_id = ?"),
+    stateByCode: db.prepare("SELECT state_json, status FROM voyages WHERE code = ?"),
     history: db.prepare(
       `SELECT v.code, v.status, v.outcome, v.failure_cause, v.deepest_phase, v.created_at, v.ended_at,
-              v.duration_ms, v.mistakes,
+              v.duration_ms, v.mistakes, v.mode, v.practice, v.rerun,
               (SELECT callsign FROM seats s WHERE s.voyage_id = v.id AND s.role = 'ENGINEER') AS engineer,
               (SELECT callsign FROM seats s WHERE s.voyage_id = v.id AND s.role = 'NAVIGATOR') AS navigator
        FROM voyages v WHERE v.status IN ('ENDED', 'ACTIVE') OR (v.status = 'ABANDONED' AND v.started_at IS NOT NULL)
@@ -110,10 +131,10 @@ export function openDb(path: string) {
       `SELECT COUNT(*) AS total,
               SUM(outcome = 'SURVIVED') AS survived,
               SUM(outcome = 'LOST') AS lost,
-              MIN(CASE WHEN outcome = 'SURVIVED' THEN duration_ms END) AS fastest
-       FROM voyages WHERE status = 'ENDED'`,
+              MIN(CASE WHEN outcome = 'SURVIVED' AND practice IS NULL AND mode = 'STANDARD' THEN duration_ms END) AS fastest
+       FROM voyages WHERE status = 'ENDED' AND practice IS NULL`,
     ),
-    events: db.prepare("SELECT at, kind, detail FROM events WHERE voyage_id = ? ORDER BY id"),
+    events: db.prepare("SELECT at, kind, detail, seq FROM events WHERE voyage_id = ? ORDER BY id"),
   };
 
   const statusOf = (v: Voyage): string =>
@@ -122,8 +143,22 @@ export function openDb(path: string) {
   return {
     raw: db,
     codeExists: (code: string): boolean => Boolean(stmts.codeExists.get(code)),
-    insertVoyage(v: Voyage, prevCode: string | null = null): void {
-      stmts.insertVoyage.run(v.id, v.code, v.seed, v.createdAt, prevCode, JSON.stringify(v), Date.now());
+    insertVoyage(v: Voyage, prevCode: string | null = null, rerun = false): void {
+      stmts.insertVoyage.run(v.id, v.code, v.seed, v.createdAt, prevCode, JSON.stringify(v), Date.now(), v.crewId, rerun ? 1 : 0);
+    },
+    crewRecords(crewId: string): CrewRecord[] {
+      return stmts.crewRecords.all(crewId) as CrewRecord[];
+    },
+    maxSeq(voyageId: string): number {
+      return (stmts.maxSeq.get(voyageId) as { m: number | null }).m ?? 0;
+    },
+    crewOf(code: string): string | null {
+      return (stmts.crewOf.get(code) as { crew_id: string } | undefined)?.crew_id ?? null;
+    },
+    /** An ended voyage's full state (for its debrief page). */
+    endedVoyage(code: string): Voyage | null {
+      const row = stmts.stateByCode.get(code) as { state_json: string; status: string } | undefined;
+      return row && row.status === "ENDED" ? (JSON.parse(row.state_json) as Voyage) : null;
     },
     saveVoyage(v: Voyage): void {
       const ended = v.phase === "SURVIVED" || v.phase === "LOST";
@@ -139,6 +174,8 @@ export function openDb(path: string) {
         v.mistakes,
         JSON.stringify(v),
         Date.now(),
+        v.mode,
+        v.practice,
         v.id,
       );
     },
@@ -162,11 +199,11 @@ export function openDb(path: string) {
     markAbandoned(id: string): void {
       stmts.abandon.run(Date.now(), id);
     },
-    event(voyageId: string, kind: string, detail: string | null = null): void {
-      stmts.event.run(voyageId, Date.now(), kind, detail);
+    event(voyageId: string, kind: string, detail: string | null = null, seq: number | null = null): void {
+      stmts.event.run(voyageId, Date.now(), kind, detail, seq);
     },
-    events(voyageId: string): { at: number; kind: string; detail: string | null }[] {
-      return stmts.events.all(voyageId) as { at: number; kind: string; detail: string | null }[];
+    events(voyageId: string): { at: number; kind: string; detail: string | null; seq: number | null }[] {
+      return stmts.events.all(voyageId) as { at: number; kind: string; detail: string | null; seq: number | null }[];
     },
     history(limit = 50): HistoryRow[] {
       return stmts.history.all(limit) as HistoryRow[];

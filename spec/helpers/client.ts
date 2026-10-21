@@ -158,7 +158,7 @@ export async function throughPrologue(eng: Player, nav: Player): Promise<void> {
 
 /** Jumps to ESCAPE with the door open, then both pull ABANDON → SURVIVED. */
 export async function survive(baseUrl: string, eng: Player, nav: Player): Promise<void> {
-  await jump(baseUrl, [eng, nav], { phase: "ESCAPE", deepestPhase: "ESCAPE", escape: { door: 100 } });
+  await jump(baseUrl, [eng, nav], { phase: "ESCAPE", deepestPhase: "ESCAPE", escape: { door: 100 }, ship: { armed: true, evac: 100, circuits: { EVAC: true } } });
   await Promise.all([eng.send({ t: "abandon" }), nav.send({ t: "abandon" })]);
   await eng.waitFor((v) => v.phase === "SURVIVED");
   await nav.waitFor((v) => v.phase === "SURVIVED");

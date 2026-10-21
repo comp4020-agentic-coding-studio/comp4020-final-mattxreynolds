@@ -1,6 +1,6 @@
 // Seeded generation of every phase's hidden configuration (docs/PUZZLES.md).
 
-import { ESCAPE, FLOOD, POWER, RADIO } from "../../shared/config.ts";
+import { CASCADE, ESCAPE, FLOOD, POWER, RADIO } from "../../shared/config.ts";
 import { BEARINGS, COMPARTMENTS, GLYPHS, SYSTEMS, type Compartment, type Glyph, type Pulse, type ShipSystem } from "../../shared/glyphs.ts";
 import { makeRng, type Rng } from "../../shared/rng.ts";
 
@@ -27,21 +27,31 @@ export type RadioConfig = { resonance: number; stations: Station[]; target: numb
 
 export type EscapeConfig = { band: [number, number] };
 
+/** Act IV: when and where the hull gives way, and when coast stations call. */
+export type CascadeConfig = {
+  breaches: { atS: number; compartment: Compartment; rate: number }[];
+  /** bearing = index into BEARINGS the Engineer's antenna must face to answer */
+  calls: { atS: number; bearing: number }[];
+};
+
 export type PuzzleConfig = {
   power: PowerConfig;
   flood: FloodConfig;
   radio: RadioConfig;
   escape: EscapeConfig;
+  cascade: CascadeConfig;
 };
 
 export function generatePuzzles(seed: number): PuzzleConfig {
   const rng = makeRng(seed);
-  return {
-    power: generatePower(rng),
-    flood: generateFlood(rng),
-    radio: generateRadio(rng),
-    escape: generateEscape(rng),
-  };
+  const power = generatePower(rng);
+  const flood = generateFlood(rng);
+  const radio = generateRadio(rng);
+  const escape = generateEscape(rng);
+  // drawn last so earlier phases keep the configurations they had before
+  // Act IV existed (old saves and fixed test seeds stay meaningful)
+  const cascade = generateCascade(makeRng(seed ^ 0x5eed_ca5c), radio);
+  return { power, flood, radio, escape, cascade };
 }
 
 /** Every way to close one non-shorted feeder per system. */
@@ -120,4 +130,28 @@ function generateRadio(rng: Rng): RadioConfig {
 function generateEscape(rng: Rng): EscapeConfig {
   const min = rng.pick(ESCAPE.bandMins);
   return { band: [min, min + ESCAPE.bandWidth] };
+}
+
+function generateCascade(rng: Rng, radio: RadioConfig): CascadeConfig {
+  // Breaches: every compartment is hit once, in a seeded order, so a crew
+  // can't pre-position both pumps and wait; the order must be read off the
+  // Bridge's hull map each time.
+  const order = rng.shuffle(COMPARTMENTS).slice(0, CASCADE.breaches);
+  const breaches = order.map((compartment, i) => ({
+    atS: CASCADE.firstBreachS + i * CASCADE.breachSpacingS + rng.int(-CASCADE.breachJitterS, CASCADE.breachJitterS) * (i ? 1 : 0),
+    compartment,
+    rate: CASCADE.breachRateMin + rng.next() * (CASCADE.breachRateMax - CASCADE.breachRateMin),
+  }));
+  // Calls come from bearings with no Act III station (8 bearings − 5
+  // stations leaves 3), preferably two points apart, so the antenna must move.
+  const free = BEARINGS.map((_, i) => i).filter((b) => !radio.stations.some((s) => s.bearing === b));
+  const first = rng.pick(free);
+  const apart = (b: number) => Math.min((b - first + 8) % 8, (first - b + 8) % 8) >= 2;
+  const others = free.filter(apart);
+  const second = rng.pick(others.length ? others : free.filter((b) => b !== first));
+  const calls = [first, second].slice(0, CASCADE.calls).map((bearing, i) => ({
+    atS: CASCADE.firstCallS + i * CASCADE.callSpacingS + rng.int(0, 4),
+    bearing,
+  }));
+  return { breaches, calls };
 }

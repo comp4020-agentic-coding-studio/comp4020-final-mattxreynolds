@@ -1,67 +1,31 @@
-// The canonical voyage and the only two ways it changes: applyIntent and tick.
-// Pure: no I/O, time is passed in. Rules: docs/PUZZLES.md.
+// The voyage reducer: the only two ways a voyage changes are applyIntent and
+// tick. Pure: no I/O, time is passed in. Rules: docs/PUZZLES.md and
+// docs/SYSTEMS.md. State shape: ./state.ts. Continuous systems: ./ship.ts.
 
-import { DANGER, ESCAPE, FLOOD, MAX_TICK_DT_S, POWER, RADIO } from "../../shared/config.ts";
+import { CASCADE, DANGER, ESCAPE, FINALE, FLOOD, MAX_TICK_DT_S, MODES, POWER, RADIO, type Mode } from "../../shared/config.ts";
 import { COMPARTMENTS, SYSTEMS, type Compartment, type ShipSystem } from "../../shared/glyphs.ts";
 import {
+  ACT_OF,
+  ACT_START,
+  ACT_TITLE,
+  CIRCUITS,
   INTENT_RULES,
   isPlaying,
+  phaseIndex,
+  type Act,
+  type Circuit,
   type Fx,
   type Intent,
   type Phase,
   type RejectReason,
   type Role,
 } from "../../shared/protocol.ts";
-import { generatePuzzles, type PuzzleConfig } from "./puzzles.ts";
+import { recordSample, buildDebrief } from "./debrief.ts";
+import { prepareStart } from "./scenario.ts";
+import { evacLive, gridReset as resetGrid, gridTrip, radioPowered, shipLive, tickShip, tickWater } from "./ship.ts";
+import { addDanger, meanLevel, mistake, note, rules, type Voyage } from "./state.ts";
 
-export type Seat = { callsign: string; ready: boolean };
-
-export type Voyage = {
-  id: string;
-  code: string;
-  seed: number;
-  phase: Phase;
-  deepestPhase: Phase;
-  seats: Partial<Record<Role, Seat>>;
-  createdAt: number;
-  startedAt: number | null;
-  endedAt: number | null;
-  /** Simulated play time; frozen while paused, so it is fair across outages. */
-  elapsedMs: number;
-  lastTickAt: number | null;
-  paused: boolean;
-  danger: number;
-  dangerRate: number;
-  mistakes: number;
-  failureCause: string | null;
-  nextCode: string | null;
-  phaseTimes: Partial<Record<Phase, number>>;
-  config: PuzzleConfig;
-  prologue: { busOn: boolean; acknowledged: boolean };
-  power: { closed: boolean[]; trippedUntil: number; online: boolean };
-  flood: {
-    levels: Record<Compartment, number>;
-    prevLevels: Record<Compartment, number>;
-    valves: Record<Compartment, boolean>;
-    pressure: Record<Compartment, number>;
-    pumps: boolean[];
-    stable: boolean;
-  };
-  radio: {
-    channel: number;
-    coupled: boolean;
-    antenna: number;
-    contact: boolean;
-    lastReply: "contact" | "wrong-station" | "no-carrier" | null;
-  };
-  escape: {
-    pressure: number;
-    held: boolean;
-    door: number;
-    lastStrokeAt: number;
-    abandonAt: Partial<Record<Role, number>>;
-  };
-};
+export { createVoyage, upgradeVoyage, type Seat, type Voyage } from "./state.ts";
 
 export type Result = { ok: true; fx: Fx[] } | { ok: false; reason: RejectReason };
 
@@ -70,55 +34,21 @@ const FAILURE_CAUSE: Partial<Record<Phase, string>> = {
   POWER: "Emergency power never came online",
   FLOOD: "Flood control collapsed",
   RADIO: "No distress call reached shore",
+  CASCADE: "The ship's systems failed one after another",
   ESCAPE: "The escape route flooded",
 };
 
-const PHASE_ORDER: Phase[] = ["LOBBY", "PROLOGUE", "POWER", "FLOOD", "RADIO", "ESCAPE", "SURVIVED"];
+const ROMAN = ["", "I", "II", "III", "IV", "V"];
+
 const NEXT: Partial<Record<Phase, Phase>> = {
   LOBBY: "PROLOGUE",
   PROLOGUE: "POWER",
   POWER: "FLOOD",
   FLOOD: "RADIO",
-  RADIO: "ESCAPE",
+  RADIO: "CASCADE",
+  CASCADE: "ESCAPE",
   ESCAPE: "SURVIVED",
 };
-
-export function createVoyage(id: string, code: string, seed: number, now: number): Voyage {
-  const config = generatePuzzles(seed);
-  return {
-    id,
-    code,
-    seed,
-    phase: "LOBBY",
-    deepestPhase: "LOBBY",
-    seats: {},
-    createdAt: now,
-    startedAt: null,
-    endedAt: null,
-    elapsedMs: 0,
-    lastTickAt: null,
-    paused: false,
-    danger: 0,
-    dangerRate: 0,
-    mistakes: 0,
-    failureCause: null,
-    nextCode: null,
-    phaseTimes: {},
-    config,
-    prologue: { busOn: false, acknowledged: false },
-    power: { closed: config.power.breakers.map(() => false), trippedUntil: 0, online: false },
-    flood: {
-      levels: { ...config.flood.start },
-      prevLevels: { ...config.flood.start },
-      valves: { FORE: false, CARGO: false, ENGINE: false },
-      pressure: { FORE: 0, CARGO: 0, ENGINE: 0 },
-      pumps: [false, false, false],
-      stable: false,
-    },
-    radio: { channel: 0, coupled: false, antenna: 0, contact: false, lastReply: null },
-    escape: { pressure: 0, held: false, door: 0, lastStrokeAt: 0, abandonAt: {} },
-  };
-}
 
 // ------------------------------------------------------------- transitions
 
@@ -128,36 +58,58 @@ export function advance(v: Voyage, from: Phase, now: number, fx: Fx[]): boolean 
   if (v.phase !== from) return false;
   const to = NEXT[from];
   if (!to) return false;
+  if (from === "LOBBY" && v.practice !== null && v.practice > 1) {
+    // a practice run starts at a later act from a controlled scenario: the
+    // earlier acts are set up as a crew who had solved them cleanly would
+    // leave them (server/game/scenario.ts)
+    return enterPractice(v, now, fx);
+  }
+  enter(v, to, now, fx);
+  return true;
+}
+
+function enter(v: Voyage, to: Phase, now: number, fx: Fx[]): void {
   v.phase = to;
   v.phaseTimes[to] = v.elapsedMs;
-  if (PHASE_ORDER.indexOf(to) > PHASE_ORDER.indexOf(v.deepestPhase)) v.deepestPhase = to;
-  if (to === "PROLOGUE") {
+  if (phaseIndex(to) > phaseIndex(v.deepestPhase)) v.deepestPhase = to;
+  if (to === "PROLOGUE" || (v.startedAt === null && isPlaying(to))) {
     v.startedAt = now;
     v.lastTickAt = now;
   }
-  if (to === "POWER") v.danger = DANGER.start;
-  if (to === "SURVIVED") v.endedAt = now;
+  if (to === "POWER" && v.danger < DANGER.start) v.danger = DANGER.start;
+  if (to === "CASCADE") v.ship.cascadeAtMs = v.elapsedMs;
+  if (to === "SURVIVED") finish(v, now);
+  const act = ACT_OF[to];
+  if (act && to === ACT_START[act]) note(v, "SHIP", "act", `Act ${ROMAN[act]} — ${ACT_TITLE[act]}`);
+  if (to === "SURVIVED") note(v, "SHIP", "survived", "Both crew abandoned ship together — survived", "good");
   fx.push({ k: "phase", phase: to });
+}
+
+function enterPractice(v: Voyage, now: number, fx: Fx[]): boolean {
+  const start = ACT_START[v.practice as Act];
+  prepareStart(v, start);
+  v.startedAt = now;
+  v.lastTickAt = now;
+  note(v, "SHIP", "practice", `Practice from Act ${v.practice} — earlier acts set up as solved`);
+  enter(v, start, now, fx);
   return true;
+}
+
+function finish(v: Voyage, now: number): void {
+  v.endedAt = now;
+  recordSample(v, true);
+  v.debrief = buildDebrief(v);
 }
 
 export function lose(v: Voyage, now: number, fx: Fx[]): boolean {
   if (!isPlaying(v.phase)) return false;
   v.failureCause = FAILURE_CAUSE[v.phase] ?? "The ship went down";
+  note(v, "SHIP", "lost", `${v.failureCause}`, "bad");
   v.phase = "LOST";
-  v.endedAt = now;
   v.danger = DANGER.max;
+  finish(v, now);
   fx.push({ k: "phase", phase: "LOST" });
   return true;
-}
-
-function addDanger(v: Voyage, amount: number): void {
-  v.danger = Math.max(0, Math.min(DANGER.max, v.danger + amount));
-}
-
-function mistake(v: Voyage, danger: number): void {
-  v.mistakes++;
-  addDanger(v, danger);
 }
 
 // ------------------------------------------------------------- derived
@@ -201,12 +153,17 @@ export function escapeInBand(v: Voyage): boolean {
 // ------------------------------------------------------------- intents
 
 const validCompartment = (c: unknown): c is Compartment => COMPARTMENTS.includes(c as Compartment);
+const validCircuit = (c: unknown): c is Circuit => CIRCUITS.includes(c as Circuit);
 const isInt = (n: unknown, lo: number, hi: number): n is number =>
   typeof n === "number" && Number.isInteger(n) && n >= lo && n <= hi;
 
 export function bothSeatsReady(v: Voyage): boolean {
   return Boolean(v.seats.ENGINEER?.ready && v.seats.NAVIGATOR?.ready);
 }
+
+const unready = (v: Voyage): void => {
+  for (const s of Object.values(v.seats)) if (s) s.ready = false;
+};
 
 /** Validates and applies one intent. Never trusts the client about outcomes. */
 export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number): Result {
@@ -228,10 +185,33 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
       v.seats[role]!.ready = intent.ready;
       break; // start is decided by the manager, which knows who is connected
     }
+    case "setMode": {
+      const mode = intent.mode as Mode;
+      if (!MODES.includes(mode)) return reject("bad-input");
+      if (!v.unlocks.modes.includes(mode)) return reject("locked");
+      if (v.mode !== mode) {
+        v.mode = mode;
+        v.ship.circuits.LIGHTS = !rules(v).dark;
+        unready(v); // both must agree to the new terms
+      }
+      break;
+    }
+    case "setStart": {
+      const act = intent.act;
+      if (!isInt(act, 1, 5)) return reject("bad-input");
+      if (act > v.unlocks.acts) return reject("locked");
+      const practice = act === 1 ? null : (act as Act);
+      if (v.practice !== practice) {
+        v.practice = practice;
+        unready(v);
+      }
+      break;
+    }
     case "prologueBreaker": {
       if (!v.prologue.busOn) {
         v.prologue.busOn = true;
         fx.push({ k: "busOn" });
+        note(v, role, "busOn", "Emergency bus restored");
       }
       break;
     }
@@ -240,6 +220,7 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
       if (!v.prologue.acknowledged) {
         v.prologue.acknowledged = true;
         fx.push({ k: "ack" });
+        note(v, role, "ack", "Alarm acknowledged — Bridge and Engine Room linked");
       }
       break;
     }
@@ -262,16 +243,30 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
     }
     case "setValve": {
       if (!validCompartment(intent.compartment) || typeof intent.open !== "boolean") return reject("bad-input");
-      if (v.flood.stable) break;
-      v.flood.valves[intent.compartment] = intent.open;
+      if (v.flood.valves[intent.compartment] !== intent.open) {
+        v.flood.valves[intent.compartment] = intent.open;
+      }
       break;
     }
     case "setPump": {
       if (!isInt(intent.pump, 0, 2) || typeof intent.on !== "boolean") return reject("bad-input");
-      if (v.flood.stable) break;
       const running = v.flood.pumps.filter(Boolean).length;
       if (intent.on && !v.flood.pumps[intent.pump] && running >= FLOOD.maxPumps) return reject("pump-bus-limit");
+      if (intent.on && !v.flood.pumps[intent.pump] && now < v.flood.seizedUntil[intent.pump]) return reject("pump-seized");
       v.flood.pumps[intent.pump] = intent.on;
+      break;
+    }
+    case "setCircuit": {
+      if (!validCircuit(intent.circuit) || typeof intent.on !== "boolean") return reject("bad-input");
+      if (v.ship.circuits[intent.circuit] !== intent.on) {
+        v.ship.circuits[intent.circuit] = intent.on;
+        note(v, role, "circuit", `${intent.circuit} circuit ${intent.on ? "energised" : "shed"}`);
+      }
+      break;
+    }
+    case "gridReset": {
+      const why = resetGrid(v, now, fx);
+      if (why) return reject(why);
       break;
     }
     case "tune": {
@@ -282,36 +277,70 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
     }
     case "couple": {
       if (v.radio.coupled) break;
+      if (!radioPowered(v)) return reject("radio-unpowered");
       if (v.radio.channel === v.config.radio.resonance) {
         v.radio.coupled = true;
         fx.push({ k: "coupled" });
+        note(v, role, "coupled", "Transmitter coupled at resonance");
       } else {
         mistake(v, RADIO.dangerArc);
         fx.push({ k: "arc" });
+        note(v, role, "arc", "Transmitter arced — coupled off resonance", "bad");
       }
       break;
     }
     case "setAntenna": {
       if (!isInt(intent.bearing, 0, 7)) return reject("bad-input");
-      if (v.radio.contact) break;
+      if (v.phase === "RADIO" && v.radio.contact) break;
       v.radio.antenna = intent.bearing;
       break;
     }
     case "transmit": {
       if (!v.radio.coupled) return reject("not-coupled");
+      if (!radioPowered(v)) return reject("radio-unpowered");
       if (v.radio.contact) break;
       const at = stationAt(v, v.radio.antenna);
       if (at === v.config.radio.target) {
         v.radio.contact = true;
         v.radio.lastReply = "contact";
+        note(v, role, "contact", "Distress signal received ashore", "good");
       } else if (at >= 0) {
         v.radio.lastReply = "wrong-station";
         mistake(v, RADIO.dangerWrongStation);
+        note(v, role, "wrongStation", "Wrong station raised — cannot assist", "bad");
       } else {
         v.radio.lastReply = "no-carrier";
         mistake(v, RADIO.dangerNoCarrier);
       }
       fx.push({ k: "reply", result: v.radio.lastReply });
+      break;
+    }
+    case "answerCall": {
+      const s = v.ship;
+      if (s.call === null) return reject("no-call");
+      if (!radioPowered(v)) return reject("radio-unpowered");
+      const call = v.config.cascade.calls[s.call];
+      s.call = null;
+      if (v.radio.antenna === call.bearing) {
+        s.callsAnswered++;
+        fx.push({ k: "callResult", answered: true });
+        note(v, role, "callAnswered", "Answered the coast station — rescue vectored", "good");
+      } else {
+        s.callsMissed++;
+        mistake(v, RADIO.dangerWrongStation);
+        fx.push({ k: "callResult", answered: false });
+        note(v, role, "callMissed", "Answered with the antenna off the station — call lost", "bad");
+      }
+      break;
+    }
+    case "armDavits": {
+      const s = v.ship;
+      if (s.armed) break;
+      if (!evacLive(v)) return reject("evac-offline");
+      if (s.evac < FINALE.armCharge) return reject("evac-low");
+      s.armed = true;
+      fx.push({ k: "davitsArmed", armed: true });
+      note(v, role, "davits", "Lifeboat davits armed", "good");
       break;
     }
     case "pumpStroke": {
@@ -322,6 +351,7 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
         v.escape.pressure = ESCAPE.ventTo;
         v.mistakes++;
         fx.push({ k: "vent" });
+        note(v, role, "vent", "Door rams over-pressured — relief vented", "bad");
       }
       break;
     }
@@ -332,6 +362,7 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
     }
     case "abandon": {
       if (v.escape.door < 100) return reject("door-not-open");
+      if (!v.ship.armed) return reject("davits-not-armed");
       v.escape.abandonAt[role] = now;
       fx.push({ k: "abandonPulled", role });
       break;
@@ -351,8 +382,10 @@ function allFed(v: Voyage): boolean {
 function trip(v: Voyage, now: number, cause: "short" | "overload" | "backfeed", fx: Fx[]): void {
   v.power.closed = v.power.closed.map(() => false);
   v.power.trippedUntil = now + POWER.tripMs;
+  v.ship.powerTrips++;
   mistake(v, cause === "short" ? POWER.dangerShort : POWER.dangerOverload);
   fx.push({ k: "trip", cause });
+  note(v, "ENGINEER", "trip", `Breakers tripped (${cause}) — the generator is worn for the rest of the voyage`, "bad");
 }
 
 // ------------------------------------------------------------- progress
@@ -368,15 +401,17 @@ export function checkProgress(v: Voyage, now: number, fx: Fx[]): void {
         v.power.online = true;
         addDanger(v, -POWER.dangerRelief);
         fx.push({ k: "powerOnline" });
+        note(v, "ENGINEER", "powerOnline", "Emergency power online — pumps, radio and helm fed", "good");
         advance(v, "POWER", now, fx);
       }
       break;
     }
     case "FLOOD":
-      if (COMPARTMENTS.every((c) => v.flood.levels[c] <= FLOOD.targetLevel)) {
+      if (v.flood.held >= FLOOD.holdS) {
         v.flood.stable = true;
         addDanger(v, -FLOOD.dangerRelief);
         fx.push({ k: "floodStable" });
+        note(v, "SHIP", "floodStable", "Every compartment below 20% — damage control shores the hull", "good");
         advance(v, "FLOOD", now, fx);
       }
       break;
@@ -386,10 +421,17 @@ export function checkProgress(v: Voyage, now: number, fx: Fx[]): void {
         advance(v, "RADIO", now, fx);
       }
       break;
+    case "CASCADE":
+      if (v.ship.evac >= 100) {
+        addDanger(v, -CASCADE.dangerRelief);
+        advance(v, "CASCADE", now, fx);
+      }
+      break;
     case "ESCAPE": {
       const e = v.escape.abandonAt.ENGINEER;
       const n = v.escape.abandonAt.NAVIGATOR;
-      if (e !== undefined && n !== undefined && Math.abs(e - n) <= ESCAPE.abandonWindowMs) {
+      if (e !== undefined && n !== undefined && Math.abs(e - n) <= ESCAPE.abandonWindowMs && v.ship.armed) {
+        v.ship.margin = (DANGER.max - v.danger) / Math.max(0.01, v.dangerRate);
         advance(v, "ESCAPE", now, fx);
       }
       break;
@@ -399,6 +441,36 @@ export function checkProgress(v: Voyage, now: number, fx: Fx[]): void {
 }
 
 // ------------------------------------------------------------- tick
+
+/** Danger %/s from the water itself, in every act with live compartments. */
+function waterDanger(v: Voyage): number {
+  return DANGER.rate.PER_LEVEL * (meanLevel(v) / 100);
+}
+
+export function dangerRateOf(v: Voyage): number {
+  const r = DANGER.rate;
+  let base = 0;
+  switch (v.phase) {
+    case "POWER":
+      base = r.POWER;
+      break;
+    case "FLOOD":
+      base = r.FLOOD;
+      break;
+    case "RADIO":
+      base = r.RADIO;
+      break;
+    case "CASCADE":
+      base = r.CASCADE;
+      break;
+    case "ESCAPE":
+      // each coast station answered in Act IV vectored rescue closer
+      base = r.ESCAPE * Math.max(0.5, 1 - FINALE.callBonus * v.ship.callsAnswered);
+      break;
+  }
+  const water = shipLive(v) ? waterDanger(v) : 0;
+  return (base + water) * rules(v).danger;
+}
 
 /** Advances the continuous simulation to `now`. */
 export function tick(v: Voyage, now: number): Fx[] {
@@ -411,80 +483,40 @@ export function tick(v: Voyage, now: number): Fx[] {
   if (dt === 0) return fx;
   v.elapsedMs += dt * 1000;
 
-  let rate = 0;
-  switch (v.phase) {
-    case "POWER":
-      rate = DANGER.rate.POWER;
-      break;
-    case "FLOOD": {
-      tickFlood(v, dt, fx);
-      const mean = COMPARTMENTS.reduce((n, c) => n + v.flood.levels[c], 0) / COMPARTMENTS.length;
-      rate = DANGER.rate.FLOOD_BASE + DANGER.rate.FLOOD_PER_LEVEL * (mean / 100);
-      break;
-    }
-    case "RADIO":
-      rate = DANGER.rate.RADIO;
-      break;
-    case "ESCAPE":
-      tickEscape(v, now, dt, fx);
-      rate = DANGER.rate.ESCAPE;
-      break;
+  tickShip(v, now, dt, fx);
+  if (v.phase === "FLOOD") {
+    const below = COMPARTMENTS.every((c) => v.flood.levels[c] <= FLOOD.targetLevel);
+    v.flood.held = below ? v.flood.held + dt : 0;
   }
-  v.dangerRate = rate;
-  addDanger(v, rate * dt);
+  if (v.phase === "ESCAPE") tickEscape(v, now, dt, fx);
+  v.dangerRate = dangerRateOf(v);
+  addDanger(v, v.dangerRate * dt);
+  recordSample(v);
   checkProgress(v, now, fx);
   return fx;
 }
 
-function tickFlood(v: Voyage, dt: number, fx: Fx[]): void {
-  const f = v.flood;
-  f.prevLevels = { ...f.levels };
-  for (const c of COMPARTMENTS) {
-    const p = pumpFor(v, c);
-    const pumpOn = f.pumps[p];
-    const open = f.valves[c];
-    let level = f.levels[c] + v.config.flood.inflow[c] * dt;
-    if (pumpOn && open) {
-      level -= FLOOD.drainRate * dt;
-      f.pressure[c] = relax(f.pressure[c], dt);
-    } else if (pumpOn && !open) {
-      f.pressure[c] += FLOOD.pressureRise * dt;
-      if (f.pressure[c] >= FLOOD.burstAt) {
-        f.pressure[c] = 0;
-        f.pumps[p] = false;
-        mistake(v, FLOOD.dangerBurst);
-        fx.push({ k: "burst", compartment: c });
-      }
-    } else if (!pumpOn && open) {
-      level += FLOOD.backflowRate * dt;
-      // backflow reads as negative line pressure on the Engineer's gauge
-      f.pressure[c] = -25;
-    } else {
-      f.pressure[c] = relax(f.pressure[c], dt);
-    }
-    f.levels[c] = Math.max(0, Math.min(100, level));
-  }
-}
-
-function relax(p: number, dt: number): number {
-  const step = FLOOD.pressureRelax * dt;
-  return Math.abs(p) <= step ? 0 : p - Math.sign(p) * step;
-}
-
 function tickEscape(v: Voyage, now: number, dt: number, fx: Fx[]): void {
   const e = v.escape;
+  const decay = rules(v).doorDecay;
   const moving = e.door < 100 && e.held && escapeInBand(v);
   if (moving) {
     e.door = Math.min(100, e.door + ESCAPE.doorRate * dt);
-    if (e.door >= 100) fx.push({ k: "doorOpen" });
+    if (e.door >= 100) {
+      fx.push({ k: "doorOpen" });
+      note(v, "SHIP", "doorOpen", "Watertight escape door fully open", "good");
+    }
   } else if (e.door < 100 && e.held && e.pressure > v.config.escape.band[1]) {
     // over-pressure with the release held: the rams slip and the door sags
     // back, so the Engineer must be told when to stop, not just pump blindly
     e.door = Math.max(0, e.door - ESCAPE.slipRate * dt);
   }
-  e.pressure = Math.max(0, e.pressure - (moving ? ESCAPE.decayDoor : ESCAPE.decayIdle) * dt);
+  e.pressure = Math.max(0, e.pressure - (moving ? ESCAPE.decayDoor : ESCAPE.decayIdle) * decay * dt);
   for (const r of ["ENGINEER", "NAVIGATOR"] as const) {
     const at = e.abandonAt[r];
     if (at !== undefined && now - at > ESCAPE.abandonWindowMs) delete e.abandonAt[r];
   }
 }
+
+// re-exported for tests that drive the water model directly
+export { tickWater, gridTrip };
