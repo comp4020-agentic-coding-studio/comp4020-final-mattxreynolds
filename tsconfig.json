@@ -9,12 +9,13 @@
     // node itself wants when it runs a .ts file directly.
     "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"],
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "moduleDetection": "force",
     "verbatimModuleSyntax": true
   },
-  "include": ["*.ts", "spec", "scripts"]
+  "include": ["*.ts", "spec", "scripts", "server", "shared", "client"]
 }

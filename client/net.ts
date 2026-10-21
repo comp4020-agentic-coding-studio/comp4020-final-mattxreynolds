@@ -1,0 +1,153 @@
+// Socket client. Identity is the per-voyage seat token in localStorage
+// (docs/MULTIPLAYER.md); every (re)connect re-sends hello for a full snapshot.
+
+import { io, type Socket } from "socket.io-client";
+import type { HelloAck, Intent, IntentAck, RejectReason, View, Fx } from "../shared/protocol.ts";
+import { emitFx, toast, useStore } from "./store.ts";
+
+const KEY = (code: string) => `btw.seat.${code}`;
+
+export function savedToken(code: string): string | null {
+  try {
+    return localStorage.getItem(KEY(code));
+  } catch {
+    return null;
+  }
+}
+function saveToken(code: string, token: string): void {
+  try {
+    localStorage.setItem(KEY(code), token);
+  } catch {
+    // private mode with storage disabled: the seat lasts this tab only
+  }
+}
+export function forgetToken(code: string): void {
+  try {
+    localStorage.removeItem(KEY(code));
+  } catch {
+    /* ignore */
+  }
+}
+
+let socket: Socket | null = null;
+let current: { code: string; token: string } | null = null;
+let seq = 0;
+
+export const REJECT_TEXT: Record<RejectReason, string> = {
+  "not-seated": "You're not aboard this voyage",
+  "wrong-phase": "That system isn't active right now",
+  "wrong-role": "That's your partner's control",
+  "bad-input": "That didn't register",
+  "not-ready-to-start": "Waiting for both crew",
+  "consoles-dead": "No power — the consoles are dead",
+  "generator-tripped": "Generator tripped — wait for it to reset",
+  "pump-bus-limit": "Pump bus overloaded — max 2 pumps",
+  "carrier-locked": "Carrier locked — tuning is fixed",
+  "not-coupled": "No carrier — the transmitter isn't coupled",
+  "door-not-open": "The escape door isn't open yet",
+  "too-fast": "Steady strokes",
+  paused: "Ship systems holding — partner disconnected",
+};
+
+export type SeatResult = { code: string; token: string; role: string } | { error: string };
+
+async function seatRequest(url: string, callsign: string): Promise<SeatResult> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ callsign }),
+    });
+    return (await res.json()) as SeatResult;
+  } catch {
+    return { error: "network" };
+  }
+}
+
+export async function createVoyage(callsign: string): Promise<SeatResult> {
+  const r = await seatRequest("/api/voyages", callsign);
+  if ("token" in r) saveToken(r.code, r.token);
+  return r;
+}
+
+export async function joinVoyage(code: string, callsign: string): Promise<SeatResult> {
+  const r = await seatRequest(`/api/voyages/${encodeURIComponent(code)}/join`, callsign);
+  if ("token" in r) saveToken(r.code, r.token);
+  return r;
+}
+
+export type Peek = { code: string; phase: string; crew: { role: string; callsign: string }[] };
+export async function peekVoyage(code: string): Promise<Peek | null> {
+  try {
+    const res = await fetch(`/api/voyages/${encodeURIComponent(code)}`);
+    return res.ok ? ((await res.json()) as Peek) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Connects (or reconnects) to the voyage this browser holds a seat in. */
+export function connect(code: string, onFail: (reason: string) => void): void {
+  const token = savedToken(code);
+  if (!token) return onFail("bad-token");
+  current = { code, token };
+  useStore.setState({ code, conn: "connecting", view: null });
+  if (!socket) {
+    socket = io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000 });
+    socket.on("connect", () => hello(onFail));
+    socket.on("disconnect", () => useStore.setState({ conn: "offline" }));
+    socket.on("view", (v: View) => {
+      const prev = useStore.getState().view;
+      // views carry a monotonic rev; drop any that arrive out of order
+      if (prev && prev.code === v.code && v.rev < prev.rev) return;
+      useStore.setState({ view: v });
+    });
+    socket.on("fx", (list: Fx[]) => list.forEach(emitFx));
+    socket.on("moved", (m: { code: string; by: string }) => {
+      if (!current) return;
+      saveToken(m.code, current.token);
+      history.replaceState(null, "", `/v/${m.code}`);
+      connect(m.code, onFail);
+    });
+  } else if (socket.connected) {
+    hello(onFail);
+  }
+}
+
+function hello(onFail: (reason: string) => void): void {
+  if (!socket || !current) return;
+  const sentFor = current.code;
+  socket.emit("hello", current, (ack: HelloAck) => {
+    if (current?.code !== sentFor) return;
+    if (ack.ok) useStore.setState({ conn: "online" });
+    else onFail(ack.reason);
+  });
+}
+
+export function disconnect(): void {
+  current = null;
+  socket?.disconnect();
+  socket = null;
+  useStore.setState({ conn: "idle", view: null, code: null });
+}
+
+/** Sends an intent. Feedback for rejections is shown automatically. */
+export function send(intent: Intent): Promise<IntentAck> {
+  return new Promise((resolve) => {
+    if (!socket?.connected) {
+      toast("Reconnecting to the ship…", "warn");
+      return resolve({ ok: false, reason: "bad-input", rev: 0 });
+    }
+    socket.timeout(5000).emit("intent", { seq: ++seq, intent }, (err: unknown, ack: IntentAck) => {
+      if (err) {
+        toast("No answer from the ship — try again", "warn");
+        return resolve({ ok: false, reason: "bad-input", rev: 0 });
+      }
+      if (!ack.ok) {
+        toast(REJECT_TEXT[ack.reason] ?? "That didn't register", "warn");
+        emitFx({ k: "rejected", reason: ack.reason });
+      }
+      resolve(ack);
+    });
+  });
+}
