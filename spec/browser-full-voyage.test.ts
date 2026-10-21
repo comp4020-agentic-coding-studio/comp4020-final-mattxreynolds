@@ -58,7 +58,8 @@ describe.skipIf(!testHooks())("a full voyage through the real controls", () => {
     await use(E, `valve-${c1}`);
     await use(E, `valve-${c2}`);
     await use(N, `pump-${pumpOf(c2)}`);
-    await waitView(N, `v.flood.levels.${c1} < 20 && v.flood.levels.${c2} < 20`, 40_000);
+    // drain well below the line first, as a crew must: the first creeps back while the third drains
+    await waitView(N, `v.flood.levels.${c1} < 5 && v.flood.levels.${c2} < 5`, 40_000);
     // hand a pump over to the third compartment
     await use(N, `pump-${pumpOf(c1)}`);
     await use(E, `valve-${c1}`);

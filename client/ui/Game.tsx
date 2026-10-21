@@ -32,6 +32,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const conn = useStore((s) => s.conn);
   const muted = useStore((s) => s.muted);
   const volume = useStore((s) => s.volume);
+  const sceneReady = useStore((s) => s.sceneReady);
   const [gl] = useState(webglAvailable);
 
   useEffect(() => {
@@ -98,9 +99,15 @@ export function Game({ ended = false }: { ended?: boolean }) {
                   other's rooms. Describe everything.
                 </p>
                 <Controls />
-                <button className="primary big" data-testid="take-controls" onClick={lockCanvas}>
-                  Click to take the controls
-                </button>
+                {sceneReady ? (
+                  <button className="primary big" data-testid="take-controls" onClick={lockCanvas}>
+                    Click to take the controls
+                  </button>
+                ) : (
+                  <button className="primary big" disabled aria-busy="true">
+                    Lighting the lamps…
+                  </button>
+                )}
                 <p className="hint">Esc frees the mouse. Stuck? Press R here to return to your starting point.</p>
                 <label className="volume">
                   Volume

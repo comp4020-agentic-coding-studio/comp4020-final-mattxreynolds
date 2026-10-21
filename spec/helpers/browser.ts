@@ -59,7 +59,8 @@ export async function slowLink(p: Profile, rttMs: number): Promise<void> {
 export const viewOf = (page: Page): Promise<any> => page.evaluate(() => window.__btw?.view());
 
 export async function waitView(page: Page, pred: string, timeout = 8000): Promise<void> {
-  await page.waitForFunction(`(() => { const v = window.__btw?.view(); return v && (${pred}); })()`, null, { timeout });
+  // interval polling, not rAF: a software-rendered frame can take 150 ms+
+  await page.waitForFunction(`(() => { const v = window.__btw?.view(); return v && (${pred}); })()`, null, { timeout, polling: 50 });
 }
 
 /** Uses a control by interactable id, through the same path as pressing E. */

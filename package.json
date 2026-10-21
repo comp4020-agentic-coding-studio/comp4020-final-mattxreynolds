@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
-    "test:e2e": "vitest run --project app",
+    "test:e2e": "vitest run --project app --project browser",
     "check": "pnpm typecheck && pnpm test",
     "check:local": "node scripts/check-local.ts",
     "check:evidence": "node scripts/check-evidence.ts"

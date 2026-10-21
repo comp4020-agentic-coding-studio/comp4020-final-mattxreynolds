@@ -1,11 +1,40 @@
 // The 3D view for the local player's role. Each room owns its own lighting,
 // background and fog, so the two room modules never share a file.
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useEffect, useRef } from "react";
 import { useStore } from "../store.ts";
 import { Bridge, BRIDGE_LAYOUT } from "./Bridge.tsx";
 import { EngineRoom, ENGINE_LAYOUT } from "./EngineRoom.tsx";
 import { Player } from "./Player.tsx";
+
+/** Marks the scene ready once frames are flowing smoothly again after the
+ * first-mount shader compile (which can stall the main thread for a second
+ * or more on slow GPUs). Until then the briefing card says it's loading. */
+function ReadyProbe() {
+  const smooth = useRef(0);
+  const done = useRef(false);
+  const ready = () => {
+    if (done.current) return;
+    done.current = true;
+    useStore.setState({ sceneReady: true });
+  };
+  useEffect(() => {
+    // never strand a slow machine on the loading button
+    const cap = setTimeout(ready, 6000);
+    return () => {
+      clearTimeout(cap);
+      useStore.setState({ sceneReady: false });
+    };
+  }, []);
+  useFrame((_, dt) => {
+    if (done.current) return;
+    // a frame under 0.5 s means the compile stall has passed
+    smooth.current = dt < 0.5 ? smooth.current + 1 : 0;
+    if (smooth.current >= 8) ready();
+  });
+  return null;
+}
 
 export function Scene() {
   const role = useStore((s) => s.view?.you);
@@ -20,6 +49,7 @@ export function Scene() {
     >
       {engineer ? <EngineRoom /> : <Bridge />}
       <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
+      <ReadyProbe />
     </Canvas>
   );
 }

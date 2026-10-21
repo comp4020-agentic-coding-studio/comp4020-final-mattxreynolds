@@ -24,6 +24,8 @@ type State = {
   /** Bumped by the R key on the pause card to send the player back to spawn. */
   respawn: number;
   lastFx: { fx: Fx; at: number }[];
+  /** The 3D room has finished its first-load shader compile. */
+  sceneReady: boolean;
 };
 
 export const useStore = create<State>(() => ({
@@ -39,6 +41,7 @@ export const useStore = create<State>(() => ({
   reducedMotion: typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
   respawn: 0,
   lastFx: [],
+  sceneReady: false,
 }));
 
 let toastId = 0;
