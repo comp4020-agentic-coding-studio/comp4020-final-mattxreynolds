@@ -158,6 +158,64 @@ voyage played through the real controls in two independent browser contexts
 (Prologue → Power, including a deliberate short circuit → Flood → Radio →
 Escape → Survived → Ship's Log → Sail again).
 
+### Polish and review workstream ([`a2f136a`](https://github.com/mattxreynolds/below-the-waterline/commit/a2f136a)…[`0a30042`](https://github.com/mattxreynolds/below-the-waterline/commit/0a30042))
+
+**Verified.** The fourth delegated agent (Opus 5.5, medium) found and fixed
+five client bugs:
+
+- **Fast double-presses were silently dropped.** A toggle computed its next
+  value from the last 200 ms view, so the second press did nothing.
+- **Controls could be used while hidden.** Raycasting ignores visibility,
+  so stations still compiling their shaders could be aimed at and used.
+- **"Sail again" connected twice**, rebuilding the 3D canvas twice.
+- **The whole scene re-rendered on every view**, five times a second.
+- **Pointer-lock rejections were unhandled.**
+
+It also added a per-phase "where to look" banner and pulse-lamp beeps
+synced to the lamp's own timing, plus sounds for remote pump changes. I
+checked its wording for spoilers and glyph names before accepting it.
+
+### Marker simulation
+
+**Verified.** I scripted a walkthrough as a stranger, in two independent
+profiles: `/readme/` → Play → a hostile callsign (rejected) → create → join
+by typed code → a bad code → a third player → ready → prologue → a breaker
+(it was the shorted one: trip, one mistake recorded) → **SIGTERM the
+server mid-voyage, restart it** → both clients restored with identical
+state → refresh → `/history/` lists the live voyage. One fix came out of it:
+a mistyped code logged a 404 in the console.
+
+Running `pnpm check` the way CI does (production app, no test hooks)
+exposed a real latency problem, fixed in [`8ef9d01`](https://github.com/mattxreynolds/below-the-waterline/commit/8ef9d01). A silent network drop went
+unnoticed for up to 25 s because of the Socket.IO heartbeat defaults. During
+that time the ship kept flooding instead of "holding". It is now about 13 s.
+
+### Can one seat solve it alone? (the most important finding)
+
+**Verified.** A flaky authority test kept failing for one seed. Tracing it
+showed that ~5% of generated power puzzles had the answer "breakers 1, 2, 3",
+so sweeping left to right solved Power with no talking ([`fa26f8f`](https://github.com/mattxreynolds/below-the-waterline/commit/fa26f8f)). That
+prompted a systematic audit. Every puzzle was simulated against a
+**no-communication strategy** before changing anything. **Every one of the
+four was solvable blind:**
+
+| Puzzle | Blind strategy | Before | Fix | After |
+|---|---|---|---|---|
+| Power | Engineer sweeps combinations using the load meter | ~1.6 trips per solve | rating moved to the Bridge; wrong pairings trip ([`591de31`](https://github.com/mattxreynolds/below-the-waterline/commit/591de31)) | ~3 trips, ~9–12 danger (costly, **not** impossible: documented as an honest limit) |
+| Flood | open every valve, rotate pumps | 40/40 solved | backflow 1.2 → 3 %/s ([`0102dba`](https://github.com/mattxreynolds/below-the-waterline/commit/0102dba)) | 0/40 blind, 40/40 informed |
+| Radio | sweep channels coupling each time, sweep bearings transmitting each time | ~14 danger | arc cost +1 → +2 | ~22 danger |
+| Escape | hold release, pump steadily | 60/60 opened | over-pressure slips the rams ([`fbc93ca`](https://github.com/mattxreynolds/below-the-waterline/commit/fbc93ca)) | 0/60 blind, 60/60 talking (13–22 s) |
+
+**Rationale.** The project's definition of good is "moments in which two
+people genuinely need one another". The original puzzles *displayed*
+asymmetric information but didn't *require* it. Unit tests now lock in that
+blind play fails for Flood and Escape. Raising mistake costs then made a
+slow-but-steady 14-minute pair lose (≈ 95 danger), so the base rates were
+lowered again (now ≈ 76).
+
+[STUDENT REVIEW: this is the clearest example of the agent's tests changing
+the design. Consider whether it belongs in your README argument.]
+
 ## [STUDENT REVIEW] Your reflection
 
 What you decided, what surprised you, and what you would do differently.

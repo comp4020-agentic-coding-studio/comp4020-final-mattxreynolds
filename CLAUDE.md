@@ -84,6 +84,11 @@ own judgement are marked `[STUDENT REVIEW]`.
 
 ## Lessons
 
+- **Simulate the no-communication strategy for every puzzle.** All four
+  puzzles were once solvable blind despite showing asymmetric information.
+  Before changing a puzzle rule or number, re-run a blind-play simulation and
+  keep the unit tests that assert blind play fails.
+
 - Look up client-supplied keys with `Object.hasOwn`, never `obj[key]`:
   `{t:"toString"}` once crashed the server through `INTENT_RULES[t]`.
 - CDP network emulation does not slow an open WebSocket; slow-link tests
