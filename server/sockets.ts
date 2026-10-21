@@ -10,9 +10,11 @@ export function attachSockets(http: HttpServer, manager: Manager): Server {
   const io = new Server(http, {
     serveClient: false,
     maxHttpBufferSize: 4096,
-    // tolerate slow links: a missed heartbeat or two is not a disconnect
-    pingInterval: 10000,
-    pingTimeout: 15000,
+    // A silent drop (Wi-Fi gone, no TCP close) is noticed within ~13 s, so the
+    // partner sees "holding" and the ship pauses; 8 s of silence still
+    // tolerates a very slow link.
+    pingInterval: 5000,
+    pingTimeout: 8000,
   });
 
   io.on("connection", (socket) => {

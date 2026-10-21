@@ -35,6 +35,10 @@ async function toPrologue(a: Profile, b: Profile): Promise<string> {
   await b.page.getByTestId("ready").click();
   await waitView(a.page, "v.phase === 'PROLOGUE'");
   await waitView(b.page, "v.phase === 'PROLOGUE'");
+  // as a player would: act once the room has loaded (take-controls appears
+  // after the first-mount shader compile; see ReadyProbe in client/scene/Scene.tsx)
+  await a.page.getByTestId("take-controls").waitFor({ timeout: 15000 });
+  await b.page.getByTestId("take-controls").waitFor({ timeout: 15000 });
   return code;
 }
 
@@ -73,8 +77,10 @@ describe("going offline and back restores the seat without a reload", () => {
 
     const banner = a.page.getByRole("status").filter({ hasText: /lost connection/i });
     await b.context.setOffline(true);
-    // the partner hears about it from the server, in their own room
-    await banner.waitFor({ timeout: 8000 });
+    // the partner hears about it from the server, in their own room: at once
+    // if the browser closes the socket, else when the heartbeat lapses
+    // (pingInterval 5 s + pingTimeout 8 s in server/sockets.ts)
+    await banner.waitFor({ timeout: 16000 });
     await b.page.waitForTimeout(4000);
     await b.context.setOffline(false);
 
