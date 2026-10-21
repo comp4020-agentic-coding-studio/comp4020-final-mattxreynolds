@@ -74,5 +74,7 @@ export const ESCAPE = {
   ventAt: 95,
   ventTo: 30,
   doorRate: 10,
+  /** door %/s lost while held above the band (rams slip) */
+  slipRate: 15,
   abandonWindowMs: 3000,
 } as const;

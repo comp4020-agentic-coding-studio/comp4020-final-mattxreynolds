@@ -477,6 +477,10 @@ function tickEscape(v: Voyage, now: number, dt: number, fx: Fx[]): void {
   if (moving) {
     e.door = Math.min(100, e.door + ESCAPE.doorRate * dt);
     if (e.door >= 100) fx.push({ k: "doorOpen" });
+  } else if (e.door < 100 && e.held && e.pressure > v.config.escape.band[1]) {
+    // over-pressure with the release held: the rams slip and the door sags
+    // back, so the Engineer must be told when to stop, not just pump blindly
+    e.door = Math.max(0, e.door - ESCAPE.slipRate * dt);
   }
   e.pressure = Math.max(0, e.pressure - (moving ? ESCAPE.decayDoor : ESCAPE.decayIdle) * dt);
   for (const r of ["ENGINEER", "NAVIGATOR"] as const) {

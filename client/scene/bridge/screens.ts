@@ -643,7 +643,15 @@ export function drawEscape(ctx: Ctx, w: number, h: number, d: EscapeData): void 
       ctx.fill();
     }
   });
-  text(ctx, `PRESSURE ${d.status === "OK" ? "IN BAND" : d.status === "LOW" ? "BELOW BAND" : "ABOVE BAND"}`, w / 2, 378, 28, INK.ink);
+  const slipping = d.status === "HIGH" && d.held && d.door < 100;
+  text(
+    ctx,
+    slipping ? "⚠ RAMS SLIPPING — DOOR CLOSING — TELL THEM TO STOP" : `PRESSURE ${d.status === "OK" ? "IN BAND" : d.status === "LOW" ? "BELOW BAND" : "ABOVE BAND"}`,
+    w / 2,
+    378,
+    28,
+    slipping ? INK.red : INK.ink,
+  );
 
   // door progress
   const px = 70;

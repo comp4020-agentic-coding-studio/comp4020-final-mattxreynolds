@@ -192,7 +192,11 @@ Genuine synchronisation under rising water.
    → 30, steam).
 2. **Open the door**: door progress += 10 %/s only while B holds RELEASE *and*
    pressure is in band. Both see the door move (E physically, B on the panel).
-   Progress is kept when interrupted.
+   Progress is kept when interrupted. **Above the band with release held,
+   the rams slip and the door closes at 15 %/s** (B's panel: "RAMS SLIPPING").
+   Without this, holding release and pumping blindly opened the door every
+   time with no talking (simulated: 60/60 seeds). With it, blind pumping
+   fails 60/60, and a pair calling "more / stop" opens it in 13–22 s.
 3. **Abandon ship**: once the door is fully open, each player pulls their
    ABANDON lever. If both pulls land within a 3-second window → SURVIVED. A lone
    pull resets after 3 s with no penalty; partner lamp shows it.

@@ -202,6 +202,20 @@ describe("rules", () => {
     expect(v.phase).toBe("RADIO");
   });
 
+  it("escape needs talking: blind steady pumping with release held never opens the door", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { v, act, run, t } = setup(seed);
+      v.phase = "ESCAPE";
+      act("NAVIGATOR", { t: "holdDoor", held: true });
+      // a stroke every 600 ms for 60 s
+      for (let i = 0; i < 100; i++) {
+        act("ENGINEER", { t: "pumpStroke" });
+        run(0.6);
+      }
+      expect(v.escape.door, `seed ${seed}`).toBeLessThan(100);
+    }
+  });
+
   it("a lone abandon pull expires; pulls further apart than the window do not escape", () => {
     const { v, act, run, t } = setup();
     v.phase = "ESCAPE";
