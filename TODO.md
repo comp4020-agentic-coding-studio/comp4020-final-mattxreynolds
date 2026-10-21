@@ -1,14 +1,14 @@
 # TODO
 
 ## CURRENT
-- Second production cycle (docs/SYSTEMS.md, ADR 005). Done and committed:
-  ship simulation, five acts (new CASCADE act), davits finale, modes,
-  practice, crew unlocks, same-ship replay, debrief (in-game + /log/CODE/),
-  cinematic bookends, event sequence + restart recovery, chaos spec.
-- In progress: new rooms. Aux Machinery Room (Engineer) and Comms Room
-  (Bridge), by two room workstreams; then integration of the browser specs.
+- Nothing in progress. Second production cycle complete; full spec passes
+  (158 tests: unit, app, browser).
 
 ## NEXT
+- Human playtests of the five-act voyage: is Act IV readable, is the
+  difficulty curve (escape after a few attempts) right, are the cinematics
+  the right length. All balance figures are from scripted crews.
+- Flood is still solvable alone at a cost (PUZZLES.md "Honest limit").
 - Human playtest with two people: difficulty, banner wording, audio levels,
   pulse beep, 10–15 min length (balance figures are estimates; see
   docs/GAME_DESIGN.md).
@@ -24,6 +24,11 @@
 - reflections/crit-10.md: the student's own words.
 
 ## COMPLETED
+- Second cycle: ship simulation (grid/water/hull), five acts with CASCADE,
+  Aux Machinery + Comms rooms, seeded Act IV, cross-act consequences (wear,
+  seams, lost compartments, answered calls), davits finale, debrief
+  (in-game + /log/CODE/), modes + unlocks per crew, practice, same-ship
+  replay, cinematics, event seq + restart recovery, chaos spec.
 - Starter template imported unchanged; docs, ADRs, CLAUDE.md.
 - Vertical slice → full game: lobby, prologue, power, flood, radio, escape,
   survived/lost, Ship's Log, sail again.

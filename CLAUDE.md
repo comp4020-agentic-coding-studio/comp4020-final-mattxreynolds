@@ -1,11 +1,13 @@
 # Below the Waterline — engineering constitution
 
 A two-player asymmetric real-time 3D co-op puzzle game (COMP4020 final
-project). Engineer in the Engine Room, Radio Officer / Navigator on the
-Bridge. Read before working:
+project). Engineer in the Engine Room (+ Aux Machinery), Radio Officer / Navigator on
+the Bridge (+ Comms Room). One voyage in five acts over a server-side ship
+simulation. Read before working:
 
 - `TODO.md` — current board. Update it when you finish or start a chunk.
 - `docs/PUZZLES.md` — the rules. Server code implements exactly this.
+- `docs/SYSTEMS.md` — the five acts, ship systems, modes, practice, unlocks.
 - `docs/ARCHITECTURE.md`, `docs/MULTIPLAYER.md` — structure and protocol.
 - `docs/PRODUCT.md` — scope and non-goals. `docs/adr/` — decisions.
 
@@ -99,3 +101,13 @@ own judgement are marked `[STUDENT REVIEW]`.
   last rendered view: views arrive every 200 ms, so `!serverValue` sends the
   same value twice on a quick double-press (`useLatched` in scene/interact.tsx).
 - Keep the R3F `<Scene>` memoised: the HUD around it re-renders on every view.
+- Blind-play simulations must include *reactive* strategies (act on live
+  gauges), not only fixed sweeps: a reactive Engineer solved Flood alone.
+- Anything ordered by a client-side counter must survive a server restart:
+  view `rev` restarted at 0 and open pages silently ignored every new view.
+  Seed such counters from the clock or persist them.
+- Ship systems are live from Act II to the end: a station's intents may be
+  legal in later phases (`INTENT_RULES`), so gate client stations on the
+  same phases (`stationMode(…, until)`), never on "my phase only".
+- Practice starts come from `scenario.ts` (built from the seed), never from
+  a copied save state.

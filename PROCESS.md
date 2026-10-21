@@ -216,6 +216,64 @@ lowered again (now ≈ 76).
 [STUDENT REVIEW: this is the clearest example of the agent's tests changing
 the design. Consider whether it belongs in your README argument.]
 
+## Second production cycle (one unattended overnight session)
+
+The student gave one long brief asking for fifteen ranked features. Below
+is what happened, in order.
+
+### Lead first: server and protocol before delegation
+
+The lead wrote the server side alone before any delegation
+([`4dc5c37`](https://github.com/mattxreynolds/below-the-waterline/commit/4dc5c37)). That covered the continuous ship systems (`ship.ts`:
+grid, water, hull, Act IV breaches and calls, the accumulator), the new
+CASCADE phase, the davits gate on the escape, modes, practice starts from a
+seeded scenario, an ordered event log and the debrief builder. The
+protocol, secrecy projections and IDs were fixed first so the room work
+could proceed in parallel. ADR 005 records why the phase machine was kept
+rather than rewritten.
+
+### A blind-play hole the first cycle missed
+
+The first cycle's simulation of blind Flood play used a *fixed* sweep. A new
+simulation used a *reactive* blind Engineer: open on deadhead, shut on
+backflow. It won 40/40 seeds at no cost, because the gauge reveals which
+pumps run. Running-dry seizure and a 6 s hold ([`4dc5c37`](https://github.com/mattxreynolds/below-the-waterline/commit/4dc5c37)) made blind
+play cost about 10 more danger than a talking crew, but **did not** make it
+fail. PUZZLES.md now records this as an honest limit rather than claiming
+otherwise.
+
+### Delegation
+
+Two Opus subagents (medium effort) worked in parallel, each owning one
+side's client directory with no shared files. One built the Engineer's Aux
+Machinery Room, the other the Bridge's Comms Room. Meanwhile the lead built
+the lobby settings, debrief UI, cinematics, audio, docs and the chaos spec
+([`b6cdbab`](https://github.com/mattxreynolds/below-the-waterline/commit/b6cdbab), [`6778749`](https://github.com/mattxreynolds/below-the-waterline/commit/6778749), [`867eafc`](https://github.com/mattxreynolds/below-the-waterline/commit/867eafc)). The lead reviewed both
+diffs and screenshots and integrated them in [`d6dbae9`](https://github.com/mattxreynolds/below-the-waterline/commit/d6dbae9). The first
+full five-act browser run then exposed two debrief bugs (a "clean voyage"
+lesson printed despite a trip, and a meaningless escape margin), both fixed
+there.
+
+### Balance by simulation, not by people
+
+A scripted crew that plays correctly but waits a human-like thinking time
+in each act produced the difficulty table in GAME_DESIGN.md. Danger rates
+for Acts III–V were raised a little so a slow first attempt usually dies in
+Act V ([`bb0cca1`](https://github.com/mattxreynolds/below-the-waterline/commit/bb0cca1)). **No human playtesting has happened.**
+
+### Hostile-marker audit found a restart bug
+
+An audit script started a fresh server and opened two browser contexts. It
+jumped to Act IV, SIGKILLed and restarted the server, then forced a loss.
+The open pages never saw the loss: the client drops views with a lower
+`rev`, and the server's rev restarted at 0. Fixed by seeding rev from the
+clock, with a regression assertion ([`feeb0c4`](https://github.com/mattxreynolds/below-the-waterline/commit/feeb0c4)). The same audit found
+unreadable lobby and debrief cards (dark-on-dark).
+
+[STUDENT REVIEW: the overnight session ran without supervision. Decide
+whether this section should stay as written, and what you would have
+prioritised differently.]
+
 ## [STUDENT REVIEW] Your reflection
 
 What you decided, what surprised you, and what you would do differently.
