@@ -1,7 +1,12 @@
 # TODO
 
 ## CURRENT
-- Nothing in progress. The game is complete and the full spec passes (90 tests).
+- Second production cycle (docs/SYSTEMS.md, ADR 005). Done and committed:
+  ship simulation, five acts (new CASCADE act), davits finale, modes,
+  practice, crew unlocks, same-ship replay, debrief (in-game + /log/CODE/),
+  cinematic bookends, event sequence + restart recovery, chaos spec.
+- In progress: new rooms. Aux Machinery Room (Engineer) and Comms Room
+  (Bridge), by two room workstreams; then integration of the browser specs.
 
 ## NEXT
 - Human playtest with two people: difficulty, banner wording, audio levels,
