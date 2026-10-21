@@ -1,6 +1,6 @@
 // POWER station: six knife-switch breakers, each with a glyph plate, raised
 // load studs, a CLOSED / OPEN flag and a numbered position plate; the
-// generator LOAD meter with a red MAX line at capacity; the TRIPPED lamp.
+// generator LOAD meter (numbers only: the rating is the Bridge's); the TRIPPED lamp.
 
 import { useCallback } from "react";
 import type { Glyph } from "../../../shared/glyphs.ts";
@@ -116,8 +116,8 @@ function Breaker({ i, x }: { i: number; x: number }) {
 }
 
 function LoadMeter() {
-  const capacity = useEV((v) => v.power.capacity, 6);
-  const max = Math.max(8, capacity + 3);
+  // the generator's rating is on the Bridge's diagram, not here (docs/PUZZLES.md)
+  const max = 9;
   const spec: DialSpec = {
     min: 0,
     max,
@@ -125,10 +125,10 @@ function LoadMeter() {
     minor: 0.5,
     title: "GENERATOR LOAD",
     subtitle: "UNITS",
-    zones: [{ from: capacity, to: max, color: "rgba(184,50,42,0.45)" }],
-    marks: [{ v: capacity, color: "#c0281c", text: "MAX" }],
+    zones: [],
+    marks: [],
   };
-  return <Dial position={[0, 0, 0]} diameter={0.5} spec={spec} specKey={`${capacity}`} value={() => ev()?.power.load ?? 0} />;
+  return <Dial position={[0, 0, 0]} diameter={0.5} spec={spec} specKey="load" value={() => ev()?.power.load ?? 0} />;
 }
 
 export function Switchboard() {

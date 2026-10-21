@@ -252,6 +252,12 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
       v.power.closed[index] = closed;
       if (closed && index === v.config.power.shorted) trip(v, now, "short", fx);
       else if (powerLoad(v) > v.config.power.capacity) trip(v, now, "overload", fx);
+      else if (closed && v.power.closed.filter(Boolean).length >= SYSTEMS.length && !allFed(v)) {
+        // three breakers that don't feed one each of pumps/radio/helm backfeed
+        // the bus: guessing combinations costs a trip, so the Bridge's routing
+        // diagram is needed, not just the load meter (docs/PUZZLES.md)
+        trip(v, now, "backfeed", fx);
+      }
       break;
     }
     case "setValve": {
@@ -338,7 +344,11 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
   return { ok: true, fx };
 }
 
-function trip(v: Voyage, now: number, cause: "short" | "overload", fx: Fx[]): void {
+function allFed(v: Voyage): boolean {
+  return SYSTEMS.every((sys) => v.config.power.feeders[sys].some((i) => v.power.closed[i]));
+}
+
+function trip(v: Voyage, now: number, cause: "short" | "overload" | "backfeed", fx: Fx[]): void {
   v.power.closed = v.power.closed.map(() => false);
   v.power.trippedUntil = now + POWER.tripMs;
   mistake(v, cause === "short" ? POWER.dangerShort : POWER.dangerOverload);

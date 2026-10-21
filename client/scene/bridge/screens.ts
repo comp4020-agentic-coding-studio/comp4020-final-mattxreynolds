@@ -27,13 +27,13 @@ export const mhz = (channel: number): string => (RADIO.mhzBase + channel * RADIO
 
 // ------------------------------------------------------------ POWER
 
-export type PowerData = Pick<NavigatorView["power"], "diagram" | "shorted" | "fed" | "tripped" | "online">;
+export type PowerData = Pick<NavigatorView["power"], "diagram" | "shorted" | "capacity" | "fed" | "tripped" | "online">;
 
 const SYS_LABEL: Record<ShipSystem, string> = { PUMPS: "BILGE PUMPS", RADIO: "RADIO MAST", HELM: "HELM" };
 
 export function drawPower(ctx: Ctx, w: number, h: number, d: PowerData): void {
   screenBg(ctx, w, h);
-  header(ctx, w, "ROUTING DIAGRAM · EMERGENCY POWER", d.online ? "ONLINE" : d.tripped ? "TRIPPED" : "NO LOADS SHOWN");
+  header(ctx, w, "ROUTING DIAGRAM · EMERGENCY POWER", d.online ? "ONLINE" : d.tripped ? "TRIPPED" : `RATED ${d.capacity}`);
 
   // scorch and a torn corner (decoration, kept clear of content)
   const sc = ctx.createRadialGradient(w - 40, h - 30, 10, w - 40, h - 30, 230);
@@ -157,7 +157,7 @@ export function drawPower(ctx: Ctx, w: number, h: number, d: PowerData): void {
   // footer status
   if (d.online) banner(ctx, "EMERGENCY POWER ONLINE", w / 2 - 40, h - 46, 620, 64, INK.green);
   else if (d.tripped) banner(ctx, "⚠ GENERATOR TRIPPED — RESETTING", w / 2 - 40, h - 46, 640, 64, INK.amber);
-  else text(ctx, "ONE FEEDER PER SYSTEM · NEVER THE SHORTED ONE", w / 2 - 50, h - 42, 24, INK.dim);
+  else text(ctx, `ONE FEEDER EACH · NOT THE SHORTED ONE · TOTAL LOAD ≤ ${d.capacity}`, w / 2 - 50, h - 42, 24, INK.dim);
   screenGlass(ctx, w, h);
 }
 

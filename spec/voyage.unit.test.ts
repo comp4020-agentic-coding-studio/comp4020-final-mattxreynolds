@@ -2,6 +2,7 @@
 // every phase is solvable as specified and transitions fire exactly once.
 
 import { describe, expect, it } from "vitest";
+import { POWER } from "../shared/config.ts";
 import { COMPARTMENTS } from "../shared/glyphs.ts";
 import type { Fx, Intent, Role } from "../shared/protocol.ts";
 import { generatePuzzles, powerSelections } from "../server/game/puzzles.ts";
@@ -134,9 +135,26 @@ describe("rules", () => {
     expect(r).toMatchObject({ ok: true, fx: [{ k: "trip", cause: "short" }] });
     expect(v.power.closed.every((c) => !c)).toBe(true);
     expect(act("ENGINEER", { t: "setBreaker", index: 0, closed: true })).toEqual({ ok: false, reason: "generator-tripped" });
-    t.now += 4100;
+    t.now += POWER.tripMs + 100;
     expect(act("ENGINEER", { t: "setBreaker", index: v.config.power.solution[0], closed: true }).ok).toBe(true);
     expect(v.mistakes).toBe(1);
+  });
+
+  it("three breakers that don't feed every system backfeed and trip (no free guessing)", () => {
+    const { v, act } = setup();
+    act("ENGINEER", { t: "prologueBreaker" });
+    act("NAVIGATOR", { t: "prologueAck" });
+    const p = v.config.power;
+    // both feeders of one system plus one other non-shorted breaker
+    const [a, b] = p.feeders.PUMPS;
+    const c = [0, 1, 2, 3, 4, 5].find((i) => i !== a && i !== b && i !== p.shorted)!;
+    const loads = [a, b, c].reduce((n, i) => n + p.breakers[i].load, 0);
+    if (a === p.shorted || b === p.shorted || loads > p.capacity) return; // other rules fire first
+    act("ENGINEER", { t: "setBreaker", index: a, closed: true });
+    act("ENGINEER", { t: "setBreaker", index: b, closed: true });
+    const r = act("ENGINEER", { t: "setBreaker", index: c, closed: true });
+    expect(r).toMatchObject({ ok: true, fx: [{ k: "trip", cause: "backfeed" }] });
+    expect(v.power.closed.every((x) => !x)).toBe(true);
   });
 
   it("only two pumps may run; deadheading bursts and trips the pump", () => {

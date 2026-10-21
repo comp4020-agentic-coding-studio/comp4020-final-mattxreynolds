@@ -66,7 +66,6 @@ export function engineerView(v: Voyage, presence: Presence, rev: number, now: nu
     power: {
       breakers: v.config.power.breakers.map((b, i) => ({ glyph: b.glyph, load: b.load, closed: v.power.closed[i] })),
       load: powerLoad(v),
-      capacity: v.config.power.capacity,
       tripped: powerTripped(v, now),
       online: v.power.online,
     },
@@ -111,6 +110,7 @@ export function navigatorView(v: Voyage, presence: Presence, rev: number, now: n
         feeders: [p.breakers[p.feeders[system][0]].glyph, p.breakers[p.feeders[system][1]].glyph],
       })),
       shorted: p.breakers[p.shorted].glyph,
+      capacity: p.capacity,
       fed: systemsFed(v, now),
       tripped: powerTripped(v, now),
       online: v.power.online,

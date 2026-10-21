@@ -14,6 +14,7 @@ const RISER = 1.05;
 const EMPTY: PowerData = {
   diagram: [],
   shorted: "bolt",
+  capacity: 0,
   fed: { PUMPS: false, RADIO: false, HELM: false },
   tripped: false,
   online: false,
@@ -62,6 +63,15 @@ export function PowerConsole({ position, rotationY = 0 }: { position: [number, n
             );
           })}
           <Plate text={"VIEW ONLY · NO CONTROLS\nDIRECT THE ENGINE ROOM"} width={0.62} height={0.1} position={[0.55, 0.14, 0.03]} fg="#9a9586" />
+          {live && d.capacity > 0 && (
+            <Plate
+              text={`GENERATOR RATED ${d.capacity}\nTOTAL LOAD MUST NOT EXCEED ${d.capacity}`}
+              width={0.62}
+              height={0.11}
+              position={[0.55, 0.02, 0.03]}
+              border={PALETTE.hazardYellow}
+            />
+          )}
         </Slope>
       </ConsoleBody>
     </group>

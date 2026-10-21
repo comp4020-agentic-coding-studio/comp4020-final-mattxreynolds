@@ -25,7 +25,7 @@ export const PHASE_GUIDE: Partial<Record<Phase, Record<Role, Guide>>> = {
     ENGINEER: {
       title: "EMERGENCY POWER",
       you: "The MAIN SWITCHBOARD (breakers and generator meter) is beside the bus lever.",
-      partner: "has the routing diagram: which breakers feed what.",
+      partner: "has the routing diagram: which breakers feed what, and the generator's rating.",
     },
     NAVIGATOR: {
       title: "EMERGENCY POWER",

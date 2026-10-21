@@ -34,13 +34,13 @@ const keys = (value: unknown): Set<string> => new Set(paths(value).map((p) => p.
 
 // Keys that would carry the other role's knowledge, at any depth.
 const ENGINEER_MUST_NOT_HAVE = [
-  "diagram", "feeders", "shorted", "fed",
+  "diagram", "feeders", "shorted", "fed", "capacity",
   "levels", "trends", "pumps", "pumpTo", "pumpGlyphs",
   "channel", "stations", "bearing", "target", "signal", "lastReply",
   "band", "status", "held",
 ];
 const NAVIGATOR_MUST_NOT_HAVE = [
-  "breakers", "load", "capacity",
+  "breakers", "load",
   "valves", "pressure", "engineLevel",
   "resonance", "lock", "pulse", "antenna",
 ];
@@ -102,7 +102,7 @@ describe("each role's view holds only its half of the puzzle, in every phase", (
       // (glyph strings are shared with the Bridge's diagram by design, so the
       // check is structural)
       for (const b of (e as any).power.breakers) expect(Object.keys(b).sort()).toEqual(["closed", "glyph", "load"]);
-      expect(Object.keys((e as any).power).sort()).toEqual(["breakers", "capacity", "load", "online", "tripped"]);
+      expect(Object.keys((e as any).power).sort()).toEqual(["breakers", "load", "online", "tripped"]);
       expect(Object.keys((e as any).radio).sort()).toEqual(["antenna", "contact", "coupled", "lock", "pulse", "resonance"]);
       expect(Object.keys((e as any).escape).sort()).toEqual(["door", "partnerAbandon", "pressure", "youAbandon"]);
       // the escape band is the Bridge's; the Engineer has the numbers but no marks
@@ -111,7 +111,7 @@ describe("each role's view holds only its half of the puzzle, in every phase", (
       expect(eJson).not.toMatch(/"(N|NE|E|SE|S|SW|W|NW)"/);
 
       // Navigator: no Engineer-only numbers
-      expect(Object.keys((n as any).power).sort()).toEqual(["diagram", "fed", "online", "shorted", "tripped"]);
+      expect(Object.keys((n as any).power).sort()).toEqual(["capacity", "diagram", "fed", "online", "shorted", "tripped"]);
       expect(Object.keys((n as any).radio).sort()).toEqual(["channel", "contact", "coupled", "lastReply", "signal", "stations"]);
       expect(Object.keys((n as any).escape).sort()).toEqual(["band", "door", "held", "partnerAbandon", "status", "youAbandon"]);
       // the target is not marked among the stations

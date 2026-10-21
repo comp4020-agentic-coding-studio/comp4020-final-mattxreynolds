@@ -67,7 +67,7 @@ export type HelloAck = { ok: true } | { ok: false; reason: "not-found" | "bad-to
 export type Fx =
   | { k: "busOn" }
   | { k: "ack" }
-  | { k: "trip"; cause: "short" | "overload" }
+  | { k: "trip"; cause: "short" | "overload" | "backfeed" }
   | { k: "powerOnline" }
   | { k: "burst"; compartment: Compartment }
   | { k: "floodStable" }
@@ -114,7 +114,6 @@ export type EngineerView = CommonView & {
   power: {
     breakers: { glyph: Glyph; load: number; closed: boolean }[];
     load: number;
-    capacity: number;
     tripped: boolean;
     online: boolean;
   };
@@ -144,6 +143,8 @@ export type NavigatorView = CommonView & {
   power: {
     diagram: { system: ShipSystem; feeders: [Glyph, Glyph] }[];
     shorted: Glyph;
+    /** Generator rating: the Bridge's, so the Engineer's load meter alone can't solve it. */
+    capacity: number;
     fed: Record<ShipSystem, boolean>;
     tripped: boolean;
     online: boolean;

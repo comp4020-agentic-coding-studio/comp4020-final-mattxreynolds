@@ -57,7 +57,7 @@ communication at all.)
 
 | | Engineer | Bridge |
 |---|---|---|
-| Sees | Switchboard: 6 breakers in a row, each with a glyph plate and **load pips** (●●○). Generator **load meter** with numbered scale and a red line at capacity. TRIPPED lamp. | Damaged **routing diagram**: each system drawn with lines to the two glyphs that can feed it, one glyph stamped with a ⚡ **SHORTED – DO NOT ENERGISE** mark. Three **system lamps** (PUMPS / RADIO / HELM) that light when fed. No loads, no capacity. |
+| Sees | Switchboard: 6 breakers in a row, each with a glyph plate and **load pips** (●●○). Generator **load meter** with a numbered scale (no rating marked). TRIPPED lamp. | Damaged **routing diagram**: each system drawn with lines to the two glyphs that can feed it, one glyph stamped with a ⚡ **SHORTED – DO NOT ENERGISE** mark. Three **system lamps** (PUMPS / RADIO / HELM) that light when fed. The **generator rating** ("TOTAL LOAD ≤ 5"). No loads. |
 | Controls | Each breaker: `setBreaker {index, closed}` | none (pure interpretation) |
 
 Communication loop: B describes a glyph shape → E finds it, reports its pips
@@ -70,8 +70,23 @@ Rules (server):
 - Load = Σ load of closed breakers. A system is *fed* when either feeder is
   closed and the generator is not tripped.
 - Closing the shorted breaker → **trip** with `cause: short`, danger +4.
-- Load > capacity → **trip** with `cause: overload`, danger +2.
-- Trip: all breakers forced open; `trippedUntil = now + 4 s`; `setBreaker`
+- Load > capacity → **trip** with `cause: overload`, danger +3.
+- Three (or more) breakers closed that don't feed every system → **trip**
+  with `cause: backfeed`, danger +3. Without this rule an Engineer could
+  sweep the within-capacity combinations alone at no cost (measured:
+  avg ~1.6 trips per solve). Each wrong guess now costs a trip.
+- The generator rating lives on the **Bridge**, not the Engineer's meter.
+  With the rating on the meter, the Engineer had only ~3 candidate
+  combinations and could still brute-force Power alone. Without it, the
+  Bridge has the pairings, the short and the rating, and the Engineer has
+  the loads. Neither half is enough on its own.
+- **Honest limit.** Power is *expensive* to solve alone, not impossible: an
+  Engineer guessing cheapest-first averages ~3 trips (≈ 9–12 danger, ~20 s
+  of lockouts) against 0 for a pair who talk. Making it strictly unsolvable
+  would need hiding the loads too, and then the Engineer would have nothing
+  to say. Flood, Radio and Escape need both players' controls by
+  construction.
+- Trip: all breakers forced open; `trippedUntil = now + 6 s`; `setBreaker`
   closing is rejected `generator-tripped` until then (opening is allowed).
   E sees TRIPPED lamp and sparks, B sees consoles flicker and lamps die.
 - Complete: all three systems fed, not tripped, load ≤ capacity. Because the

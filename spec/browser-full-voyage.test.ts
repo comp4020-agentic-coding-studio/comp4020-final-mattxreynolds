@@ -42,7 +42,7 @@ describe.skipIf(!testHooks())("a full voyage through the real controls", () => {
     // Emergency power: one wrong move first (the short), then the answer
     await use(E, `breaker-${cfg.config.power.shorted}`);
     await waitView(N, "v.power.tripped === true");
-    await waitView(E, "v.power.tripped === false", 8000);
+    await waitView(E, "v.power.tripped === false", 10000);
     for (const i of cfg.config.power.solution) {
       await use(E, `breaker-${i}`);
       await waitView(N, `v.phase !== 'POWER' || Object.values(v.power.fed).filter(Boolean).length >= 1`);

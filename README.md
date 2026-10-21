@@ -44,7 +44,8 @@ fresh seed, so the answers are different each time.
   Navigator acknowledges the alarm.
 - **1 · Emergency Power**: the Engineer has six breakers marked with
   symbols, plus load studs and a generator meter. The Navigator has the
-  damaged routing diagram and knows which symbol is shorted. Together they
+  damaged routing diagram, knows which symbol is shorted, and knows the
+  generator's rating. Together they
   feed the pumps, radio and helm without overloading the generator.
 - **2 · Flood Control**: the Engineer opens suction valves and reads line
   pressure. The Navigator runs the pumps and watches the flood map. Neither

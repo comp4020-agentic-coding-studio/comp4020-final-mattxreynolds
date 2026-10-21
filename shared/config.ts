@@ -28,9 +28,9 @@ export const DANGER = {
 
 export const POWER = {
   breakers: 6,
-  tripMs: 4000,
+  tripMs: 6000,
   dangerShort: 4,
-  dangerOverload: 2,
+  dangerOverload: 3,
   dangerRelief: 5,
 } as const;
 
