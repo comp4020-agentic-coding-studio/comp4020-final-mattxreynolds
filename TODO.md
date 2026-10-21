@@ -1,10 +1,11 @@
 # TODO
 
 ## CURRENT
-- Polish/review pass (delegated) + marker simulation.
+- Marker simulation.
 
 ## NEXT
-- Polish/review pass (onboarding, readability, audio cues, performance).
+- Playtest the phase banner wording, audio levels and the pulse beep with real pairs.
+- Engine Room frame cost under software GL (9 lights; see polish report).
 - Marker simulation from /readme/ with two fresh profiles; fix findings.
 - Verify Docker image builds and runs (Docker Desktop not running in this env).
 
@@ -19,3 +20,5 @@
 - Audio, Dockerfile, README draft, PROCESS log, ending vignettes.
 - Engine Room + Bridge 3D merged; reliability suite merged (85 tests).
 - Full voyage passes through real controls in two browser contexts.
+- Polish pass: phase "where to look" banner, cross-room audio + pulse beeps,
+  latched toggles, sail-again double-connect, cheaper water/receiver/glass.

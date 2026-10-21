@@ -90,3 +90,7 @@ own judgement are marked `[STUDENT REVIEW]`.
   must proxy frames (`slowLink` in spec/helpers/browser.ts).
 - Use `res.sendFile(name, { root })`, not an absolute path: a dot-directory
   anywhere in the absolute path makes send 404.
+- A toggle's next value must come from what this player last sent, not the
+  last rendered view: views arrive every 200 ms, so `!serverValue` sends the
+  same value twice on a quick double-press (`useLatched` in scene/interact.tsx).
+- Keep the R3F `<Scene>` memoised: the HUD around it re-renders on every view.
