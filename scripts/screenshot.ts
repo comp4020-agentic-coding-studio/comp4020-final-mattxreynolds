@@ -4,9 +4,10 @@
 // a phase with the test hook, and screenshots both rooms from a few angles.
 //
 //   node scripts/screenshot.ts --phase FLOOD --out /tmp/shots [--port 9100]
-//     [--patch '{"flood":{"pumps":[true,false,false]}}'] [--views spawn,left,right,back]
+//     [--patch '{"flood":{"pumps":[true,false,false]}}'] [--views "spawn;left;right;back"]
 //
-// Each view is "name" or "name:x,z,yaw,pitch" (yaw radians, 0 = facing -Z).
+// Views are ";"-separated; each is "name" or "name:x,z,yaw,pitch" (yaw radians
+// relative to the room's spawn direction).
 
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync } from "node:fs";
@@ -21,7 +22,7 @@ const { values } = parseArgs({
     out: { type: "string", default: "/tmp/shots" },
     port: { type: "string", default: "9100" },
     patch: { type: "string" },
-    views: { type: "string", default: "spawn,left,right,back" },
+    views: { type: "string", default: "spawn;left;right;back" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
   },
@@ -70,7 +71,7 @@ try {
   for (const [name, page] of pages) {
     await page.addStyleTag({ content: ".overlay:not(.ending){display:none!important}" });
     await page.waitForTimeout(1500);
-    for (const v of values.views!.split(",")) {
+    for (const v of values.views!.split(";")) {
       const [label, pose] = v.split(":");
       if (pose || label !== "spawn") {
         const preset: Record<string, string> = { left: "0,0,1.2,0", right: "0,0,-1.2,0", back: "0,0,3.14,0", down: "0,0,0,-0.5" };
