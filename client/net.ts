@@ -33,6 +33,8 @@ export function forgetToken(code: string): void {
 let socket: Socket | null = null;
 let current: { code: string; token: string } | null = null;
 let seq = 0;
+/** The latest connect() caller's failure handler (survives sail-again moves). */
+let failHandler: (reason: string) => void = () => {};
 
 export const REJECT_TEXT: Record<RejectReason, string> = {
   "not-seated": "You're not aboard this voyage",
@@ -90,12 +92,16 @@ export async function peekVoyage(code: string): Promise<Peek | null> {
 /** Connects (or reconnects) to the voyage this browser holds a seat in. */
 export function connect(code: string, onFail: (reason: string) => void): void {
   const token = savedToken(code);
+  failHandler = onFail;
   if (!token) return onFail("bad-token");
+  // already seated on this voyage with this token (e.g. App catching up with a
+  // sail-again move): the socket re-hellos by itself on every reconnect
+  if (socket && current?.code === code && current.token === token) return;
   current = { code, token };
   useStore.setState({ code, conn: "connecting", view: null });
   if (!socket) {
     socket = io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000 });
-    socket.on("connect", () => hello(onFail));
+    socket.on("connect", () => hello());
     socket.on("disconnect", () => useStore.setState({ conn: "offline" }));
     socket.on("view", (v: View) => {
       const prev = useStore.getState().view;
@@ -108,20 +114,20 @@ export function connect(code: string, onFail: (reason: string) => void): void {
       if (!current) return;
       saveToken(m.code, current.token);
       history.replaceState(null, "", `/v/${m.code}`);
-      connect(m.code, onFail);
+      connect(m.code, failHandler);
     });
   } else if (socket.connected) {
-    hello(onFail);
+    hello();
   }
 }
 
-function hello(onFail: (reason: string) => void): void {
+function hello(): void {
   if (!socket || !current) return;
   const sentFor = current.code;
   socket.emit("hello", current, (ack: HelloAck) => {
     if (current?.code !== sentFor) return;
     if (ack.ok) useStore.setState({ conn: "online" });
-    else onFail(ack.reason);
+    else failHandler(ack.reason);
   });
 }
 

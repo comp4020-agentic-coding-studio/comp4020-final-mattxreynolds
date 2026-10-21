@@ -97,8 +97,10 @@ function PumpSwitch(props: { index: number; x: number; mode: StationMode; glyph:
   const label = `Pump switch ${index + 1} of 3`;
   const onUse = useCallback(() => {
     if (!active) return;
-    pending.current = !on;
-    void send({ t: "setPump", pump: index, on: !on }).then((ack) => {
+    // act on what the switch shows (a press still in flight), not the last view
+    const want = !(pending.current ?? on);
+    pending.current = want;
+    void send({ t: "setPump", pump: index, on: want }).then((ack) => {
       // rejected: snap back; accepted: the next view settles it (or this does)
       if (!ack.ok) pending.current = null;
       else setTimeout(() => (pending.current = null), 800);

@@ -3,7 +3,7 @@
 
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
-import { Euler, Raycaster, Vector2, Vector3 } from "three";
+import { Euler, Raycaster, Vector2, Vector3, type Object3D } from "three";
 import { useStore } from "../store.ts";
 import { moveWithCollision, type RoomLayout } from "./colliders.ts";
 import { findInteractable, interactables } from "./interact.tsx";
@@ -13,6 +13,16 @@ const SPEED = 2.4;
 const FAST = 1.7;
 const REACH = 2.4;
 const SENSITIVITY = 0.0022;
+/** A second press on the same control inside this window is the same intent
+ * (E and a click together, a bouncing key), not a new one. */
+const PRESS_DEBOUNCE_MS = 120;
+
+/** Visible only if it and every ancestor is (rooms hide stations while their
+ * shaders compile; three's raycaster ignores visibility). */
+function shown(o: Object3D | null): boolean {
+  for (; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
 
 export function Player({ layout }: { layout: RoomLayout }) {
   const { camera, gl, scene } = useThree();
@@ -55,9 +65,13 @@ export function Player({ layout }: { layout: RoomLayout }) {
       euler.current.y -= e.movementX * SENSITIVITY;
       euler.current.x = Math.max(-1.4, Math.min(1.4, euler.current.x - e.movementY * SENSITIVITY));
     };
+    let lastPress = { id: "", at: 0 };
     const press = () => {
       const id = aimed.current;
       if (!id) return;
+      const now = performance.now();
+      if (lastPress.id === id && now - lastPress.at < PRESS_DEBOUNCE_MS) return;
+      lastPress = { id, at: now };
       const entry = interactables.get(id);
       if (!entry || entry.def.disabled) return;
       if (entry.def.onHold) {
@@ -139,7 +153,7 @@ export function Player({ layout }: { layout: RoomLayout }) {
     // aim
     ray.current.setFromCamera(centre.current, camera);
     ray.current.far = REACH;
-    const hit = ray.current.intersectObjects(scene.children, true).find((h) => h.object.visible);
+    const hit = ray.current.intersectObjects(scene.children, true).find((h) => shown(h.object));
     const entry = hit ? findInteractable(hit.object) : null;
     const id = entry && !entry.def.disabled ? entry.def.id : null;
     aimed.current = id;

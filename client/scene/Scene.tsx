@@ -2,7 +2,7 @@
 // background and fog, so the two room modules never share a file.
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useStore } from "../store.ts";
 import { Bridge, BRIDGE_LAYOUT } from "./Bridge.tsx";
 import { EngineRoom, ENGINE_LAYOUT } from "./EngineRoom.tsx";
@@ -36,7 +36,9 @@ function ReadyProbe() {
   return null;
 }
 
-export function Scene() {
+/** Memoised: the HUD around it re-renders on every server view (5×/s), and
+ * the room components already subscribe to exactly the fields they draw. */
+export const Scene = memo(function Scene() {
   const role = useStore((s) => s.view?.you);
   if (!role) return null;
   const engineer = role === "ENGINEER";
@@ -52,4 +54,4 @@ export function Scene() {
       <ReadyProbe />
     </Canvas>
   );
-}
+});

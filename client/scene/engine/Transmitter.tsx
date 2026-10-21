@@ -8,7 +8,7 @@ import { Group, MeshStandardMaterial } from "three";
 import { BEARINGS } from "../../../shared/glyphs.ts";
 import { send } from "../../net.ts";
 import { IDS } from "../ids.ts";
-import { Interactable } from "../interact.tsx";
+import { Interactable, useLatched } from "../interact.tsx";
 import { PALETTE } from "../palette.ts";
 import { Dial, Lamp, Lever, type DialSpec } from "../parts.tsx";
 import { kicks } from "./Effects.tsx";
@@ -114,8 +114,12 @@ function Pointer() {
 
 function CrankButton({ id, dir, live, antenna, stage }: { id: string; dir: 1 | -1; live: boolean; antenna: number; stage: number }) {
   const m = M();
-  const next = (antenna + (dir === 1 ? 1 : 7)) % 8;
-  const use = useCallback(() => void send({ t: "setAntenna", bearing: next }), [next]);
+  const latch = useLatched(antenna);
+  const use = useCallback(() => {
+    const next = (latch.get() + (dir === 1 ? 1 : 7)) % 8;
+    latch.set(next);
+    void send({ t: "setAntenna", bearing: next }).then((a) => a.ok || latch.clear());
+  }, [dir, latch]);
   const way = dir === 1 ? "clockwise" : "anticlockwise";
   const at = BEARINGS[antenna];
   const prompt =

@@ -8,7 +8,7 @@ import type { Group } from "three";
 import { COMPARTMENT_LABEL, COMPARTMENTS, type Compartment } from "../../../shared/glyphs.ts";
 import { send } from "../../net.ts";
 import { IDS } from "../ids.ts";
-import { Interactable } from "../interact.tsx";
+import { Interactable, useLatched } from "../interact.tsx";
 import { PALETTE } from "../palette.ts";
 import { Dial, type DialSpec } from "../parts.tsx";
 import { At, B, C, ev, G, M, Pipe, Plate, STAGE, useEV, useStage } from "./kit.tsx";
@@ -58,7 +58,12 @@ function Valve({ c }: { c: Compartment }) {
   const open = useEV((v) => v.flood.valves[c].open, false);
   const { stage } = useStage();
   const live = stage === STAGE.FLOOD;
-  const toggle = useCallback(() => void send({ t: "setValve", compartment: c, open: !open }), [c, open]);
+  const latch = useLatched(open);
+  const toggle = useCallback(() => {
+    const want = !latch.get();
+    latch.set(want);
+    void send({ t: "setValve", compartment: c, open: want }).then((a) => a.ok || latch.clear());
+  }, [c, latch]);
   const name = `Valve ${COMPARTMENT_LABEL[c]}`;
   const state = open ? "OPEN" : "SHUT";
   const prompt =

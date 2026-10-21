@@ -63,3 +63,21 @@ export function useById(id: string, held?: boolean): boolean {
   else e.def.onUse?.();
   return true;
 }
+
+/** The value a toggle should act on: the one this player last sent, until the
+ * server's view changes (confirming or overriding it) or `holdMs` passes.
+ * Without it, two presses inside one view tick both send `!serverValue`, so
+ * the second press silently does nothing. Read with get() inside callbacks
+ * (no stale closure); call set() when sending and clear() on a rejection. */
+export function useLatched<T>(server: T, holdMs = 1500) {
+  const r = useRef<{ server: T; pending: T | null; at: number }>({ server, pending: null, at: 0 });
+  if (r.current.server !== server) r.current = { server, pending: null, at: 0 };
+  return useRef({
+    get: (): T => {
+      const s = r.current;
+      return s.pending !== null && performance.now() - s.at < holdMs ? s.pending : s.server;
+    },
+    set: (v: T) => void (r.current = { ...r.current, pending: v, at: performance.now() }),
+    clear: () => void (r.current = { ...r.current, pending: null }),
+  }).current;
+}

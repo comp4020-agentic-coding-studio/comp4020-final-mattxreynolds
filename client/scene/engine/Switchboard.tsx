@@ -6,7 +6,7 @@ import { useCallback } from "react";
 import type { Glyph } from "../../../shared/glyphs.ts";
 import { send } from "../../net.ts";
 import { IDS } from "../ids.ts";
-import { Interactable } from "../interact.tsx";
+import { Interactable, useLatched } from "../interact.tsx";
 import { drawGlyph } from "../glyphDraw.ts";
 import { PALETTE } from "../palette.ts";
 import { Dial, Lamp, Lever, type DialSpec } from "../parts.tsx";
@@ -55,7 +55,12 @@ function Breaker({ i, x }: { i: number; x: number }) {
   const { stage } = useStage();
   const live = stage === STAGE.POWER;
   const solved = stage > STAGE.POWER;
-  const toggle = useCallback(() => void send({ t: "setBreaker", index: i, closed: !closed }), [i, closed]);
+  const latch = useLatched(closed);
+  const toggle = useCallback(() => {
+    const want = !latch.get();
+    latch.set(want);
+    void send({ t: "setBreaker", index: i, closed: want }).then((a) => a.ok || latch.clear());
+  }, [i, latch]);
   const name = `Breaker ${i + 1} of ${N}`;
   const state = closed ? "CLOSED" : "OPEN";
   let prompt: string;
