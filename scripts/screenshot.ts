@@ -10,7 +10,7 @@
 // relative to the room's spawn direction).
 
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -105,4 +105,6 @@ try {
 } finally {
   await browser.close();
   srv.kill();
+  await new Promise((r) => srv.once("exit", r));
+  rmSync(dir, { recursive: true, force: true });
 }
