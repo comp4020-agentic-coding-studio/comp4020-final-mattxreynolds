@@ -31,6 +31,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const prompt = useStore((s) => s.prompt);
   const conn = useStore((s) => s.conn);
   const muted = useStore((s) => s.muted);
+  const volume = useStore((s) => s.volume);
   const [gl] = useState(webglAvailable);
 
   useEffect(() => {
@@ -101,6 +102,20 @@ export function Game({ ended = false }: { ended?: boolean }) {
                   Click to take the controls
                 </button>
                 <p className="hint">Esc frees the mouse. Stuck? Press R here to return to your starting point.</p>
+                <label className="volume">
+                  Volume
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={volume}
+                    onChange={(e) => useStore.setState({ volume: Number(e.target.value), muted: false })}
+                  />
+                  <button className="link" onClick={() => useStore.setState((s) => ({ muted: !s.muted }))}>
+                    {muted ? "Unmute" : "Mute"}
+                  </button>
+                </label>
               </div>
             </div>
           )}

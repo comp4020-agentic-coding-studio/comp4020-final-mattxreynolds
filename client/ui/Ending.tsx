@@ -20,6 +20,10 @@ export function Ending({ onHome }: { onHome: () => void }) {
   const o = view.outcome!;
   const survived = o.result === "SURVIVED";
   return (
+    <>
+    <div className={`vignette ${survived ? "survived" : "lost"}`} aria-hidden>
+      {survived ? (<><div className="sun" /><div className="sea" /><div className="boat" /></>) : <div className="bubbles" />}
+    </div>
     <div className={`overlay ending ${survived ? "survived" : "lost"}`}>
       <div className="card center">
         <p className="kicker">Voyage {view.code}</p>
@@ -46,5 +50,6 @@ export function Ending({ onHome }: { onHome: () => void }) {
         </p>
       </div>
     </div>
+    </>
   );
 }

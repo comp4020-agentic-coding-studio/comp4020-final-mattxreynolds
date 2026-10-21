@@ -102,7 +102,7 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .banner { position: absolute; top: 5rem; left: 50%; transform: translateX(-50%); padding: 0.6rem 1rem; border-radius: 4px; font-weight: 700; pointer-events: none; }
 .banner.warn { background: #c98a00; color: #1b1300; }
 .muted-tag { position: absolute; bottom: 1rem; right: 1rem; color: #fff; font: 600 0.8rem var(--mono); background: #0008; padding: 0.2rem 0.5rem; }
-.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: #050c10aa; padding: 1rem; overflow: auto; }
+.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: #050c10aa; padding: 1rem; overflow: auto; }
 .briefing { max-width: 34rem; text-align: center; }
 .briefing .controls { max-width: 24rem; margin: 1rem auto; }
 .objective-big { font-size: 1.15rem; font-weight: 700; color: var(--accent); }
@@ -121,3 +121,18 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.volume { display: flex; align-items: center; gap: 0.6rem; justify-content: center; font-weight: 600; }
+.volume input { width: 10rem; margin: 0; padding: 0; }
+.vignette { position: fixed; inset: 0; z-index: 5; overflow: hidden; pointer-events: none; }
+.vignette.survived { background: linear-gradient(#f6c98a 0%, #e88f6a 35%, #3f6f8f 55%, #0f2f45 100%); animation: fadein 2.5s ease-out; }
+.vignette.lost { background: radial-gradient(ellipse at 50% 120%, #0b2a3a 0%, #02070a 70%); animation: fadein 1.5s ease-out; }
+.vignette .sea { position: absolute; left: -10%; right: -10%; bottom: 0; height: 42%; background: repeating-linear-gradient(170deg, #1d4f6b 0 14px, #18445d 14px 28px); animation: swell 6s ease-in-out infinite; }
+.vignette .boat { position: absolute; left: 50%; bottom: 36%; width: 9rem; height: 2.4rem; margin-left: -4.5rem; background: #e8622a; border-radius: 0 0 4.5rem 4.5rem; animation: bob 3s ease-in-out infinite; }
+.vignette .boat::before { content: ""; position: absolute; left: 1.2rem; right: 1.2rem; top: -1.4rem; height: 1.4rem; background: #f3efe4; border-radius: 0.7rem 0.7rem 0 0; }
+.vignette .sun { position: absolute; left: 70%; top: 24%; width: 5rem; height: 5rem; border-radius: 50%; background: #fff2c6; box-shadow: 0 0 60px #ffe9a8; }
+.vignette .bubbles { position: absolute; inset: 0; background: radial-gradient(circle at 30% 70%, #ffffff22 0 3px, transparent 4px), radial-gradient(circle at 60% 40%, #ffffff1a 0 2px, transparent 3px), radial-gradient(circle at 45% 85%, #ffffff22 0 4px, transparent 5px); animation: rise 5s linear infinite; }
+@keyframes fadein { from { opacity: 0; } }
+@keyframes swell { 50% { transform: translateY(6px) skewY(-0.5deg); } }
+@keyframes bob { 50% { transform: translateY(-6px) rotate(-2deg); } }
+@keyframes rise { to { transform: translateY(-40%); } }
