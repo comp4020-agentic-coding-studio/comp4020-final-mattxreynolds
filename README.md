@@ -50,14 +50,16 @@ fresh seed, so the answers are different each time.
 - **2 · Flood Control**: the Engineer opens suction valves and reads line
   pressure. The Navigator runs the pumps and watches the flood map. Neither
   knows which pump draws from which compartment until one of you changes
-  something and the other notices.
+  something and the other notices. An open valve with no running pump lets
+  the sea back in, so you have to keep each other's settings matched.
 - **3 · Distress Signal**: the Navigator tunes while the Engineer watches the
   resonance needle. The Engineer then describes the rhythm of a pulse lamp.
   The Navigator finds it in the codebook, reads its bearing off the chart,
   and talks the Engineer's antenna round before transmitting.
 - **Final escape**: the Navigator knows the pressure band the door rams need.
   The Engineer works the hand pump while the Navigator holds the door
-  release. Then both pull their abandon-ship levers within three seconds of
+  release and calls "more" or "stop". Too much pressure and the rams slip
+  and the door closes again. Then both pull their abandon-ship levers within three seconds of
   each other.
 
 If the water wins, the ending says why. **Sail again** starts a new voyage

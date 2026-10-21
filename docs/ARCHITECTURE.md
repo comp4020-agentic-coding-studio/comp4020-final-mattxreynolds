@@ -100,11 +100,18 @@ that the first-person controller raycasts against.
 
 ## Testing
 
-- `spec/*.unit.test.ts` — pure logic: generation uniqueness, reducer rules,
-  transitions-once, danger, view secrecy, DB round trip (temp file).
-- `spec/*.test.ts` — against the running app (`APP_URL`): invariants,
-  HTTP pages, socket multi-client flows, persistence across a spawned second
-  server, and Playwright with two independent browser contexts.
+Three Vitest projects (`vitest.config.ts`):
+
+- **unit**: `spec/*.unit.test.ts`. Pure logic: generation uniqueness,
+  reducer rules, transitions firing once, the full voyage solved through the
+  reducer, and **blind-play simulations that must fail**.
+- **app**: the other `spec/*.test.ts` files, run against the running app
+  (`APP_URL`): invariants, pages, socket multi-client flows. Specs needing test
+  hooks or restarts (persistence, secrecy, authority, replay) start their own
+  server via `spec/helpers/server.ts`.
+- **browser**: `spec/browser-*.test.ts`. Playwright with two independent
+  browser contexts, one file at a time. The full-voyage spec needs test hooks
+  and skips against CI's production image.
 - Test-only hooks (`/api/test/*`) exist only when `ENABLE_TEST_HOOKS=1`; they
   are never on in production.
 
