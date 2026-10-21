@@ -44,7 +44,7 @@ export function RadioDesk({ position, rotationY = 0 }: { position: [number, numb
     const m = mode;
     if (m === "dead") return drawDead(ctx, w, h);
     drawWave(ctx, w, h, !!v?.radio.coupled || m === "done", t, m === "standby");
-  }, 8);
+  }, 8, live);
   const meter = useCanvasTexture(
     640,
     512,

@@ -75,6 +75,8 @@ export function useAnimatedCanvas(
   height: number,
   draw: (ctx: CanvasRenderingContext2D, w: number, h: number, t: number) => void,
   fps = 10,
+  /** false: draw once and stop (dead / standby screens never change) */
+  animate = true,
 ): CanvasTexture {
   const { canvas, texture } = useMemo(() => {
     const canvas = document.createElement("canvas");
@@ -88,10 +90,13 @@ export function useAnimatedCanvas(
   const last = useRef(-1);
   const drawRef = useRef(draw);
   drawRef.current = draw;
+  const animRef = useRef(animate);
+  if (animRef.current !== animate) last.current = -1; // redraw once on a mode change
+  animRef.current = animate;
   useEffect(() => () => texture.dispose(), [texture]);
   useFrame(() => {
     const t = nowS();
-    if (t - last.current < 1 / fps) return;
+    if (t - last.current < 1 / fps || (!animRef.current && last.current >= 0)) return;
     last.current = t;
     const ctx = canvas.getContext("2d")!;
     drawRef.current(ctx, width, height, t);

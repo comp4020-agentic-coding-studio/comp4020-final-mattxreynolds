@@ -74,7 +74,7 @@ function Sky() {
     skyMat.uniforms.flash.value = f * 0.35;
   });
   return (
-    <mesh material={skyMat}>
+    <mesh material={skyMat} raycast={() => null}>
       <sphereGeometry args={[74, 32, 16]} />
     </mesh>
   );
@@ -119,7 +119,7 @@ function Sea() {
       ref.current.rotation.x = Math.sin(t * 0.23) * 0.012;
     }
   });
-  return <mesh ref={ref} geometry={geo} material={mat} position={[0, -0.6, -40]} />;
+  return <mesh ref={ref} geometry={geo} material={mat} position={[0, -0.6, -40]} raycast={() => null} />;
 }
 
 // ------------------------------------------------------------ shell
@@ -169,7 +169,9 @@ function usePortholeTexture() {
   );
 }
 
-const glassMat = new MeshStandardMaterial({ color: "#8fb3c4", transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.4 });
+// unlit: at 8 % opacity a lit glass layer over the sky + sea was a third full
+// lighting pass across the forward windows for no visible difference
+const glassMat = new MeshBasicMaterial({ color: "#8fb3c4", transparent: true, opacity: 0.08, depthWrite: false });
 const rivetMat = new MeshStandardMaterial({ color: PALETTE.bulkheadDark, roughness: 0.5, metalness: 0.5 });
 // a 6-sided dome is plenty at rivet size (hundreds of instances)
 const rivetGeo = new SphereGeometry(1, 6, 3);

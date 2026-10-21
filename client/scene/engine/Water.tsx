@@ -28,6 +28,8 @@ export function waterTarget(): number {
 export function Water() {
   const ref = useRef<Mesh>(null);
   const h = useRef(0.02);
+  const lastRipple = useRef(-1);
+  const flat = useRef(false);
   const geo = useMemo(() => new PlaneGeometry(ROOM.w, ROOM.d, 40, 32), []);
   const base = useMemo(() => Float32Array.from(geo.attributes.position.array), [geo]);
   const mat = useMemo(
@@ -49,8 +51,14 @@ export function Water() {
     if (!mesh) return;
     h.current += (waterTarget() - h.current) * Math.min(1, dt * 0.8);
     mesh.position.y = h.current;
+    mat.opacity = 0.42 + Math.min(0.25, h.current * 0.5);
+    // ripple at ~20 Hz (vertex rewrite + normals is the costly part); once
+    // flat under reduced motion, leave the geometry alone
     const reduced = useStore.getState().reducedMotion;
     const t = performance.now() / 1000;
+    if (t - lastRipple.current < 0.05 || (reduced && flat.current)) return;
+    lastRipple.current = t;
+    flat.current = reduced;
     const pos = geo.attributes.position;
     const arr = pos.array as Float32Array;
     const amp = reduced ? 0 : 0.012 + Math.min(0.02, h.current * 0.04);
@@ -61,7 +69,6 @@ export function Water() {
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    mat.opacity = 0.42 + Math.min(0.25, h.current * 0.5);
   });
 
   return <mesh ref={ref} geometry={geo} material={mat} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null} renderOrder={2} />;
