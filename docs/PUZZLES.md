@@ -1,6 +1,8 @@
 # Puzzles
 
-The authoritative specification of every phase. Server code in
+The authoritative specification of every phase. The voyage's five acts and
+the continuous ship systems (grid, water, hull, modes, practice) that run
+underneath these puzzles are in `docs/SYSTEMS.md`. Server code in
 `server/game/` implements exactly this; numbers live in `shared/config.ts`.
 If you change a rule, change it here first.
 
@@ -126,10 +128,17 @@ Rules (server, per tick):
   - otherwise pressure relaxes toward 0.
 - Every compartment also gains `inflow[c]`·dt. Levels clamp 0–100.
 - Ship danger rises faster the fuller the compartments are (see GAME_DESIGN).
-- Complete: all three levels ≤ 20 at the same moment. Because only two pumps
+- **Running dry**: a pump drawing on a compartment at or below 6 % for 1.5 s
+  seizes. It trips off, cracks that compartment's seam (+0.08 %/s inflow for
+  the rest of the voyage, see SYSTEMS.md) and can't restart for 12 s
+  (`pump-seized`). Only the Bridge's map shows levels, so the Bridge must
+  call "shut it" in time.
+- Complete: all three levels ≤ 20 **held for 6 s**. Because only two pumps
   run at once, players must drain two, then hand a pump over to the third —
   a coordinated switch (shut valve / stop pump / start pump / open valve).
-  Danger −20. Water in the engine room recedes; pumps lock running.
+  Danger −20. Damage control shores the hull (base inflow × 0.35), but the
+  water stays live: pumps and valves keep working, and mattering, through
+  Acts III–V.
 
 Recoverability: any configuration can be undone; bursts only cost danger and
 time.
@@ -138,6 +147,16 @@ Tuning note: backflow is 3 %/s. At the first value (1.2 %/s), "open every
 valve and rotate the pumps" drained the ship with no communication on 40/40
 simulated seeds. At 3 %/s that blind strategy fails 40/40, while a pair who
 match valves to the running pumps succeeds 40/40.
+
+**Honest limit (found in the second production cycle).** A *reactive*
+blind strategy still wins: the Engineer opens a valve whenever its gauge
+shows deadhead and shuts it whenever it shows backflow, while the Bridge
+rotates pumps blind. The gauge tells the Engineer which pumps run. It won
+40/40 simulated seeds at no cost. The running-dry and hold rules make it
+**expensive**: about 10 danger more than a talking crew (net −9 against
+−18 after the phase's relief) and slower. It is still possible. Like Power,
+Flood is costly alone, not impossible. Hiding the gauge would leave the
+Engineer nothing to report.
 
 ---
 
@@ -184,6 +203,31 @@ watches the signal meter → B transmits.
 
 ---
 
+## Act IV — Cascade (~2–3 min)
+
+Previously learned systems at once. Full rules: docs/SYSTEMS.md.
+
+**Generated config** (`config.cascade`): three breaches (one per
+compartment, seeded order and timing, 0.6–0.85 %/s each), and two
+coast-station calls from seeded bearings that hold no Act III station.
+
+| | Engineer | Bridge |
+|---|---|---|
+| Sees | Generator plant (Aux Machinery): load, output, heat, wear, TRIPPED. Valve gauges. Antenna rotator. A CALLING lamp. | Hull map with breaches and levels. Distribution panel: what each circuit draws. Accumulator charge. Caller's bearing and time left. |
+| Controls | `setValve`, `gridReset`, `setAntenna` | `setPump`, `setCircuit {LIGHTS, RADIO, EVAC}`, `answerCall` |
+
+- Complete: accumulator reaches 100 % (1.25 %/s while EVAC is live and the
+  grid is up). Danger −10.
+- `answerCall` succeeds only with the antenna on the caller's bearing and the
+  RADIO circuit on. Wrong bearing: danger +3, call lost. Unanswered for 20 s:
+  missed.
+- Blind play (EVAC on, pumps parked, never shedding load) loses compartments
+  and trips the grid (unit test `charging blind … does not finish cleanly`).
+  The caller's bearing exists only in the Bridge's view; the heat and output
+  only in the Engineer's.
+
+---
+
 ## Final Escape (~60–120 s)
 
 Genuine synchronisation under rising water.
@@ -205,7 +249,11 @@ Genuine synchronisation under rising water.
    Without this, holding release and pumping blindly opened the door every
    time with no talking (simulated: 60/60 seeds). With it, blind pumping
    fails 60/60, and a pair calling "more / stop" opens it in 13–22 s.
-3. **Abandon ship**: once the door is fully open, each player pulls their
+3. **Davits**: the Bridge arms the lifeboat davits in the Comms Room
+   (`armDavits`: needs the EVAC circuit live and ≥ 50 % charge; +3 load).
+   ABANDON is refused (`davits-not-armed`) until they are armed. A grid trip,
+   or the accumulator draining to 0 with EVAC off, drops them.
+4. **Abandon ship**: once the door is fully open, each player pulls their
    ABANDON lever. If both pulls land within a 3-second window → SURVIVED. A lone
    pull resets after 3 s with no penalty; partner lamp shows it.
 
@@ -215,8 +263,9 @@ Danger rises fast here; the phase is paced to be exciting, not punishing.
 
 ## Endings
 
-- **SURVIVED**: alarms change tone, door slams open, fade to the lifeboat on
-  open water, voyage summary (duration, mistakes, phase times).
+- **SURVIVED**: alarms change tone, door slams open, a short exterior
+  cinematic of the lifeboat pulling clear of the listing ship, then the
+  summary and the incident reconstruction (docs/SYSTEMS.md).
 - **LOST**: danger reached 100. Brief blackout/flood ending naming the cause:
 
 | Phase at loss | Failure cause |
@@ -224,6 +273,7 @@ Danger rises fast here; the phase is paced to be exciting, not punishing.
 | POWER | Emergency power never came online |
 | FLOOD | Flood control collapsed |
 | RADIO | No distress call reached shore |
+| CASCADE | The ship's systems failed one after another |
 | ESCAPE | The escape route flooded |
 
 Both endings offer one-click **Sail again** (new voyage, same crew and roles,

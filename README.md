@@ -22,8 +22,12 @@ Discord, or sitting next to each other. There is no in-game chat, by design.
 4. Describe what you see. Your partner's room is different from yours, and
    your controls change things in their room.
 
-A first voyage takes about 10 to 15 minutes. Every voyage is generated from a
-fresh seed, so the answers are different each time.
+A voyage starts with a short cinematic (skip it with Space). The full
+voyage runs five acts, about 15 to 20 minutes. Most crews won't escape on
+their first try, and that's intended. Each attempt teaches you the ship, and
+the early acts go much faster the second time. Every voyage is generated
+from a fresh seed (the "ship number"), so the answers change each time. You
+can also replay the same ship on purpose.
 
 ### Controls
 
@@ -39,32 +43,72 @@ fresh seed, so the answers are different each time.
 
 ### What happens aboard
 
-- **Prologue**: the ship is dark and alarms are sounding. The Engineer
-  restores the emergency bus. The Bridge consoles come alive, and the
-  Navigator acknowledges the alarm.
-- **1 · Emergency Power**: the Engineer has six breakers marked with
-  symbols, plus load studs and a generator meter. The Navigator has the
-  damaged routing diagram, knows which symbol is shorted, and knows the
-  generator's rating. Together they
-  feed the pumps, radio and helm without overloading the generator.
-- **2 · Flood Control**: the Engineer opens suction valves and reads line
-  pressure. The Navigator runs the pumps and watches the flood map. Neither
-  knows which pump draws from which compartment until one of you changes
-  something and the other notices. An open valve with no running pump lets
-  the sea back in, so you have to keep each other's settings matched.
-- **3 · Distress Signal**: the Navigator tunes while the Engineer watches the
+One ship, one continuous disaster, five acts. The ship's systems run on the
+server the whole way through: an electrical grid with a generator that
+heats up and trips, water in three compartments with pumps, valves and
+leaking seams, and hull damage that gets worse. Decisions in early acts
+carry forward. Every breaker trip in Act I permanently wears the generator,
+so you have less power for the rest of the voyage. Every pump you burst or
+run dry cracks a seam that keeps leaking. The debrief tells you which of
+these cost you.
+
+- **Act I · Impact.** The ship is dark and alarms are sounding. The
+  Engineer restores the emergency bus, and the Bridge consoles come alive.
+  Then **Emergency Power**: the Engineer has six breakers marked with
+  symbols, with load studs and a meter. The Navigator has the damaged
+  routing diagram, knows which symbol is shorted, and knows the generator's
+  rating. Feed the pumps, radio and helm without overloading the generator.
+- **Act II · Stabilisation.** The Engineer opens suction valves and reads
+  line pressure. The Navigator runs the pumps and watches the flood map.
+  Neither knows which pump draws from which compartment until one of you
+  changes something and the other notices. An open valve with no pump lets
+  the sea back in. A pump left on an empty compartment seizes, and only the
+  Navigator can see when that's about to happen. The **Aux Machinery Room**
+  opens behind the Engine Room: the generator's heat gauge and RESET button
+  are in there, and from now on the Engineer has to keep an eye on them.
+- **Act III · Mayday.** The Navigator tunes while the Engineer watches the
   resonance needle. The Engineer then describes the rhythm of a pulse lamp.
   The Navigator finds it in the codebook, reads its bearing off the chart,
-  and talks the Engineer's antenna round before transmitting.
-- **Final escape**: the Navigator knows the pressure band the door rams need.
-  The Engineer works the hand pump while the Navigator holds the door
-  release and calls "more" or "stop". Too much pressure and the rams slip
-  and the door closes again. Then both pull their abandon-ship levers within three seconds of
-  each other.
+  and talks the Engineer's antenna round before transmitting. The Bridge's
+  **Comms Room** opens: its distribution panel switches the lighting, radio
+  and evacuation circuits.
+- **Act IV · Cascade.** Charge the evacuation accumulator while everything
+  else goes wrong. Hull breaches open one after another, and only the Bridge
+  sees where. The pumps (two of them, three compartments) have to follow.
+  The accumulator, pumps, radio and lights together are more than a worn
+  generator can carry, so the Bridge sheds load and the Engineer watches the
+  heat. Twice, a coast station calls. The Bridge sees the bearing, the
+  Engineer turns the antenna, the Bridge answers. Each answered call gives
+  you more time in the final escape.
+- **Act V · Abandon Ship.** The water keeps coming. The Bridge arms the
+  lifeboat davits (they need the accumulator). The Navigator knows the
+  pressure band the door rams need. The Engineer works the hand pump while
+  the Navigator holds the door release and calls "more" or "stop". Too much
+  pressure and the rams slip and the door closes again. Then both pull
+  their abandon-ship levers within three seconds of each other.
 
-If the water wins, the ending says why. **Sail again** starts a new voyage
-for the same crew in one click. Every voyage is kept in the
-[Ship's Log](/history/).
+If the water wins, the ending says why. The **incident reconstruction**
+replays the voyage from the server's event log: a scrubbable timeline of
+flooding, compartment levels and generator heat, with the closest call,
+trips, the distress-call time, the escape margin and plain-language lessons.
+Every debrief is kept at `/log/CODE/`. **Sail again** starts a new ship for
+the same crew in one click, or **sail this same ship again** to put what you
+learned to use. Every voyage is kept in the [Ship's Log](/history/).
+
+### Modes and practice
+
+- Surviving a full **Standard Voyage** unlocks four challenge modes for that
+  crew: **Rough Seas** (heavy rolling, a hotter generator, leakier rams),
+  **Blackout** (a weaker generator; the rooms run on emergency lamps),
+  **Rapid Flood** (much faster water, stronger pumps) and **Chain Reaction**
+  (a generator trip bursts a pump; a lost compartment leaks into its
+  neighbours). Surviving two of those unlocks **All Systems**.
+- Once a crew has reached an act on a full voyage, they can **practise**
+  from it. A practice run starts with the earlier acts set up as a clean
+  crew would leave them. It is labelled PRACTICE everywhere, never counts as
+  surviving, and never unlocks anything.
+- Unlocks belong to the pair. Sail Again keeps them, and creating a new
+  voyage from the same browser carries them over.
 
 ## What "good" means for this game
 
@@ -119,8 +163,11 @@ contains the other's information; a control change reaches the other browser
 within a second; phase completion is decided by the server and fires once;
 refresh, reconnect and server restart all restore the voyage; finished voyages
 appear in the log after a restart. These claims need people: whether the
-puzzles *feel* like they need both players, whether the difficulty and the
-10 to 15 minute length are right, and whether failure feels fair.
+puzzles *feel* like they need both players, whether the difficulty curve (a
+first escape after a few attempts) and the 15 to 20 minute full voyage are
+right, and whether failure feels fair. The balance numbers come from scripted
+simulations of talking and non-talking crews (`spec/*.unit.test.ts`), not
+from people.
 [STUDENT REVIEW: no playtesting has been recorded yet. Add any you run.]
 
 ## Persistence and multiplayer
@@ -137,6 +184,10 @@ puzzles *feel* like they need both players, whether the difficulty and the
   redeployed. An in-progress voyage resumes where it was.
 - If one player drops out mid-voyage, the ship holds (no rising water) until
   they return.
+- An active voyage survives a server restart in any act, including its ship
+  systems (grid, wear, water, breaches, accumulator). Significant events are
+  recorded in order with sequence numbers, and each finished voyage's
+  debrief is stored with it.
 
 ## Running it locally
 

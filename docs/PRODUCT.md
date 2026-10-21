@@ -13,7 +13,9 @@ ship's systems together until both can abandon ship.
 confusion → discovery → "wait, your controls affect my room" →
 interdependence → coordination → rising pressure → synchronised escape.
 
-First-time play: about 10–15 minutes. Desktop browser, mouse and keyboard.
+A full voyage: five acts, about 15–20 minutes once a crew knows the ship.
+A first escape is expected to take a few attempts; early acts get much
+faster with mastery. Desktop browser, mouse and keyboard.
 
 ## Definition of good
 
@@ -35,9 +37,14 @@ First-time play: about 10–15 minutes. Desktop browser, mouse and keyboard.
 
 ## Scope
 
-Exactly two roles; one ship; two rooms; prologue; three puzzle phases
-(Emergency Power, Flood Control, Distress Signal); final escape; success and
-failure endings; persistent voyage log; replay.
+Exactly two roles; one ship; four compact rooms (Engine Room and Aux
+Machinery for the Engineer; Bridge and Comms Room for the Navigator), the
+second room on each side unlocking mid-voyage; five acts (Impact,
+Stabilisation, Mayday, Cascade, Abandon Ship) over a continuous ship
+simulation (grid, water, hull); success and failure endings with cinematic
+bookends; an incident-reconstruction debrief; persistent voyage log;
+replay (new ship or same ship); unlockable challenge modes; practice from a
+reached act. See docs/SYSTEMS.md.
 
 ## Non-goals
 
@@ -53,4 +60,4 @@ play, more than two players, large downloaded assets.
 - A control change in one room is visible in the other within ~1 s.
 - Refresh, reconnect and server restart all restore the voyage.
 - The voyage log shows completed voyages after a restart.
-- A first-time pair can finish in 10–15 minutes (qualitative; needs playtest).
+- A pair escapes within a few attempts, and later attempts are visibly faster (qualitative; needs playtest).

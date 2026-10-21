@@ -30,10 +30,13 @@ server/
   manager.ts       VoyageManager: in-memory live voyages, tick loop,
                    persistence, broadcasting per-role views.
   game/
-    voyage.ts      Voyage state type + reducer: applyIntent, tick, transitions.
-    puzzles.ts     Seeded generation of every phase's config.
+    state.ts       Voyage state type, creation, upgrade of old saves, event notes.
+    voyage.ts      Reducer: applyIntent, tick, guarded transitions, danger.
+    ship.ts        Continuous systems: grid, water, hull, Act IV, accumulator.
+    scenario.ts    Practice starts: earlier acts set up from the seed.
+    debrief.ts     Timeline samples, highlights and lessons at the end.
+    puzzles.ts     Seeded generation of every phase's config (incl. Act IV).
     views.ts       Projects canonical state → RoleView (the secrecy boundary).
-    danger.ts      Danger model.
 client/
   index.html       Vite entry (served at / and /v/:code).
   main.tsx         React root.
@@ -47,7 +50,13 @@ spec/              Vitest: unit (pure, no server) + app (against running app).
 
 ## State machine
 
-`LOBBY → PROLOGUE → POWER → FLOOD → RADIO → ESCAPE → SURVIVED | LOST`
+`LOBBY → PROLOGUE → POWER → FLOOD → RADIO → CASCADE → ESCAPE → SURVIVED | LOST`
+
+Acts are a projection of phases (`ACT_OF` in `shared/protocol.ts`): I =
+PROLOGUE+POWER, II = FLOOD, III = RADIO, IV = CASCADE, V = ESCAPE. From
+FLOOD to the end, `tick` also advances the ship systems in `ship.ts` (see
+docs/SYSTEMS.md and ADR 005). A practice voyage leaves LOBBY straight into
+its chosen act through the same guarded `advance`.
 
 `Voyage` is a plain serialisable object. All mutation goes through two pure
 functions in `server/game/voyage.ts`:
@@ -69,7 +78,14 @@ the same way. Time is injected (`now`) so tests are deterministic.
   failure_cause, created_at, started_at, ended_at, duration_ms, mistakes,
   state_json, updated_at, prev_code)`
 - `seats(voyage_id, role, callsign, token_hash, joined_at)`
-- `events(id, voyage_id, at, kind, detail)` — public, non-secret history.
+- `events(id, voyage_id, at, kind, detail, seq)`: public, non-secret
+  history. Lifecycle rows plus a copy of every significant voyage event
+  (`log.*`) with its monotonically increasing sequence number.
+- `voyages` also carries `mode`, `practice`, `rerun` and `crew_id` (a
+  pair's lineage across voyages; unlocks are computed from it).
+
+The ended voyage's debrief (timeline samples, highlights, lessons and the
+ordered event log) is part of `state_json` and is rendered at `/log/CODE/`.
 
 `state_json` is the full canonical `Voyage`. It is written immediately after
 every applied intent and at least every 2 s while a voyage is live; on boot,

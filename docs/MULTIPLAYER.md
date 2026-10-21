@@ -19,8 +19,13 @@ input. Join link: `/v/CODE`.
 
 HTTP (simple, testable, survives socket hiccups):
 
-- `POST /api/voyages {callsign}` → `{code, token, role}`. Creator is seated
-  as ENGINEER.
+- `POST /api/voyages {callsign, from?, ship?}` → `{code, token, role}`.
+  Creator is seated as ENGINEER. `from: {code, token}` names a voyage this
+  browser holds a seat in (the client sends its most recent one). If the
+  token verifies, the new voyage joins that crew's lineage (`crew_id`), so
+  unlocks carry over. A forged or stale token is ignored. `ship` (integer
+  0 … 2³¹−1) replays a specific seed, from a debrief's "sail this ship
+  again".
 - `POST /api/voyages/:code/join {callsign}` → `{code, token, role}`. Second
   seat (NAVIGATOR). Errors: `404 not-found`, `409 full`, `409 started`
   (a stranger arriving after start), `400 bad-callsign`.
@@ -42,8 +47,15 @@ can see who is who. (Swap is a deliberate non-goal: one less thing to sync.)
 ## Readiness and start
 
 `setReady {ready}` in LOBBY. Start happens when both seats are filled,
-both ready and both connected; the server transitions to PROLOGUE. A player
-disconnecting in the lobby clears their ready flag.
+both ready and both connected; the server transitions to PROLOGUE (or, for a
+practice run, straight to the chosen act). A player disconnecting in the
+lobby clears their ready flag.
+
+`setMode {mode}` and `setStart {act}` (either seat, LOBBY only) choose a
+challenge mode and a practice starting act. Both are checked against the
+crew's unlocks (`locked`), and any change clears both ready flags, so
+nobody starts on terms they didn't see. The lobby view carries
+`{mode, practice, unlockedModes, unlockedActs}`.
 
 ## Authoritative state, intents, views
 
@@ -93,9 +105,22 @@ connection banner appears when the socket is down.
 
 ## Replay
 
-From SURVIVED/LOST either player sends `sailAgain`. The server creates a new
-voyage (new code, new seed) with the same two seats and roles. The seat
+From SURVIVED/LOST either player sends `sailAgain {sameShip?}`. The server
+creates a new voyage (new code; a new seed, or the same seed when `sameShip`)
+with the same two seats and roles, the same crew lineage, mode and practice
+start. The seat
 token hashes are copied, so each player's existing token is valid for the new
 voyage; the server emits `moved {code}` and each client copies its own token to
 the new code's storage key. The voyages are linked via `prev_code`. The partner sees "ADA wants to
 sail again" and is taken along. Old voyage stays in the log.
+
+## Ordered events and restart recovery
+
+Every significant voyage event (`note()` in `server/game/state.ts`) gets a
+monotonically increasing `seq` inside the canonical state. After each
+change the manager copies new entries to the `events` table (`log.<kind>`,
+`seq`). It remembers the last copied seq per live voyage, initialised from
+the table's `MAX(seq)` on load, so a restart neither duplicates nor drops
+events. Canonical state, including every ship system, is in `state_json`.
+A SIGKILL mid-Act IV resumes with phase, circuits, wear, water and
+accumulator intact (`spec/campaign.test.ts`).
