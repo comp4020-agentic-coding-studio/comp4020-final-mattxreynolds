@@ -3,7 +3,7 @@
 
 import { DANGER, MAX_LOG, MODE_RULES, type Mode, type ModeRules } from "../../shared/config.ts";
 import { COMPARTMENTS, type Compartment } from "../../shared/glyphs.ts";
-import type { Act, Circuit, DebriefEvent, DebriefSample, Debrief, Phase, Role } from "../../shared/protocol.ts";
+import type { Act, Circuit, DebriefEvent, DebriefSample, Debrief, FireState, Phase, Role } from "../../shared/protocol.ts";
 import { generatePuzzles, type PuzzleConfig } from "./puzzles.ts";
 
 export type Seat = { callsign: string; ready: boolean };
@@ -35,6 +35,20 @@ export type ShipState = {
   call: number | null;
   callsAnswered: number;
   callsMissed: number;
+  /** the compartment fire (docs/SYSTEMS.md); its hidden half is config.incident */
+  fire: {
+    state: FireState;
+    intensity: number;
+    /** isolators thrown so far, in order; cleared by a wrong throw */
+    thrown: number[];
+    /** simulated ms until which the panel is locked */
+    lockedUntilMs: number;
+    flares: number;
+    /** simulated ms when it ignited */
+    igniteAtMs: number | null;
+    /** seconds spent in the fire's acts: ignition is scheduled on this clock */
+    clockS: number;
+  };
   /** debrief only: the worst it got, and seconds of water left at the escape */
   peakDanger: number;
   margin: number | null;
@@ -177,6 +191,7 @@ export function createVoyage(
       call: null,
       callsAnswered: 0,
       callsMissed: 0,
+      fire: { state: "idle", intensity: 0, thrown: [], lockedUntilMs: 0, flares: 0, igniteAtMs: null, clockS: 0 },
       peakDanger: 0,
       margin: null,
       peakLevel: null,
@@ -196,6 +211,7 @@ export function upgradeVoyage(v: Voyage): Voyage {
   v.crewId ??= v.id;
   v.practice ??= null;
   v.ship ??= fresh.ship;
+  v.ship.fire ??= fresh.ship.fire;
   v.flood.dry ??= fresh.flood.dry;
   v.flood.seizedUntil ??= fresh.flood.seizedUntil;
   v.flood.held ??= 0;
@@ -204,6 +220,7 @@ export function upgradeVoyage(v: Voyage): Voyage {
   v.log ??= [];
   v.samples ??= [];
   v.debrief ??= null;
+  v.config.incident ??= fresh.config.incident;
   if (!v.config.cascade) v.config = { ...fresh.config, ...v.config, cascade: fresh.config.cascade };
   return v;
 }

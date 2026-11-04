@@ -73,6 +73,15 @@ export function buildDebrief(v: Voyage): Debrief {
       tone: s.callsAnswered ? "good" : "bad",
     });
   }
+  if (count(v, "fireIgnite")) {
+    const out = v.log.find((e) => e.k === "fireOut");
+    highlights.push({
+      label: "COMPARTMENT FIRE",
+      value: out ? "put out" : count(v, "fireBurnout") ? "flashover" : "still burning",
+      detail: `${count(v, "fireFlare")} wrong isolator${count(v, "fireFlare") === 1 ? "" : "s"} thrown`,
+      tone: out ? "good" : "bad",
+    });
+  }
   const recovery = v.log.find((e) => e.k === "floodStable");
   if (recovery) highlights.push({ label: "MAJOR RECOVERY", value: fmt(recovery.t), detail: "Every compartment pumped below 20%", tone: "good" });
   if (survived && s.margin !== null) {
@@ -92,6 +101,8 @@ export function buildDebrief(v: Voyage): Debrief {
   if (lost.length) lessons.push(`Losing ${lost.map((c) => COMPARTMENT_LABEL[c]).join(" and ")} added a permanent load of water the pumps could never remove.`);
   if (s.callsMissed) lessons.push(`${s.callsMissed} coast-station call${s.callsMissed > 1 ? "s were" : " was"} missed. The Bridge sees the caller's bearing; the Engineer has to aim the antenna there before the Bridge answers.`);
   if (count(v, "wrongStation")) lessons.push("Transmitting to the wrong station cost water. The Engineer's pulse rhythm, matched in the Bridge's codebook, names the right one.");
+  if (count(v, "fireBurnout")) lessons.push("The fire flashed over and cracked a seam. The Engineer reads the class glyph on the smoke plate; the Bridge's procedure book gives the isolator order for it. Read the glyph aloud before touching a switch.");
+  else if (count(v, "fireFlare")) lessons.push("A wrong isolator flared the fire and reset the panel. The order is only in the Bridge's procedure book.");
   if (count(v, "vent")) lessons.push("The door rams vented from over-pressure. The Bridge knows the band; call \"more\" and \"stop\".");
   if (!survived && v.failureCause) {
     const act = ACT_OF[v.deepestPhase === "LOST" ? "ESCAPE" : v.deepestPhase];

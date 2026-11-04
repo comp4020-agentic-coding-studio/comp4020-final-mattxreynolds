@@ -2,7 +2,7 @@
 // tick. Pure: no I/O, time is passed in. Rules: docs/PUZZLES.md and
 // docs/SYSTEMS.md. State shape: ./state.ts. Continuous systems: ./ship.ts.
 
-import { CASCADE, DANGER, ESCAPE, FINALE, FLOOD, MAX_TICK_DT_S, MODES, POWER, RADIO, type Mode } from "../../shared/config.ts";
+import { CASCADE, DANGER, ESCAPE, FINALE, FLOOD, INCIDENT, MAX_TICK_DT_S, MODES, POWER, RADIO, type Mode } from "../../shared/config.ts";
 import { COMPARTMENTS, SYSTEMS, type Compartment, type ShipSystem } from "../../shared/glyphs.ts";
 import {
   ACT_OF,
@@ -22,7 +22,7 @@ import {
 } from "../../shared/protocol.ts";
 import { recordSample, buildDebrief } from "./debrief.ts";
 import { prepareStart } from "./scenario.ts";
-import { evacLive, gridReset as resetGrid, gridTrip, radioPowered, shipLive, tickShip, tickWater } from "./ship.ts";
+import { evacLive, gridReset as resetGrid, fireDanger, gridTrip, radioPowered, setIsolator, shipLive, tickShip, tickWater } from "./ship.ts";
 import { addDanger, meanLevel, mistake, note, rules, type Voyage } from "./state.ts";
 
 export { createVoyage, upgradeVoyage, type Seat, type Voyage } from "./state.ts";
@@ -271,6 +271,12 @@ export function applyIntent(v: Voyage, role: Role, intent: Intent, now: number):
       if (why) return reject(why);
       break;
     }
+    case "setIsolator": {
+      if (!isInt(intent.index, 0, INCIDENT.isolators - 1) || typeof intent.on !== "boolean") return reject("bad-input");
+      const why = setIsolator(v, intent.index, intent.on, fx);
+      if (why) return reject(why);
+      break;
+    }
     case "tune": {
       if (!isInt(intent.channel, 0, RADIO.channels - 1)) return reject("bad-input");
       if (v.radio.coupled) return reject("carrier-locked");
@@ -471,7 +477,7 @@ export function dangerRateOf(v: Voyage): number {
       break;
   }
   const water = shipLive(v) ? waterDanger(v) : 0;
-  return (base + water) * rules(v).danger;
+  return (base + water + fireDanger(v)) * rules(v).danger;
 }
 
 /** Advances the continuous simulation to `now`. */

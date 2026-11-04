@@ -228,6 +228,24 @@ coast-station calls from seeded bearings that hold no Act III station.
 
 ---
 
+## Incident — Compartment fire (Acts III–IV, optional to survive)
+
+Rules in docs/SYSTEMS.md "Compartment fire". Hidden config
+(`config.incident`): compartment, ignition time, burning class, 5 isolator
+glyphs, 3 class glyphs and a distinct 4-of-5 order per class.
+
+| | Engineer | Bridge |
+|---|---|---|
+| Sees | Smoke %, class glyph, isolator glyphs and thrown flags | Compartment, intensity, progress, the book of orders for all three classes |
+| Controls | `setIsolator {index, on}` (set, never toggle) | none: it reads and instructs |
+
+Blind play: 120 possible orders per class and a wrong throw flares and locks
+the panel. Unit tests (`spec/incident.unit.test.ts`): fixed sweeps put it out
+in about 1 % of runs, a reactive prefix search in about 2 %; a talking crew
+60 of 60.
+
+---
+
 ## Final Escape (~60–120 s)
 
 Genuine synchronisation under rising water.

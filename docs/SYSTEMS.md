@@ -90,6 +90,27 @@ circuit is live), about 80 s of charging with nothing going wrong. Meanwhile:
   by 12 %. A wrong answer or a missed call costs danger.
 - Completing the act: −10 danger.
 
+## Compartment fire (Acts III–IV)
+
+A seeded incident (`config.incident`, ADR 006). A fire clock runs only in
+Acts III and IV; at 30–60 s a fire breaks out in one compartment and grows
+1.2 %/s. Each seat holds half of it:
+
+- **Engineer (Aux Machinery, fire panel)** sees the smoke thickness, a
+  **class glyph** (one of three) and five glyph-marked isolator switches.
+  Never where it burns, never the order. `setIsolator {index, on}`.
+- **Bridge (Comms Room, fire card)** sees the compartment, intensity,
+  progress and the **procedure book**: for every class glyph, the four
+  isolator glyphs to throw, in order. Never which class is burning.
+
+The Engineer reads the class glyph aloud, the Bridge reads back the order,
+the Engineer throws it. A wrong throw flares the fire (+40 %), resets the
+panel and locks it for 8 s, danger +2. `on:false` re-arms for free. Four
+right throws put it out (danger −4). Needs the grid up. While burning: +0.12
+%/s inflow in that compartment, and from 50 % intensity the generator
+derates by one. At 100 % it flashes over: a permanently cracked seam and
+danger +6. Never an instant loss. Tunables: `INCIDENT` in `shared/config.ts`.
+
 ## Act V — Abandon Ship
 
 The door-ram puzzle (PUZZLES.md) plus:
