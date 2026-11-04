@@ -5,3 +5,4 @@ Source: strproxy /api/me `total_spend` (confirmed, lifetime). Sprint baseline at
 | Checkpoint | total_spend | Sprint spend | Note |
 |---|---:|---:|---|
 | Start | 1442.04 | 0.00 | branch created |
+| After 4/5 agents merged | 1455.88 | 13.84 | engine, fx, ui/audio, fire incident integrated; bridge pending |
