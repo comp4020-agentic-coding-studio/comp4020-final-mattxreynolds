@@ -50,3 +50,7 @@ now waits for every staged Bridge part to compile (`scene/loading.ts`).
   `dressStd`) so the tier decision applies to them.
 - Production skips three.js's shader info-log checks
   (`debug.checkShaderErrors = false`); development keeps them.
+- Keep one persistent `<Canvas>` for the whole voyage, cinematics included
+  (`Scene.tsx` swaps the content and a `Lens` sets the camera). Remounting it
+  for the ending cinematic cost `forceContextLoss` 3.4 s plus `getContext`
+  1 s on SwiftShader, which timed out the full-voyage spec.

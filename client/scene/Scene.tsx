@@ -2,7 +2,8 @@
 // background and fog, so the two room modules never share a file.
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useRef } from "react";
+import type { PerspectiveCamera } from "three";
 import { useStore } from "../store.ts";
 import { Bridge, BRIDGE_LAYOUT } from "./Bridge.tsx";
 import { CinematicScene } from "./Cinematic.tsx";
@@ -65,14 +66,10 @@ export const Scene = memo(function Scene() {
   const quality = useStore((s) => s.quality);
   if (!role) return null;
   const engineer = role === "ENGINEER";
-  if (cinematic) {
-    // a separate light canvas: the room mounts (and compiles) after it
-    return (
-      <Canvas id="scene" camera={{ fov: 50, near: 0.1, far: 400 }} dpr={[1, 1.5]} gl={{ antialias: true }} onCreated={noShaderChecks}>
-        <CinematicScene shot={cinematic.shot} start={cinematic.start} />
-      </Canvas>
-    );
-  }
+  // One persistent canvas: switching between a cinematic and the room swaps
+  // its contents, never the WebGL context. Profiling showed tearing down one
+  // context and creating another (forceContextLoss + getContext) froze a
+  // software-rendered page for ~4 s at the end of a voyage.
   return (
     <Canvas
       id="scene"
@@ -81,10 +78,32 @@ export const Scene = memo(function Scene() {
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onCreated={noShaderChecks}
     >
-      <Look />
-      {engineer ? <EngineRoom /> : <Bridge />}
-      <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
-      <ReadyProbe />
+      {cinematic ? (
+        <>
+          <Lens fov={50} near={0.1} far={400} />
+          <CinematicScene key={cinematic.shot + cinematic.start} shot={cinematic.shot} start={cinematic.start} />
+        </>
+      ) : (
+        <>
+          <Lens fov={70} near={0.05} far={80} />
+          <Look />
+          {engineer ? <EngineRoom /> : <Bridge />}
+          <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
+          <ReadyProbe />
+        </>
+      )}
     </Canvas>
   );
 });
+
+/** Sets the shared camera's lens for what is on screen (cinematic vs room). */
+function Lens({ fov, near, far }: { fov: number; near: number; far: number }) {
+  const camera = useThree((st) => st.camera) as PerspectiveCamera;
+  useLayoutEffect(() => {
+    camera.fov = fov;
+    camera.near = near;
+    camera.far = far;
+    camera.updateProjectionMatrix();
+  }, [camera, fov, near, far]);
+  return null;
+}

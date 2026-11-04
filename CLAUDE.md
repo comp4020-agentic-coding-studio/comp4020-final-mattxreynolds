@@ -122,3 +122,7 @@ own judgement are marked `[STUDENT REVIEW]`.
   still compiling, and the first control press lands inside a freeze.
 - Visual claims need `scripts/screenshot.ts --quality high`. Headless
   Chromium is a software renderer and defaults to the `low` tier.
+- Never remount the R3F `<Canvas>` mid-voyage (cinematic ↔ room, playing ↔
+  ended). Tearing down a WebGL context costs seconds on a software
+  rasteriser; swap the canvas *contents* and keep `<Game>` at a stable tree
+  position in `App.tsx`.
