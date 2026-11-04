@@ -7,6 +7,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { Group, MeshStandardMaterial } from "three";
 import { At, B, C, ev, G, M, Pipe, Plate, stageOf, STAGE, useEV, useEVs } from "./kit.tsx";
+import { GeneratorDetail } from "./Dressing.tsx";
 import { AT } from "./layout.ts";
 
 export function Generator() {
@@ -30,6 +31,7 @@ export function Generator() {
   return (
     // authored along +x, facing +z; turned so it lies along the west wall facing into the room
     <At p={AT.generator} r={[0, Math.PI / 2, 0]}>
+      <GeneratorDetail />
       {/* plinth */}
       <B p={[0, 0.1, 0]} s={[2.6, 0.2, 1.0]} m={m.pipeDark} />
       {/* engine block */}

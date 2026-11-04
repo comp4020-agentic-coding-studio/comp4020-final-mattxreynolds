@@ -25,6 +25,10 @@ const { values } = parseArgs({
     views: { type: "string", default: "spawn;left;right;back" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
+    /** render tier: "high" (bloom, reflections, relief) or "low" */
+    quality: { type: "string", default: "high" },
+    /** re-apply the patch before every view (for state that evolves, e.g. a growing fire) */
+    repatch: { type: "boolean", default: false },
     /** screenshot the opening cinematic at these seconds (e.g. "3;9;15") instead of rooms */
     cinematic: { type: "string" },
   },
@@ -57,7 +61,13 @@ try {
   const pages: [string, Page][] = [];
   for (const [name, seat] of [["engineer", a], ["navigator", b]] as const) {
     const ctx = await browser.newContext({ viewport: { width: Number(values.width), height: Number(values.height) } });
-    await ctx.addInitScript(([code, token]) => localStorage.setItem(`btw.seat.${code}`, token), [seat.code, seat.token]);
+    await ctx.addInitScript(
+      ([code, token, q]) => {
+        localStorage.setItem(`btw.seat.${code}`, token);
+        localStorage.setItem("btw.quality", q);
+      },
+      [seat.code, seat.token, values.quality!],
+    );
     const page = await ctx.newPage();
     page.on("pageerror", (e) => console.error(`[${name}] pageerror`, e));
     page.on("console", (m) => m.type() === "error" && console.error(`[${name}]`, m.text()));
@@ -91,6 +101,10 @@ try {
     await page.waitForTimeout(1500);
     for (const v of values.views!.split(";")) {
       const [label, pose] = v.split(":");
+      if (values.repatch) {
+        await post(`/api/test/voyages/${a.code}/patch`, patch);
+        await page.waitForTimeout(400);
+      }
       if (pose || label !== "spawn") {
         const preset: Record<string, string> = { left: "0,0,1.2,0", right: "0,0,-1.2,0", back: "0,0,3.14,0", down: "0,0,0,-0.5" };
         const [x, z, yaw, pitch] = (pose ?? preset[label] ?? "0,0,0,0").split(",").map(Number);

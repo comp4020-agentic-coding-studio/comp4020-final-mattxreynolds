@@ -8,13 +8,20 @@
 //    carry emissive labels, so the room stays playable).
 // Flicker and red tint scale with danger; trip dips the lights, power-up
 // flashes them. Everything is driven in useFrame from the store.
+// The visible fittings (fluorescent tubes, caged lamps, emergency domes,
+// light shafts, contact shadows) are in Fixtures.tsx; this file writes their
+// shared materials and `fixtureState` each frame, so the glowing glass
+// always agrees with the real lights.
 
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { AmbientLight, Color, Fog, Group, HemisphereLight, MeshBasicMaterial, MeshStandardMaterial, Object3D, PointLight, SpotLight } from "three";
+import { roomOpen } from "../../../shared/protocol.ts";
 import { useStore } from "../../store.ts";
 import { PALETTE } from "../palette.ts";
+import { D } from "./dressMats.ts";
 import { kicks } from "./Effects.tsx";
+import { badTube, EmergencyCages, Fixtures, FITTING_Y, FITTINGS, fixtureState } from "./Fixtures.tsx";
 import { AT } from "./layout.ts";
 import { ev, G, M, stageOf, STAGE } from "./kit.tsx";
 
@@ -23,6 +30,8 @@ const COOL = new Color("#9fb4c4");
 const RED = new Color(PALETTE.emergencyRed);
 const BG_DARK = new Color("#0b0e10");
 const BG_WARM = new Color("#1c1d1b");
+const TUBE_OFF = new Color("#2e2f2c");
+const AUX_WARM = new Color("#ffd9a0");
 
 /** Emergency lamp positions [x, y, z, rotY] on the walls (facing into the room). */
 const EMERGENCY_LAMPS: [number, number, number, number][] = [
@@ -33,6 +42,16 @@ const EMERGENCY_LAMPS: [number, number, number, number][] = [
   [4.98, 2.45, 3.1, -Math.PI / 2],
   [-4.98, 2.45, -2.6, Math.PI / 2],
 ];
+
+/** Work lights that stand in for emergency lamps when shed: fitting index ->
+ * offset (local to the fitting) of a point 0.4 m in front of its red dome. */
+const STAND_IN: Partial<Record<number, [number, number, number]>> = Object.fromEntries(
+  ([[0, 0], [1, 1], [3, 2]] as const).map(([fi, li]) => {
+    const [x, y, z] = EMERGENCY_LAMPS[li];
+    const [fx, fz] = FITTINGS[fi];
+    return [fi, [x - fx, y - FITTING_Y, z + Math.sign(-z) * 0.4 - fz]];
+  }),
+);
 
 export function Lighting() {
   const hemi = useRef<HemisphereLight>(null);
@@ -50,6 +69,7 @@ export function Lighting() {
   const emerg = useRef(0); // eased 0..1: lighting circuit shed, red lamps on
   const emergMat = useMemo(() => new MeshStandardMaterial({ color: "#3a1a14", emissive: "#ff2a1a", emissiveIntensity: 0, roughness: 0.3 }), []);
   const tmp = useMemo(() => new Color(), []);
+  const tubeCol = useMemo(() => new Color(), []);
   const lensMat = useMemo(() => new MeshBasicMaterial({ color: "#ff2a1a", transparent: true, opacity: 0.9 }), []);
   const fixtureMat = useMemo(() => new MeshBasicMaterial({ color: "#fff3d6" }), []);
 
@@ -90,7 +110,7 @@ export function Lighting() {
 
     tmp.copy(lit.current > 0.6 ? WARM : COOL).lerp(RED, redTint);
     if (hemi.current) {
-      hemi.current.intensity = 0.45 + L * 0.9;
+      hemi.current.intensity = 0.6 + L * 0.95;
       hemi.current.color.copy(tmp);
     }
     if (amb.current) amb.current.intensity = 0.18 + L * 0.25;
@@ -99,12 +119,45 @@ export function Lighting() {
     work.current.forEach((w, i) => {
       if (!w) return;
       const e = emerg.current;
-      w.intensity = L * 9 * (1 - e) + e * (i < 2 || i === 3 ? 3.2 : 0) * flicker * dip;
+      w.intensity = L * 9 * (1 - e) * (i === 2 ? 0.55 + 0.45 * badTube.level : 1) + e * (i < 2 || i === 3 ? 3.2 : 0) * flicker * dip;
       w.color.copy(tmp).lerp(RED, e * 0.8);
+      // the stand-in slides out to its emergency dome, so the dark fitting stays dark
+      const to = STAND_IN[i];
+      if (to) w.position.set(to[0] * e, -0.2 + (to[1] + 0.2) * e, to[2] * e);
     });
-    const F = L * (1 - emerg.current * 0.9);
+    const F = Math.max(0, L * (1 - emerg.current));
     fixtureMat.color.setRGB(0.25 + F * 0.9, 0.24 + F * 0.85, 0.2 + F * 0.7);
-    emergMat.emissiveIntensity = emerg.current * (reduced ? 2 : 1.6 + Math.sin(t * 2.2) * 0.4);
+    emergMat.emissiveIntensity = emerg.current * (reduced ? 2.6 : 2.3 + Math.sin(t * 2.2) * 0.5) * (0.6 + 0.4 * flicker);
+
+    // fittings: tubes go HDR (bloom) only near full output; before POWER they
+    // glow a dim cool grey, and shed they are dark glass
+    const d = D();
+    // (the tube is the source: only a little of the room's red tint)
+    tubeCol.copy(online ? WARM : COOL).lerp(RED, Math.min(0.3, (danger / 100) * 0.25));
+    d.tube.color.copy(TUBE_OFF).lerp(tubeCol, Math.min(1, F * 1.6)).multiplyScalar(0.25 + F * F * F * 2.7);
+    // the tired tube stutters on its own as the ship gets worse
+    let bad = 1;
+    if (!reduced && danger > 35) {
+      const n = Math.sin(t * 23.7) * Math.sin(t * 5.1 + 0.4) + Math.sin(t * 0.7) * 0.6;
+      if (n > 1.25 - (danger - 35) / 120) bad = 0.12;
+    }
+    badTube.level = bad;
+    d.tubeBad.color.copy(d.tube.color).multiplyScalar(bad);
+    d.lampGlass.emissive.copy(tmp).lerp(WARM, 0.5);
+    d.lampGlass.emissiveIntensity = 0.05 + F * 2.2;
+    fixtureState.work = F;
+    fixtureState.emerg = emerg.current;
+    fixtureState.flicker = flicker * dip;
+    fixtureState.tint.copy(tmp);
+
+    // Aux Machinery Room fittings follow the grid (its working light is in AuxRoom.tsx)
+    const auxOpen = !!v && roomOpen("AUX", v.phase, v.outcome?.phaseReached);
+    const auxPowered = auxOpen && !v.ship.gridDown && !lost;
+    const A = auxPowered ? Math.max(0, (1 - kicks.dip * 0.6) * flicker + kicks.flash * 0.4) : 0;
+    fixtureState.aux = A;
+    d.auxLampGlass.emissive.copy(AUX_WARM);
+    d.auxLampGlass.emissiveIntensity = 0.05 + A * 2.2;
+    d.auxEmergGlass.emissiveIntensity = auxOpen && !auxPowered ? (reduced ? 2.6 : 2.3 + Math.sin(t * 2.2 + 1) * 0.5) * (0.6 + 0.4 * flicker) : 0;
 
     // rotating beacon (alarm) — stops when the bridge acknowledges
     const beaconOn = alarm || lost;
@@ -140,16 +193,16 @@ export function Lighting() {
     <group>
       <hemisphereLight ref={hemi} args={["#c9d6e0", "#2a2420", 0.6]} />
       <ambientLight ref={amb} intensity={0.2} />
-      {/* working light fittings along the ceiling */}
-      {([[-2.6, -1.6], [0.6, -1.6], [3.4, -1.2], [-2.0, 2.0], [1.6, 2.0]] as const).map(([x, z], i) => (
-        <group key={i} position={[x, 2.9, z]}>
-          <mesh geometry={G().box} material={M().steel} scale={[0.7, 0.08, 0.2]} />
-          <mesh geometry={G().box} material={fixtureMat} scale={[0.6, 0.03, 0.12]} position={[0, -0.05, 0]} />
+      <Fixtures />
+      <EmergencyCages lamps={EMERGENCY_LAMPS} />
+      {/* one work light under each fluorescent fitting (Fixtures.tsx) */}
+      {FITTINGS.map(([x, z], i) => (
+        <group key={i} position={[x, FITTING_Y, z]}>
           <pointLight
             ref={(l) => {
               work.current[i] = l;
             }}
-            position={[0, -0.25, 0]}
+            position={[0, -0.2, 0]}
             intensity={0}
             distance={7}
             decay={1.6}

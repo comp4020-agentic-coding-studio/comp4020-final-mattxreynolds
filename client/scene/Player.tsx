@@ -4,7 +4,9 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Euler, Raycaster, Vector2, Vector3, type Object3D } from "three";
+import { ACT_OF } from "../../shared/protocol.ts";
 import { useStore } from "../store.ts";
+import { motion } from "./fx/pool.ts";
 import { moveWithCollision, type RoomLayout } from "./colliders.ts";
 import { findInteractable, interactables } from "./interact.tsx";
 
@@ -12,6 +14,9 @@ const EYE = 1.6;
 const SPEED = 2.4;
 const FAST = 1.7;
 const REACH = 2.4;
+/** ~3 degrees; pitch about a third of it */
+const MAX_ROLL = 0.052;
+const MAX_PITCH = 0.018;
 const SENSITIVITY = 0.0022;
 /** A second press on the same control inside this window is the same intent
  * (E and a click together, a bouncing key), not a new one. */
@@ -142,13 +147,26 @@ export function Player({ layout }: { layout: RoomLayout }) {
       pos.current.z = nz;
     }
 
-    // the ship lists with danger (disabled for reduced motion)
+    // ship motion, applied to the camera only (never the room, so collisions
+    // are untouched): a slow roll/pitch that grows with act and danger, plus
+    // decaying jolts on breach / compartment loss. Max roll ~3 deg; zero when
+    // reduced motion is set.
     const { view, reducedMotion } = useStore.getState();
-    const danger = view?.danger ?? 0;
+    const danger = (view?.danger ?? 0) / 100;
+    const act = view ? ACT_OF[view.phase] || 0 : 0;
     const t = performance.now() / 1000;
-    const roll = reducedMotion ? 0 : (danger / 100) * 0.06 + Math.sin(t * 0.5) * 0.004 * (1 + danger / 40);
+    motion.jolt = Math.max(0, motion.jolt - dt * 1.3);
+    let roll = 0;
+    let pitch = 0;
+    if (!reducedMotion) {
+      const amp = Math.min(1, 0.12 + act * 0.1 + danger * 0.55);
+      const j = Math.min(1, motion.jolt);
+      roll = amp * MAX_ROLL * (0.7 * Math.sin(t * 0.45) + 0.3 * Math.sin(t * 1.1 + 1)) + Math.sin(t * 38) * 0.008 * j + j * 0.012 * Math.sin(t * 9);
+      pitch = amp * MAX_PITCH * Math.sin(t * 0.33 + 2) + Math.sin(t * 31 + 1) * 0.006 * j;
+      roll = Math.max(-MAX_ROLL, Math.min(MAX_ROLL, roll));
+    }
     camera.position.set(pos.current.x, EYE + (reducedMotion ? 0 : Math.sin(t * 0.8) * 0.01), pos.current.z);
-    camera.rotation.set(euler.current.x, euler.current.y, roll, "YXZ");
+    camera.rotation.set(euler.current.x + pitch, euler.current.y, roll, "YXZ");
 
     // aim
     ray.current.setFromCamera(centre.current, camera);

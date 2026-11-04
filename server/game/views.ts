@@ -13,7 +13,7 @@ import {
   type Role,
   type View,
 } from "../../shared/protocol.ts";
-import { cascadeSeconds, evacLive, gridDraw, gridLoad, gridOutput, gridWear } from "./ship.ts";
+import { cascadeSeconds, evacLive, fireBurning, gridDraw, gridLoad, gridOutput, gridWear } from "./ship.ts";
 import { escapeInBand, powerLoad, powerTripped, resonance, stationAt, systemsFed, type Voyage } from "./voyage.ts";
 
 export type Presence = Partial<Record<Role, boolean>>;
@@ -124,6 +124,13 @@ export function engineerView(v: Voyage, presence: Presence, rev: number, now: nu
       resetReady: v.ship.grid.down && now >= v.ship.grid.trippedUntil,
       wear: gridWear(v),
     },
+    fire: {
+      state: v.ship.fire.state,
+      smoke: Math.round(v.ship.fire.intensity),
+      symptom: fireBurning(v) ? v.config.incident.kinds[v.config.incident.kind] : null,
+      isolators: v.config.incident.isolators.map((glyph, i) => ({ glyph, thrown: v.ship.fire.thrown.includes(i) })),
+      locked: v.elapsedMs < v.ship.fire.lockedUntilMs,
+    },
   };
 }
 
@@ -184,6 +191,18 @@ export function navigatorView(v: Voyage, presence: Presence, rev: number, now: n
             bearing: BEARINGS[v.config.cascade.calls[v.ship.call].bearing],
             remainingS: Math.max(0, Math.round(v.config.cascade.calls[v.ship.call].atS + CASCADE.callWindowS - cascadeSeconds(v))),
           },
+    fire: {
+      state: v.ship.fire.state,
+      compartment: fireBurning(v) ? v.config.incident.compartment : null,
+      intensity: Math.round(v.ship.fire.intensity),
+      done: v.ship.fire.thrown.length,
+      steps: v.config.incident.procedures[0].length,
+      locked: v.elapsedMs < v.ship.fire.lockedUntilMs,
+      book: v.config.incident.kinds.map((kind, k) => ({
+        kind,
+        sequence: v.config.incident.procedures[k].map((i) => v.config.incident.isolators[i]),
+      })),
+    },
   };
 }
 

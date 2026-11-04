@@ -3,6 +3,12 @@ import { MODE_RULES, MODES } from "../../shared/config.ts";
 import { ACT_TITLE, ROLE_ROOM, ROLE_TITLE, ROLES, type Act } from "../../shared/protocol.ts";
 import { send } from "../net.ts";
 import { useStore } from "../store.ts";
+import { Controls } from "./Controls.tsx";
+
+const ROLE_SEES = {
+  ENGINEER: { you: "Gauges, valves, breakers, the escape door and the carrier knob.", partner: "Routing diagrams, the flood map, radio logs and charts." },
+  NAVIGATOR: { you: "Routing diagrams, the flood map, radio logs and charts.", partner: "Gauges, valves, breakers, the escape door and the carrier knob." },
+} as const;
 
 const ROLE_BLURB = {
   ENGINEER: "Hands on the machinery: breakers, valves, the transmitter, the escape door. Reports what the gauges do.",
@@ -51,9 +57,14 @@ export function Lobby({ onHome }: { onHome: () => void }) {
                 <>
                   <p className="callsign">
                     <span className={`dot ${c.connected ? "on" : "off"}`} aria-label={c.connected ? "connected" : "disconnected"} />
+                    <span className="conn">{c.connected ? "ONLINE" : "OFFLINE"}</span>
                     {c.callsign} {role === view.you && <span className="tag">YOU</span>}
                   </p>
                   <p className="blurb">{ROLE_BLURB[role]}</p>
+                  <dl className="sees">
+                    <dt>Sees</dt><dd>{ROLE_SEES[role].you}</dd>
+                    <dt>Can't see</dt><dd>{ROLE_SEES[role].partner}</dd>
+                  </dl>
                   <p className={`ready ${c.ready ? "yes" : "no"}`}>{c.ready ? "✓ READY" : "Not ready"}</p>
                 </>
               ) : (
@@ -65,6 +76,11 @@ export function Lobby({ onHome }: { onHome: () => void }) {
       </div>
 
       {view.lobby && <VoyageSettings />}
+
+      <div className="card center">
+        <h2>Controls</h2>
+        <Controls />
+      </div>
 
       <div className="card center">
         <button

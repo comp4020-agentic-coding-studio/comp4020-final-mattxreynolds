@@ -27,6 +27,8 @@ import { MODE_RULES } from "../../../shared/config.ts";
 import { SHIP_PHASES } from "../../../shared/protocol.ts";
 import { Block, GEO, MAT } from "./kit.tsx";
 import { fxClock, navView, nowS } from "./state.ts";
+import { Exterior } from "./Exterior.tsx";
+import { storm } from "./storm.ts";
 
 export const ROOM = { w: 10, d: 8, h: 3.2, winLo: 1.3, winHi: 2.75 } as const;
 /** The Comms Room doorway in the starboard bulkhead (x = +5): z range. */
@@ -36,95 +38,6 @@ const HD = ROOM.d / 2;
 const T = 0.12; // wall thickness
 
 const FOG = "#1b2a33";
-
-// ------------------------------------------------------------ sky + sea
-
-const skyMat = new ShaderMaterial({
-  side: BackSide,
-  depthWrite: false,
-  fog: false,
-  uniforms: { flash: { value: 0 } },
-  vertexShader: /* glsl */ `
-    varying vec3 vDir;
-    void main() {
-      vDir = normalize(position);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }`,
-  fragmentShader: /* glsl */ `
-    uniform float flash;
-    varying vec3 vDir;
-    void main() {
-      float h = clamp(vDir.y, -0.2, 1.0);
-      vec3 horizon = vec3(0.106, 0.165, 0.200);
-      vec3 low = vec3(0.16, 0.22, 0.27);
-      vec3 high = vec3(0.035, 0.05, 0.07);
-      vec3 c = mix(horizon, low, smoothstep(0.0, 0.08, h));
-      c = mix(c, high, smoothstep(0.08, 0.7, h));
-      // ragged cloud bands
-      float band = sin(vDir.x * 9.0 + vDir.z * 4.0) * sin(vDir.z * 7.0 - vDir.x * 3.0);
-      c += vec3(0.03, 0.035, 0.04) * smoothstep(0.2, 0.9, band) * smoothstep(0.02, 0.25, h) * (1.0 - smoothstep(0.3, 0.6, h));
-      c += vec3(0.55, 0.6, 0.7) * flash * smoothstep(-0.05, 0.4, h);
-      gl_FragColor = vec4(c, 1.0);
-    }`,
-});
-
-function Sky() {
-  useFrame(() => {
-    // occasional distant lightning (none under reduced motion)
-    const t = nowS();
-    const reduced = useStore.getState().reducedMotion;
-    const cycle = t % 11.3;
-    const f = reduced ? 0 : cycle < 0.08 ? 1 : cycle > 0.18 && cycle < 0.24 ? 0.6 : 0;
-    skyMat.uniforms.flash.value = f * 0.35;
-  });
-  return (
-    <mesh material={skyMat} raycast={() => null}>
-      <sphereGeometry args={[74, 32, 16]} />
-    </mesh>
-  );
-}
-
-function Sea() {
-  const ref = useRef<Mesh>(null);
-  const geo = useMemo(() => {
-    const g = new PlaneGeometry(150, 72, 56, 28);
-    g.rotateX(-Math.PI / 2);
-    return g;
-  }, []);
-  const base = useMemo(() => Float32Array.from(geo.attributes.position.array as Float32Array), [geo]);
-  const mat = useMemo(
-    () => new MeshStandardMaterial({ color: "#24505f", roughness: 0.3, metalness: 0.25, flatShading: true }),
-    [],
-  );
-  useEffect(() => () => (geo.dispose(), mat.dispose()), [geo, mat]);
-  const last = useRef(0);
-  useFrame(() => {
-    const t = nowS();
-    if (t - last.current < 1 / 15) return;
-    last.current = t;
-    const reduced = useStore.getState().reducedMotion;
-    const danger = navView()?.danger ?? 20;
-    const amp = 0.45 + danger / 110;
-    const pos = geo.attributes.position.array as Float32Array;
-    const k = reduced ? 0.25 : 1;
-    for (let i = 0; i < pos.length; i += 3) {
-      const x = base[i];
-      const z = base[i + 2];
-      pos[i + 1] =
-        amp *
-        (Math.sin(x * 0.18 + t * 0.9 * k) * 0.6 +
-          Math.sin(z * 0.23 - t * 1.3 * k + x * 0.05) * 0.8 +
-          Math.sin((x + z) * 0.5 + t * 2.1 * k) * 0.22);
-    }
-    geo.attributes.position.needsUpdate = true;
-    // gentle rock of the sea relative to the room (the ship rolls)
-    if (ref.current && !reduced) {
-      ref.current.rotation.z = Math.sin(t * 0.37) * 0.025;
-      ref.current.rotation.x = Math.sin(t * 0.23) * 0.012;
-    }
-  });
-  return <mesh ref={ref} geometry={geo} material={mat} position={[0, -0.6, -40]} raycast={() => null} />;
-}
 
 // ------------------------------------------------------------ shell
 
@@ -356,7 +269,7 @@ export function RoomLights() {
     // critical flooding: a slow nervous flicker
     if (!reduced && danger > 0.75 && Math.sin(t * 13) * Math.sin(t * 3.1) > 0.92) k *= 0.6;
     for (const l of work.current) if (l) l.intensity = 8.5 * k;
-    if (hemi.current) hemi.current.intensity = 0.65 + 0.7 * k;
+    if (hemi.current) hemi.current.intensity = 0.85 + 0.7 * k + storm.flash * 1.6;
     lampGlow.color.copy(warm).multiplyScalar(0.15 + 0.85 * k);
     if (redFill.current) {
       const pulse = red ? (reduced ? 0.8 : 0.5 + 0.5 * Math.abs(Math.sin(t * 2.2))) : 0;
@@ -422,8 +335,7 @@ export function RoomShell() {
   ];
   return (
     <group>
-      <Sky />
-      <Sea />
+      <Exterior />
       {/* deck + ceiling */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} geometry={GEO.plane} scale={[ROOM.w, ROOM.d, 1]}>
         <meshStandardMaterial map={deck} roughness={0.85} metalness={0.25} />

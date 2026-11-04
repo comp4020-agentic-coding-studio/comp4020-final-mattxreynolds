@@ -80,6 +80,16 @@ these cost you.
   heat. Twice, a coast station calls. The Bridge sees the bearing, the
   Engineer turns the antenna, the Bridge answers. Each answered call gives
   you more time in the final escape.
+- **Compartment fire (Acts III–IV).** At a seeded moment a fire breaks out
+  below decks. The Engineer's fire panel in the Aux Machinery Room shows the
+  smoke and a class mark, but not where it is or what to do. The Bridge's
+  damage-control card in the Comms Room shows the compartment and a
+  procedure book: for each class mark, the order to throw five isolators.
+  The Engineer reads the mark aloud, the Bridge reads back the order, and the
+  Engineer throws it. A wrong throw makes it flare and locks the panel for
+  a few seconds. Left burning, it feeds water into its compartment, derates
+  the generator and finally flashes over, cracking a seam for good. It never
+  ends the voyage on its own.
 - **Act V · Abandon Ship.** The water keeps coming. The Bridge arms the
   lifeboat davits (they need the accumulator). The Navigator knows the
   pressure band the door rams need. The Engineer works the hand pump while

@@ -65,13 +65,18 @@ export function App() {
   else if (!seated) body = <Join code={code} initialError={error} onSeated={() => setSeated(true)} onHome={() => go(null)} />;
   else if (!view) body = <div className="card center"><p className="loading">{conn === "offline" ? "Reconnecting to the ship…" : "Boarding…"}</p></div>;
   else if (view.phase === "LOBBY") body = <Lobby onHome={() => go(null)} />;
-  else if (isPlaying(view.phase)) body = <Game />;
-  else body = (
-    <>
-      <Game ended />
-      {!cinematic && <Ending onHome={() => go(null)} />}
-    </>
-  );
+  else {
+    // One tree shape for playing and ended, so <Game> (and its WebGL canvas)
+    // is not remounted when the voyage ends: recreating the context froze
+    // software-rendered pages for seconds (docs/adr/007).
+    const ended = !isPlaying(view.phase);
+    body = (
+      <>
+        <Game ended={ended} />
+        {ended && !cinematic && <Ending onHome={() => go(null)} />}
+      </>
+    );
+  }
 
   return (
     <>

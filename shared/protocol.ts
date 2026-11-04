@@ -83,6 +83,7 @@ export type Intent =
   | { t: "abandon" }
   | { t: "setCircuit"; circuit: Circuit; on: boolean }
   | { t: "gridReset" }
+  | { t: "setIsolator"; index: number; on: boolean }
   | { t: "answerCall" }
   | { t: "armDavits" }
   | { t: "setMode"; mode: Mode }
@@ -142,6 +143,7 @@ export type Fx =
   | { k: "breach"; compartment: Compartment }
   | { k: "compartmentLost"; compartment: Compartment }
   | { k: "call" }
+  | { k: "fire"; ev: "ignite" | "step" | "flare" | "out" | "burnout" }
   | { k: "callResult"; answered: boolean }
   | { k: "evacCharged" }
   | { k: "davitsArmed"; armed: boolean }
@@ -225,6 +227,9 @@ export type CommonView = {
   ship: ShipCommon;
 };
 
+/** The compartment fire (docs/SYSTEMS.md): each seat holds half of it. */
+export type FireState = "idle" | "burning" | "out" | "burnt";
+
 export type EngineerView = CommonView & {
   you: "ENGINEER";
   power: {
@@ -263,6 +268,18 @@ export type EngineerView = CommonView & {
     /** the trip cooldown has passed and RESET will take */
     resetReady: boolean;
     wear: number;
+  };
+  /** Fire panel: the Engineer sees the symptom (class glyph, smoke) and the
+   * isolators; never where it burns or which order to throw them. */
+  fire: {
+    state: FireState;
+    /** 0-100: how much smoke */
+    smoke: number;
+    /** the glyph on the smoke plate: which class of fire this is */
+    symptom: Glyph | null;
+    isolators: { glyph: Glyph; thrown: boolean }[];
+    /** a wrong throw reset the panel; it is locked for a few seconds */
+    locked: boolean;
   };
 };
 
@@ -312,6 +329,18 @@ export type NavigatorView = CommonView & {
   };
   /** Coast-station call (Comms Room): the bearing to aim the antenna at. */
   call: { bearing: Bearing; remainingS: number } | null;
+  /** Damage-control fire card (Comms Room): where it burns and the procedure
+   * book. The book says which isolators to throw, in order, for each class
+   * glyph; which class is burning is the Engineer's to read. */
+  fire: {
+    state: FireState;
+    compartment: Compartment | null;
+    intensity: number;
+    done: number;
+    steps: number;
+    locked: boolean;
+    book: { kind: Glyph; sequence: Glyph[] }[];
+  };
 };
 
 export type View = EngineerView | NavigatorView;
@@ -333,6 +362,7 @@ export const INTENT_RULES: Record<IntentType, { roles: readonly Role[]; phases: 
   abandon: { roles: ROLES, phases: ["ESCAPE"] },
   setCircuit: { roles: ["NAVIGATOR"], phases: ["RADIO", "CASCADE", "ESCAPE"] },
   gridReset: { roles: ["ENGINEER"], phases: SHIP_PHASES },
+  setIsolator: { roles: ["ENGINEER"], phases: ["RADIO", "CASCADE", "ESCAPE"] },
   answerCall: { roles: ["NAVIGATOR"], phases: ["CASCADE"] },
   armDavits: { roles: ["NAVIGATOR"], phases: ["ESCAPE"] },
   setMode: { roles: ROLES, phases: ["LOBBY"] },

@@ -37,9 +37,12 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
 
   return (
     <div className="home">
+      <div className="atmos" aria-hidden><div className="rain" /><div className="rain r2" /><div className="swell" /><div className="swell s2" /></div>
       <header className="hero">
         <p className="kicker">A two-player cooperative escape</p>
+        <div className="hull-plate" aria-hidden><span>No.</span><b>4020</b><span>MV</span></div>
         <h1>Below the Waterline</h1>
+        <p className="premise">Two crew. Two sealed rooms. One sinking ship. Talk, or drown.</p>
         <p className="lede">
           A collision has holed your ship. The <b>Engineer</b> is sealed in the Engine Room; the{" "}
           <b>Radio Officer</b> is trapped on the Bridge. Each of you sees things the other can't, and your controls
@@ -93,6 +96,12 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
         </form>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+
+      <ul className="strip" aria-label="How it works">
+        <li><b>TWO SEATS</b><span>Engineer below, Radio Officer on the Bridge.</span></li>
+        <li><b>TWO ROOMS</b><span>Each holds clues the other can't see.</span></li>
+        <li><b>TALK</b><span>Your controls change each other's rooms. Say what you see.</span></li>
+      </ul>
 
       <section className="card how">
         <h2>How to play</h2>

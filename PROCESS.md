@@ -274,6 +274,106 @@ unreadable lobby and debrief cards (dark-on-dark).
 whether this section should stay as written, and what you would have
 prioritised differently.]
 
+## Production sprint (agent-led, branch `production/ambitious-overhaul`)
+
+A long autonomous session: one lead agent with up to five parallel subagents,
+each working in its own git worktree with exclusive file ownership. The
+brief's priorities were the visual transformation, the disaster simulation,
+a gameplay incident, and presentation. Budget figures come from the course
+proxy (`docs/production/BUDGET.md`).
+
+### Baseline, then a shared look before delegation
+
+The baseline `pnpm check:local` passed 158/158. Before splitting the work,
+the lead built the shared render layer so every room agent would share one
+look: procedural painted-steel and tread-plate relief maps, an environment
+map, bloom, grade and a quality tier ([`4588879`](https://github.com/mattxreynolds/below-the-waterline/commit/4588879)). The first proof of
+concept failed visibly. three's studio `RoomEnvironment` reflected bright
+light boxes off the wet deck and the dial glass and made the gauges
+unreadable. It was replaced with a dim compartment environment before any
+agent started. The plan and the art-direction decision are in
+`docs/production/PLAN.md` and ADR 007.
+
+### Round 1: five parallel workstreams
+
+- Engine and Aux rooms: merged machinery dressing ([`351e1b7`](https://github.com/mattxreynolds/below-the-waterline/commit/351e1b7), [`6253e53`](https://github.com/mattxreynolds/below-the-waterline/commit/6253e53)).
+- Bridge and Comms: a storm exterior and dressing ([`1411927`](https://github.com/mattxreynolds/below-the-waterline/commit/1411927), [`626b7c9`](https://github.com/mattxreynolds/below-the-waterline/commit/626b7c9), [`93a871a`](https://github.com/mattxreynolds/below-the-waterline/commit/93a871a)).
+- Disaster FX: shader water, particles, ship motion, atmosphere ([`a5a7f4c`](https://github.com/mattxreynolds/below-the-waterline/commit/a5a7f4c)).
+- Gameplay: the compartment fire, an audit and ADR 006 ([`e378f7a`](https://github.com/mattxreynolds/below-the-waterline/commit/e378f7a)).
+- UI and audio: stencil identity, act cards, gauge, soundscape ([`0ce0a57`](https://github.com/mattxreynolds/below-the-waterline/commit/0ce0a57)).
+
+The lead reviewed every diff before merging. Two corrections came from
+review rather than tests:
+- The UI agent labelled the HUD gauge "WATER LEVEL" although it shows overall
+  danger. It was relabelled "SHIP DANGER" ([`91765b3`](https://github.com/mattxreynolds/below-the-waterline/commit/91765b3)).
+- The lead's own relief-map change broke a unit test (canvases built at
+  import under Node) ([`23b3a75`](https://github.com/mattxreynolds/below-the-waterline/commit/23b3a75)).
+
+### The regression that mattered: shaders vs. the 2-second rule
+
+After round 1 the browser specs that enforce real-time propagation began
+timing out (195/198). Every agent attributed this to machine load, and none
+proved it. On an idle machine the lead measured:
+- Long main-thread tasks of 4.2 s (Engine Room) and 6.5 s (Bridge) just
+  after mount.
+- A CPU profile with 7 s inside `getShaderInfoLog` and `getProgramInfoLog`.
+- Program links of 100–800 ms each, against none over 30 ms on the baseline
+  commit.
+
+Software rasterisers link the env-map and relief-map variants about 100×
+slower, and the freeze delayed socket views past the 2 s budget (invariant
+3). The fix ([`5835042`](https://github.com/mattxreynolds/below-the-waterline/commit/5835042), [`59f067e`](https://github.com/mattxreynolds/below-the-waterline/commit/59f067e)):
+- Software GL defaults to a `low` tier without those variants.
+- Take-controls waits for every staged mount to finish compiling.
+- The readiness probe tolerates one slow software frame.
+
+Freezes fell to 0.7 s and 1.6 s, and the full spec returned to green. This
+became a CLAUDE.md lesson.
+
+### Round 2 and integration
+
+- The fire's Bridge half (the procedure book) had been built but never
+  mounted, so the mechanic was unplayable. The lead mounted it and added a
+  two-profile browser spec that plays it through the real controls
+  ([`de2f607`](https://github.com/mattxreynolds/below-the-waterline/commit/de2f607), [`3d079d3`](https://github.com/mattxreynolds/below-the-waterline/commit/3d079d3)).
+- The wire-level secrecy spec was extended to the fire ([`c8b197a`](https://github.com/mattxreynolds/below-the-waterline/commit/c8b197a)).
+- Fire effects on both seats ([`4add6f9`](https://github.com/mattxreynolds/below-the-waterline/commit/4add6f9), [`135ab07`](https://github.com/mattxreynolds/below-the-waterline/commit/135ab07)).
+- End-of-voyage report, `/log/` page and cinematics ([`b62f2c4`](https://github.com/mattxreynolds/below-the-waterline/commit/b62f2c4),
+  [`03672c4`](https://github.com/mattxreynolds/below-the-waterline/commit/03672c4), [`6b4d71a`](https://github.com/mattxreynolds/below-the-waterline/commit/6b4d71a)).
+- The engine lighting pass ([`0d3e7f1`](https://github.com/mattxreynolds/below-the-waterline/commit/0d3e7f1)) and a `--repatch` screenshot option ([`3c5be8c`](https://github.com/mattxreynolds/below-the-waterline/commit/3c5be8c)).
+- After the merge, `browser-full-voyage` timed out at the ending cinematic.
+  A CPU profile showed the canvas being torn down and rebuilt
+  (`forceContextLoss` 3.4 s plus `getContext` 1 s on SwiftShader). The fix keeps one
+  canvas for the whole voyage and swaps its contents ([`9998843`](https://github.com/mattxreynolds/below-the-waterline/commit/9998843)).
+  The full local check was then 199/199.
+- The voyage-strip layout had been copied between the client debrief and the
+  server log page; it now lives in `shared/timeline.ts`, with unit tests
+  ([`aeddeff`](https://github.com/mattxreynolds/below-the-waterline/commit/aeddeff)).
+
+### Problems with running agents in parallel
+
+- Three agents rendering headless SwiftShader Chromium at once pushed the
+  load average to about 26, and the user reported the machine was slow.
+  Browser work was then serialised.
+- The first serialisation rule (`pgrep -fc chrome-headless-shell`) matched
+  the polling shells' own command lines, so all three agents deadlocked
+  waiting for zero. It was fixed to an exact process-name match.
+- The harness flagged one subagent with a security warning. The lead audited
+  its worktree, its settings and its diff (no process, file or network
+  calls; user strings escaped in server HTML) before merging.
+
+### What is and isn't evidence
+
+All balance and cooperation claims for the fire come from scripted
+simulations: 1 % of 300 blind sweeps resolved it, 1 of 60 reactive blind
+runs resolved it, and a talking crew resolved it 60/60. **No human has
+played the sprint build.** Visual quality was judged by the agent from
+screenshots.
+
+[STUDENT REVIEW: is the new look and the fire worth the added complexity
+for your definition of good? Does anything here need your own playtest
+before you claim it?]
+
 ## [STUDENT REVIEW] Your reflection
 
 What you decided, what surprised you, and what you would do differently.

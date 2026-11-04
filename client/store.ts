@@ -3,6 +3,7 @@
 
 import { create } from "zustand";
 import type { Fx, View } from "../shared/protocol.ts";
+import { storedQuality, type Quality } from "./scene/look/quality.ts";
 
 export type Screen = "home" | "join" | "voyage";
 export type Conn = "idle" | "connecting" | "online" | "offline";
@@ -28,6 +29,8 @@ type State = {
   sceneReady: boolean;
   /** A cinematic bookend is playing (scene/Cinematic.tsx): start is performance.now()/1000. */
   cinematic: { shot: "intro" | "survived" | "lost"; start: number } | null;
+  /** Render quality tier (scene/look/quality.ts): a per-viewer setting. */
+  quality: Quality;
 };
 
 export const useStore = create<State>(() => ({
@@ -45,6 +48,7 @@ export const useStore = create<State>(() => ({
   lastFx: [],
   sceneReady: false,
   cinematic: null,
+  quality: storedQuality(),
 }));
 
 let toastId = 0;

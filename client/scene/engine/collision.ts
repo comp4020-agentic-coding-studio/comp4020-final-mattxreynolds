@@ -54,6 +54,17 @@ export function engineLayout(auxOpen: () => boolean): RoomLayout {
       box(AUX_AT.panel[0] + 0.22, AUX_AT.panel[2], 0.46, 2.2), // generator plant panel
       box(AUX_AT.machine[0], AUX_AT.machine[2], 3.0, 1.1), // aux generator set
       box(-9.74, 3.6, 1.1, 0.75), // oil drums
+      // dressing (Dressing.tsx)
+      box(4.5, 2.6, 0.75, 0.9), // lube-oil tank
+      box(-4.15, 3.85, 0.85, 0.32), // lifejacket locker
+      box(1.75, 3.88, 0.25, 0.25), // extinguisher (south)
+      box(4.88, -0.98, 0.25, 0.25), // extinguisher (east)
+      box(-3.55, -0.9, 0.1, 2.95), // generator handrail
+      box(-5.8, -1.45, 0.85, 0.85), // aux lube-oil tank
+      box(-6.8, 3.65, 1.3, 0.62), // aux workbench
+      box(AUX_AT.machine[0] - 0.5, AUX_AT.machine[2] + 0.75, 2.0, 0.1), // aux handrail
+      box(AUX.minX + 0.13, 2.85, 0.28, 0.62), // aux lifejacket locker
+      box(AUX.maxX - 0.15, 3.35, 0.25, 0.25), // aux extinguisher
     ],
     spawn: [SPAWN_X, 1.6, SPAWN_Z],
     // face the EMERGENCY BUS lever (yaw 0 looks toward −Z)

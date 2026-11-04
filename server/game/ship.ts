@@ -3,7 +3,7 @@
 // station calls, and the evac accumulator. They run from Act II until the
 // voyage ends. Pure: time is passed in, effects are returned as Fx.
 
-import { CASCADE, FINALE, FLOOD, GRID, HULL } from "../../shared/config.ts";
+import { CASCADE, FINALE, FLOOD, GRID, HULL, INCIDENT } from "../../shared/config.ts";
 import { COMPARTMENTS, COMPARTMENT_LABEL, type Compartment } from "../../shared/glyphs.ts";
 import { SHIP_PHASES, type Circuit, type Fx } from "../../shared/protocol.ts";
 import { addDanger, mistake, note, rules, type Voyage } from "./state.ts";
@@ -15,11 +15,11 @@ export const shipLive = (v: Voyage): boolean => SHIP_PHASES.includes(v.phase);
 /** What the generator can deliver now: worn by every trip this voyage. */
 export function gridOutput(v: Voyage): number {
   const wear = Math.min(v.ship.powerTrips * GRID.wearPerPowerTrip, GRID.maxPowerWear) + v.ship.grid.trips * GRID.wearPerGridTrip;
-  return Math.max(GRID.minCapacity, GRID.baseCapacity + rules(v).capacity - wear);
+  return Math.max(GRID.minCapacity, GRID.baseCapacity + rules(v).capacity - wear - fireDerate(v));
 }
 
 export function gridWear(v: Voyage): number {
-  return GRID.baseCapacity + rules(v).capacity - gridOutput(v);
+  return Math.max(0, GRID.baseCapacity + rules(v).capacity - gridOutput(v) - fireDerate(v));
 }
 
 /** Per-circuit draw (the Bridge's distribution panel). */
@@ -118,6 +118,7 @@ export function inflowOf(v: Voyage, c: Compartment): number {
   const s = v.ship;
   let rate = v.config.flood.inflow[c] * r.inflow * (v.flood.stable ? HULL.shored : 1);
   rate += s.seams[c] + s.breach[c];
+  if (fireBurning(v) && v.config.incident.compartment === c) rate += INCIDENT.leak;
   if (v.phase === "ESCAPE") rate += FINALE.inflow * r.inflow;
   if (r.chain) {
     const i = COMPARTMENTS.indexOf(c);
@@ -230,10 +231,92 @@ function tickEvac(v: Voyage, dt: number, fx: Fx[]): void {
   }
 }
 
+// ------------------------------------------------------------- the fire
+
+export const fireBurning = (v: Voyage): boolean => v.ship.fire.state === "burning";
+
+/** The burning plant derates the generator once it is well alight. */
+export function fireDerate(v: Voyage): number {
+  return fireBurning(v) && v.ship.fire.intensity >= INCIDENT.derateAt ? INCIDENT.derate : 0;
+}
+
+/** Danger %/s from the fire itself. */
+export function fireDanger(v: Voyage): number {
+  return fireBurning(v) ? INCIDENT.dangerPerS * (v.ship.fire.intensity / 100) : 0;
+}
+
+/** Ignition is scheduled on the seconds spent in Acts III-IV (deterministic
+ * from the seed and play time); then it grows until put out or flashover. */
+function tickFire(v: Voyage, dt: number, fx: Fx[]): void {
+  const f = v.ship.fire;
+  const inc = v.config.incident;
+  if (f.state === "idle") {
+    if (v.phase !== "RADIO" && v.phase !== "CASCADE") return;
+    f.clockS += dt;
+    if (f.clockS >= inc.atS) {
+      f.state = "burning";
+      f.intensity = INCIDENT.startIntensity;
+      f.igniteAtMs = Math.round(v.elapsedMs);
+      fx.push({ k: "fire", ev: "ignite" });
+      note(v, "SHIP", "fireIgnite", `Fire broke out in the ${COMPARTMENT_LABEL[inc.compartment]}`, "bad");
+    }
+    return;
+  }
+  if (f.state !== "burning") return;
+  f.intensity = Math.min(100, f.intensity + INCIDENT.growPerS * dt);
+  if (f.intensity >= 100) {
+    f.state = "burnt";
+    f.thrown = [];
+    const c = inc.compartment;
+    v.ship.seams[c] = Math.min(HULL.seamLeak * 3, v.ship.seams[c] + HULL.seamLeak);
+    mistake(v, INCIDENT.dangerBurnout);
+    fx.push({ k: "fire", ev: "burnout" });
+    note(v, "SHIP", "fireBurnout", `The fire flashed over: ${COMPARTMENT_LABEL[c]} seams are cracked for good`, "bad");
+  }
+}
+
+/** The Engineer throws (on) or re-arms (off) the fire panel's isolators. */
+export function setIsolator(v: Voyage, index: number, on: boolean, fx: Fx[]): "wrong-phase" | "grid-down" | "too-fast" | null {
+  const f = v.ship.fire;
+  if (!fireBurning(v)) return "wrong-phase";
+  if (!gridUp(v)) return "grid-down";
+  if (v.elapsedMs < f.lockedUntilMs) return "too-fast";
+  if (!on) {
+    // re-arm: idempotent, free, and says nothing about which throws were right
+    f.thrown = [];
+    return null;
+  }
+  if (f.thrown.includes(index)) return null;
+  const proc = v.config.incident.procedures[v.config.incident.kind];
+  if (proc[f.thrown.length] !== index) {
+    f.thrown = [];
+    f.intensity = Math.min(100, f.intensity + INCIDENT.flare);
+    f.lockedUntilMs = v.elapsedMs + INCIDENT.lockMs;
+    f.flares++;
+    mistake(v, INCIDENT.dangerFlare);
+    fx.push({ k: "fire", ev: "flare" });
+    note(v, "ENGINEER", "fireFlare", "Wrong isolator: the fire flared and the panel reset", "bad");
+    if (f.intensity >= 100) f.intensity = 99.9; // flashover comes from the clock, never from the flare itself
+    return null;
+  }
+  f.thrown.push(index);
+  fx.push({ k: "fire", ev: "step" });
+  if (f.thrown.length === proc.length) {
+    f.state = "out";
+    f.intensity = 0;
+    f.thrown = [];
+    addDanger(v, -INCIDENT.dangerRelief);
+    fx.push({ k: "fire", ev: "out" });
+    note(v, "ENGINEER", "fireOut", `Fire out in the ${COMPARTMENT_LABEL[v.config.incident.compartment]}`, "good");
+  }
+  return null;
+}
+
 /** Advances every live ship system by dt seconds. */
 export function tickShip(v: Voyage, now: number, dt: number, fx: Fx[]): void {
   if (!shipLive(v)) return;
   tickGrid(v, now, dt, fx);
+  tickFire(v, dt, fx);
   tickWater(v, now, dt, fx);
   if (v.phase === "CASCADE") tickCascade(v, fx);
   tickEvac(v, dt, fx);

@@ -1,8 +1,12 @@
 # TODO
 
 ## CURRENT
-- Nothing in progress. Second production cycle complete; full spec passes
-  (158 tests: unit, app, browser).
+- Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md).
+  Rounds 1–2 integrated: shared look + quality tiers (ADR 007), Engine/Aux and
+  Bridge/Comms rebuilds, lighting, disaster FX, compartment fire (ADR 006),
+  UI/audio, debrief/log page, Gerstner-sea cinematics. One persistent canvas
+  across cinematics (ending freeze fix). Voyage-strip layout shared in
+  shared/timeline.ts. Now: final hardening, push, PR, handoff report.
 
 ## NEXT
 - Human playtests of the five-act voyage: is Act IV readable, is the

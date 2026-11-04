@@ -1,6 +1,6 @@
 // Seeded generation of every phase's hidden configuration (docs/PUZZLES.md).
 
-import { CASCADE, ESCAPE, FLOOD, POWER, RADIO } from "../../shared/config.ts";
+import { CASCADE, ESCAPE, FLOOD, INCIDENT, POWER, RADIO } from "../../shared/config.ts";
 import { BEARINGS, COMPARTMENTS, GLYPHS, SYSTEMS, type Compartment, type Glyph, type Pulse, type ShipSystem } from "../../shared/glyphs.ts";
 import { makeRng, type Rng } from "../../shared/rng.ts";
 
@@ -34,12 +34,29 @@ export type CascadeConfig = {
   calls: { atS: number; bearing: number }[];
 };
 
+/** The compartment fire. The Bridge reads `compartment` and `procedures`;
+ * the Engineer reads only the class glyph and the isolator glyphs. */
+export type IncidentConfig = {
+  /** seconds into Act III (or Act IV for practice) when it ignites */
+  atS: number;
+  compartment: Compartment;
+  /** index into `kinds`: the class actually burning */
+  kind: number;
+  /** glyph on each of the Engineer's isolator switches */
+  isolators: Glyph[];
+  /** symptom glyph of each fire class */
+  kinds: Glyph[];
+  /** per class: isolator indices to throw, in this order */
+  procedures: number[][];
+};
+
 export type PuzzleConfig = {
   power: PowerConfig;
   flood: FloodConfig;
   radio: RadioConfig;
   escape: EscapeConfig;
   cascade: CascadeConfig;
+  incident: IncidentConfig;
 };
 
 export function generatePuzzles(seed: number): PuzzleConfig {
@@ -51,7 +68,8 @@ export function generatePuzzles(seed: number): PuzzleConfig {
   // drawn last so earlier phases keep the configurations they had before
   // Act IV existed (old saves and fixed test seeds stay meaningful)
   const cascade = generateCascade(makeRng(seed ^ 0x5eed_ca5c), radio);
-  return { power, flood, radio, escape, cascade };
+  const incident = generateIncident(makeRng(seed ^ 0x1f1e_f12e));
+  return { power, flood, radio, escape, cascade, incident };
 }
 
 /** Every way to close one non-shorted feeder per system. */
@@ -154,4 +172,25 @@ function generateCascade(rng: Rng, radio: RadioConfig): CascadeConfig {
     bearing,
   }));
   return { breaches, calls };
+}
+
+function generateIncident(rng: Rng): IncidentConfig {
+  // 5 isolator glyphs + 3 class glyphs use all eight, so no glyph is shared
+  const glyphs = rng.shuffle(GLYPHS);
+  const isolators = glyphs.slice(0, INCIDENT.isolators);
+  const kinds = glyphs.slice(INCIDENT.isolators, INCIDENT.isolators + INCIDENT.kinds);
+  const all = isolators.map((_, i) => i);
+  const procedures: number[][] = [];
+  while (procedures.length < kinds.length) {
+    const p = rng.shuffle(all).slice(0, INCIDENT.steps);
+    if (!procedures.some((q) => q.join() === p.join())) procedures.push(p);
+  }
+  return {
+    atS: rng.int(INCIDENT.atMinS, INCIDENT.atMaxS),
+    compartment: rng.pick(COMPARTMENTS),
+    kind: rng.int(0, kinds.length - 1),
+    isolators,
+    kinds,
+    procedures,
+  };
 }

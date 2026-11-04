@@ -111,3 +111,18 @@ own judgement are marked `[STUDENT REVIEW]`.
   same phases (`stationMode(…, until)`), never on "my phase only".
 - Practice starts come from `scenario.ts` (built from the seed), never from
   a copied save state.
+- A shader change can break the real-time guarantee. CPU rasterisers link
+  big standard-material variants (PMREM env, normal/roughness maps) about
+  100× slower and freeze the page for seconds after mount, which delays
+  socket views past 2 s. Profile with two SwiftShader contexts, and add new
+  material features through the kits so the `low` tier can drop them
+  (ADR 007).
+- `ReadyProbe` must wait for every staged mount to finish compiling
+  (`scene/loading.ts`). Otherwise take-controls appears while a stage is
+  still compiling, and the first control press lands inside a freeze.
+- Visual claims need `scripts/screenshot.ts --quality high`. Headless
+  Chromium is a software renderer and defaults to the `low` tier.
+- Never remount the R3F `<Canvas>` mid-voyage (cinematic ↔ room, playing ↔
+  ended). Tearing down a WebGL context costs seconds on a software
+  rasteriser; swap the canvas *contents* and keep `<Game>` at a stable tree
+  position in `App.tsx`.

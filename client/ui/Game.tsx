@@ -1,6 +1,7 @@
 // The in-voyage screen: 3D scene + HUD + briefing/pause card.
 
 import { useEffect, useRef, useState } from "react";
+import { setQuality } from "../scene/look/quality.ts";
 import { MODE_RULES } from "../../shared/config.ts";
 import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE, type Phase } from "../../shared/protocol.ts";
 import { Scene } from "../scene/Scene.tsx";
@@ -30,6 +31,32 @@ function usePhaseBanner(phase: Phase, locked: boolean): Phase | null {
   return shown === phase ? shown : null;
 }
 
+/** A big stencilled act card on each phase change: ~2.5 s, skippable, never blocks input. */
+const ACT_CARD_MS = 2500;
+function ActCard({ phase }: { phase: Phase }) {
+  const [shown, setShown] = useState<Phase | null>(null);
+  const last = useRef<Phase | null>(null);
+  useEffect(() => {
+    if (last.current === phase) return;
+    last.current = phase;
+    if (!/^ACT /.test(PHASE_LABEL[phase] ?? "")) return setShown(null);
+    setShown(phase);
+    const t = setTimeout(() => setShown(null), ACT_CARD_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
+  if (!shown) return null;
+  const [act, name] = PHASE_LABEL[shown]!.split(" · ");
+  return (
+    <div className="act-card" data-testid="act-card" key={shown} aria-hidden>
+      <span className="act-num">{act}</span>
+      <span className="act-name">{name}</span>
+      <button className="act-skip" tabIndex={-1} onClick={() => setShown(null)}>skip</button>
+    </div>
+  );
+}
+
+const TREND_MARK: Record<string, string> = { STABLE: "▬ HOLDING", RISING: "▲ RISING", CRITICAL: "✖ CRITICAL", FALLING: "▼ FALLING" };
+
 const PHASE_LABEL: Record<string, string> = {
   PROLOGUE: "ACT I · IMPACT",
   POWER: "ACT I · EMERGENCY POWER",
@@ -57,6 +84,8 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const conn = useStore((s) => s.conn);
   const muted = useStore((s) => s.muted);
   const volume = useStore((s) => s.volume);
+  const quality = useStore((s) => s.quality);
+  const reducedMotion = useStore((s) => s.reducedMotion);
   const sceneReady = useStore((s) => s.sceneReady);
   const cinematic = useStore((s) => s.cinematic);
   const [gl] = useState(webglAvailable);
@@ -129,8 +158,12 @@ export function Game({ ended = false }: { ended?: boolean }) {
               <ShipStrip />
             </div>
             <div className={`flood ${view.trend.toLowerCase()}`} data-testid="flood">
-              FLOODING: {view.trend}
-              <span className="meter" aria-hidden><span style={{ width: `${view.danger}%` }} /></span>
+              <span className="flood-pct">{Math.round(view.danger)}%</span>
+              <span className="flood-label">SHIP DANGER · {TREND_MARK[view.trend] ?? view.trend}</span>
+              <span className="meter" aria-hidden>
+                <span style={{ width: `${view.danger}%` }} />
+                <i style={{ left: "25%" }} /><i style={{ left: "50%" }} /><i style={{ left: "75%" }} />
+              </span>
             </div>
           </div>
           <div className="reticle" aria-hidden>{prompt ? "◎" : "·"}</div>
@@ -149,6 +182,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
               <p><b>{partner?.callsign ?? "Partner"}</b> in the {partnerRoom} {banner.partner}</p>
             </div>
           )}
+          <ActCard phase={view.phase} />
           {muted && <div className="muted-tag">MUTED (M)</div>}
           {!locked && (
             <div className="overlay" onClick={(e) => e.target === e.currentTarget && lockCanvas()}>
@@ -177,6 +211,14 @@ export function Game({ ended = false }: { ended?: boolean }) {
                   </button>
                 )}
                 <p className="hint">Or click anywhere outside this card. Esc frees the mouse and brings this card back. Stuck? Press R here to return to your starting point.</p>
+                <div className="toggles">
+                  <button className="link" data-testid="gfx-toggle" onClick={() => setQuality(quality === "high" ? "low" : "high")}>
+                    Graphics: {quality === "high" ? "High" : "Low"}
+                  </button>
+                  <button className="link" data-testid="motion-toggle" onClick={() => useStore.setState((s) => ({ reducedMotion: !s.reducedMotion }))}>
+                    Reduced motion: {reducedMotion ? "On" : "Off"}
+                  </button>
+                </div>
                 <label className="volume">
                   Volume
                   <input
