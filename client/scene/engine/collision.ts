@@ -45,7 +45,7 @@ export function engineLayout(auxOpen: () => boolean): RoomLayout {
       box(-4.3, -0.9, 1.1, 2.7), // generator
       box(AT.manifold[0], 3.7, 3.7, 0.65), // valve manifold
       box(3.4, 3.55, 1.7, 0.8), // workbench
-      box(4.45, -1.85, 0.5, 0.5), // hand pump
+      box(4.45, -1.3, 0.5, 0.5), // hand pump
       box(4.85, 1.55, 0.3, 0.7), // abandon lever panel
       box(4.75, -3.75, 0.3, 0.3), // corner risers
       box(-4.75, 3.75, 0.3, 0.3),
