@@ -159,7 +159,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
             </div>
             <div className={`flood ${view.trend.toLowerCase()}`} data-testid="flood">
               <span className="flood-pct">{Math.round(view.danger)}%</span>
-              <span className="flood-label">WATER LEVEL · {TREND_MARK[view.trend] ?? view.trend}</span>
+              <span className="flood-label">SHIP DANGER · {TREND_MARK[view.trend] ?? view.trend}</span>
               <span className="meter" aria-hidden>
                 <span style={{ width: `${view.danger}%` }} />
                 <i style={{ left: "25%" }} /><i style={{ left: "50%" }} /><i style={{ left: "75%" }} />
