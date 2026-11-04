@@ -20,11 +20,15 @@ Durable state for the overnight sprint. If context is lost, start here.
 
 ## Workstreams
 - P3 ocean in Bridge — lead
-- P0 cinematics — 
-- P1 room audit — 
-- P2 QA — 
+- P0 cinematics — agent "cinematic" (worktree)
+- P1 room audit — agents "bridge-audit", "engine-audit" (worktrees)
+- P2 QA — agents qa-coop, qa-journey, qa-render (read-only reports → ISSUES.md by lead)
 
 ## Issue register
 See ISSUES.md.
 
 ## Log
+- 22:26 P3 fixed: 1e91a6f (sea mask under ship footprint; numeric check 1.32 m → -0.15 m; renders /tmp/btw-shots/wave).
+- 22:30 Spawned: cinematic (worktree, Cinematic.tsx), bridge-audit (worktree, client/scene/bridge + Bridge.tsx),
+  engine-audit (worktree, client/scene/engine + EngineRoom.tsx), QA-coop (read-only), QA-journey (read-only, browser),
+  QA-render (read-only, browser). Ports: cinematic 9110-9119, bridge 9120-9129, engine 9130-9139, QA 9140-9169.
