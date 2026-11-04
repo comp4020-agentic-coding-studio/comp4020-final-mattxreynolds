@@ -34,3 +34,4 @@ scripted browsers, screenshot inspection). No human playtesting.
 | BRIDGE-7 | Medium | EscapePanel | lever knob over label | fixed (lead-verified) |
 | BRIDGE-8 | — | Bridge CASCADE/emergency/fire/comms close-ups | audited by lead: davits guard grey square → fixed d4a275c (render /tmp/btw-shots/lead/davits); fire book, evac panel, CASCADE overview OK; EMERGENCY BUS plate 'occlusion' was the act-card overlay (clean in engine/final) | **fixed** |
 | CINE-1 | Medium | cinematic | survived 5.8s flat wall framing; dawn glint blotchy; lost-ending 4.7s mount gap; boxy superstructure close-ups | cinematic round 2 |
+| QA-BLACKOUT | Info | both rooms | BLACKOUT (lights circuit off) rendered: emergency-lamp red, all gauges/labels legible; floodwater stays bright vs dark room (stylistic, left) | verified /tmp/btw-shots/lead/blackout |
