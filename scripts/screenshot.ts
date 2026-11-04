@@ -5,6 +5,12 @@
 //
 //   node scripts/screenshot.ts --phase FLOOD --out /tmp/shots [--port 9100]
 //     [--patch '{"flood":{"pumps":[true,false,false]}}'] [--views "spawn;left;right;back"]
+//   node scripts/screenshot.ts --cinematic "1;9.5;20" [--ending survived|lost] [--live]
+//
+// Cinematic frames pin the cinematic clock (window.__btwCineClock) at each
+// time, so frames are deterministic however slow the software renderer is;
+// --live plays in real time instead. Each run also reports how long the
+// cinematic took to mount and the longest frame gap (a compile freeze).
 //
 // Views are ";"-separated; each is "name" or "name:x,z,yaw,pitch" (yaw radians
 // relative to the room's spawn direction).
@@ -31,6 +37,10 @@ const { values } = parseArgs({
     repatch: { type: "boolean", default: false },
     /** screenshot the opening cinematic at these seconds (e.g. "3;9;15") instead of rooms */
     cinematic: { type: "string" },
+    /** with --cinematic: capture an ending ("survived" | "lost") instead of the intro */
+    ending: { type: "string" },
+    /** with --cinematic: play in real time instead of pinning the cinematic clock */
+    live: { type: "boolean", default: false },
   },
 });
 
@@ -68,6 +78,18 @@ try {
       },
       [seat.code, seat.token, values.quality!],
     );
+    await ctx.addInitScript(() => {
+      // frame-gap monitor: the longest gap between animation frames since reset
+      const w = window as unknown as { __gap: { max: number; last: number; frames: number } };
+      w.__gap = { max: 0, last: performance.now(), frames: 0 };
+      const tick = (now: number) => {
+        w.__gap.max = Math.max(w.__gap.max, now - w.__gap.last);
+        w.__gap.last = now;
+        w.__gap.frames++;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
     const page = await ctx.newPage();
     page.on("pageerror", (e) => console.error(`[${name}] pageerror`, e));
     page.on("console", (m) => m.type() === "error" && console.error(`[${name}]`, m.text()));
@@ -77,16 +99,45 @@ try {
   }
   if (values.cinematic) {
     const [, page] = pages[0];
-    await page.getByTestId("cinematic").waitFor();
+    const times = values.cinematic.split(";").map(Number);
+    type Gap = { max: number; frames: number; last: number };
+    const pin = (sec: number) => page.evaluate((x) => void ((window as unknown as { __btwCineClock?: number }).__btwCineClock = x), sec);
+    const gap = () => page.evaluate(() => (window as unknown as { __gap: Gap }).__gap);
+    const resetGap = () => page.evaluate(() => void Object.assign((window as unknown as { __gap: Gap }).__gap, { max: 0, frames: 0, last: performance.now() }));
+    const prefix = values.ending ? `ending-${values.ending}` : "cinematic";
+    if (values.ending) {
+      for (const [, p] of pages) await p.getByTestId("skip-cinematic").click({ timeout: 8000 }).catch(() => {});
+      await page.getByTestId("take-controls").waitFor({ timeout: 60000 });
+      if (!values.live) await pin(times[0]);
+      await resetGap();
+      await post(`/api/test/voyages/${a.code}/patch`, { phase: values.ending === "lost" ? "LOST" : "SURVIVED", practice: false });
+    } else if (!values.live) await pin(times[0]);
     const t0 = Date.now();
-    for (const sec of values.cinematic.split(";").map(Number)) {
-      await page.waitForTimeout(Math.max(0, sec * 1000 - (Date.now() - t0)));
-      const file = join(values.out!, `cinematic-${sec}s.png`);
+    await page.getByTestId("cinematic").waitFor();
+    const mounted = Date.now() - t0;
+    for (const sec of times) {
+      if (values.live) await page.waitForTimeout(Math.max(0, sec * 1000 - (Date.now() - t0)));
+      else {
+        await pin(sec);
+        // two frames, so every per-frame update has landed
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      }
+      const file = join(values.out!, `${prefix}-${sec}s.png`);
       await page.screenshot({ path: file });
       console.log(file);
     }
-    process.exitCode = 0;
-  }
+    const g = await gap();
+    console.log(`cinematic visible ${mounted} ms after request; longest frame gap ${Math.round(g.max)} ms over ${g.frames} frames`);
+  } else await roomShots(pages, a.code);
+} finally {
+  await browser.close();
+  srv.kill();
+  await new Promise((r) => srv.once("exit", r));
+  rmSync(dir, { recursive: true, force: true });
+}
+
+async function roomShots(pages: [string, Page][], code: string): Promise<void> {
+  const a = { code };
   // skip the opening cinematic on both seats (Space), as a player can
   for (const [, page] of pages) {
     await page.getByTestId("skip-cinematic").click({ timeout: 8000 }).catch(() => {});
@@ -116,9 +167,4 @@ try {
       console.log(file);
     }
   }
-} finally {
-  await browser.close();
-  srv.kill();
-  await new Promise((r) => srv.once("exit", r));
-  rmSync(dir, { recursive: true, force: true });
 }

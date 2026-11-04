@@ -535,6 +535,39 @@ const FX_SOUND: Partial<Record<Fx["k"], (fx: Fx) => void>> = {
 };
 
 /** Call once at startup. Audio begins after the first pointer/key gesture. */
+/** One-shot sound cues for the cinematic bookends (scene/cinematic/timeline.ts). */
+export function cinematicCue(cue: "horn" | "impact" | "thunder" | "splash" | "groan" | "alarm"): void {
+  if (!ensure() || !started) return;
+  switch (cue) {
+    case "horn": // the other ship's whistle, distant and too late
+      tone(98, 1.6, 0.12, "sawtooth", 0, 96);
+      tone(147, 1.6, 0.07, "sawtooth", 0, 145);
+      break;
+    case "impact": // steel into steel: a deep thump, a tearing scrape, rivets going
+      tone(42, 1.6, 0.6, "sine", 0, 28);
+      noise(1.2, 120, 0.8, 0.9, "lowpass");
+      noise(2.2, 900, 2, 0.35, "bandpass", 0.15);
+      tone(260, 1.8, 0.06, "sawtooth", 0.2, 140);
+      for (let i = 0; i < 5; i++) noise(0.05, 2600, 6, 0.25, "bandpass", 0.3 + i * 0.17 + Math.random() * 0.1);
+      break;
+    case "thunder":
+      sfx.thunder();
+      break;
+    case "splash": // a sea breaking over the bow
+      noise(1.4, 700, 0.6, 0.45, "lowpass");
+      noise(0.9, 2400, 0.8, 0.12, "bandpass", 0.1);
+      break;
+    case "groan": // the hull working as she floods
+      sfx.creak();
+      tone(60, 2.4, 0.18, "sawtooth", 0.1, 44);
+      break;
+    case "alarm": // general alarm: seven short, one long
+      for (let i = 0; i < 7; i++) tone(440, 0.22, 0.06, "square", i * 0.4);
+      tone(440, 1.2, 0.06, "square", 2.9);
+      break;
+  }
+}
+
 export function initAudio(): void {
   if (started) return;
   started = true;
