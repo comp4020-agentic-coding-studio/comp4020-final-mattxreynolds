@@ -27,6 +27,7 @@ import { FloodConsole } from "./bridge/FloodConsole.tsx";
 import { PowerConsole } from "./bridge/PowerConsole.tsx";
 import { ChartTable, Codebook, RadioDesk } from "./bridge/RadioDesk.tsx";
 import { Decor } from "./bridge/Decor.tsx";
+import { Dressing, DRESS_SOLIDS } from "./bridge/Dressing.tsx";
 import { COMMS_DOOR, RoomLights, RoomShell } from "./bridge/Room.tsx";
 import { COMMS, CommsDoor, commsOpen, CommsRoom } from "./bridge/Comms.tsx";
 import { Staged, Warm } from "./bridge/kit.tsx";
@@ -66,6 +67,7 @@ export const BRIDGE_LAYOUT: RoomLayout = {
     box(AT.flood.x, AT.flood.z, AT.flood.w, DEPTH),
     box(AT.radio.x, AT.radio.z, DEPTH, AT.radio.w),
     box(AT.chart.x, AT.chart.z, 1.24, 1.05),
+    ...Object.values(DRESS_SOLIDS).map((d) => box(d.x, d.z, d.w, d.d)),
     // Comms Room furniture
     box(COMMS.dist.x, COMMS.dist.z, COMMS.dist.w, DEPTH),
     box(COMMS.call.x, COMMS.call.z, COMMS.call.w, DEPTH),
@@ -108,6 +110,7 @@ export function Bridge() {
       </Staged>
       <Staged after={STAGE * 6}>
         <Decor />
+        <Dressing />
       </Staged>
       <Staged after={STAGE * 7}>
         <CommsRoom />
