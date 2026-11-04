@@ -149,41 +149,254 @@ const clock = (ms: number): string => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** A voyage's debrief, server-rendered (no script needed): the flooding
- * timeline as inline SVG, highlights, the ordered event log and lessons. */
-export function debriefPage(code: string, d: Debrief, crew: { engineer: string | null; navigator: string | null }): string {
-  const W = 720;
-  const H = 200;
+// ---- the voyage strip, server-side ------------------------------------------
+// Mirrors VoyageStrip/turningPoints/laneOf in client/ui/Debrief.tsx (the
+// production image ships server/ and shared/ only, so it can't import the
+// client). Keep the constants, marker kinds and shapes in step.
+
+type MarkKind = "bad" | "good" | "peak" | "end";
+type Mark = { t: number; kind: MarkKind; label: string; detail: string };
+const MARK_LABEL: Record<string, [string, MarkKind]> = {
+  trip: ["BREAKER TRIP", "bad"],
+  gridTrip: ["GENERATOR TRIP", "bad"],
+  burst: ["PUMP BURST", "bad"],
+  lost: ["COMPARTMENT LOST", "bad"],
+  callMissed: ["CALL MISSED", "bad"],
+  wrongStation: ["WRONG STATION", "bad"],
+  fireIgnite: ["FIRE", "bad"],
+  fireBurnout: ["FLASHOVER", "bad"],
+  davits: ["DAVITS DROPPED", "bad"],
+  powerOnline: ["POWER ON", "good"],
+  contact: ["MAYDAY HEARD", "good"],
+  floodStable: ["HULL SHORED", "good"],
+  fireOut: ["FIRE OUT", "good"],
+  doorOpen: ["DOOR OPEN", "good"],
+};
+
+function turningPoints(d: Debrief): Mark[] {
   const dur = Math.max(1000, d.durationMs);
-  const x = (t: number) => (34 + (t / dur) * (W - 44)).toFixed(1);
-  const y = (v: number) => (12 + (1 - v / 100) * (H - 34)).toFixed(1);
-  const line = (pick: (s: Debrief["samples"][number]) => number) =>
-    d.samples.map((s, i) => `${i ? "L" : "M"}${x(s.t)},${y(pick(s))}`).join(" ");
-  const series = [
-    { d: line((s) => s.danger), style: "stroke:#b23a2a;stroke-width:3", label: "Ship flooding" },
-    ...COMPARTMENTS.map((c, i) => ({ d: line((s) => s.water[i]), style: `stroke:#1d5a7a;stroke-dasharray:${["6 4", "2 3", "10 3 2 3"][i]}`, label: COMPARTMENT_LABEL[c] })),
-    { d: line((s) => s.heat), style: "stroke:#a07a10;stroke-dasharray:1 4", label: "Generator heat" },
-  ];
-  const acts = (Object.entries(d.actTimes) as [string, number][]).map(([a, t]) => ({ act: Number(a) as Act, t }));
-  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Flooding timeline" style="width:100%;height:auto;background:#fffdf6;border:1px solid var(--rule)">
-${[0, 50, 100].map((v) => `<line x1="34" x2="${W - 10}" y1="${y(v)}" y2="${y(v)}" stroke="#0001"/><text x="30" y="${Number(y(v)) + 3}" font-size="10" text-anchor="end">${v}</text>`).join("")}
-${acts.map(({ act, t }) => `<line x1="${x(t)}" x2="${x(t)}" y1="12" y2="${H - 22}" stroke="#c9bfa6" stroke-dasharray="3 3"/><text x="${Number(x(t)) + 3}" y="${H - 6}" font-size="10">${ROMAN[act]}</text>`).join("")}
-${series.map((s) => `<path d="${s.d}" fill="none" style="${s.style}"/>`).join("")}
-</svg>
-<p class="muted">${series.map((s) => escapeHtml(s.label)).join(" · ")} (dash patterns tell them apart)</p>`;
-  const body = `<h1>Debrief — voyage ${escapeHtml(code)}</h1>
-<p><b class="${d.result === "SURVIVED" ? "survived" : "lost"}">${d.result}</b> · ${d.practice ? `PRACTICE from Act ${ROMAN[d.practice]}` : "FULL VOYAGE"} ·
-${escapeHtml(MODE_RULES[d.mode]?.title ?? d.mode)} · ${clock(d.durationMs)} · Engineer ${escapeHtml(crew.engineer ?? "—")}, Radio Officer ${escapeHtml(crew.navigator ?? "—")}</p>
-<div class="stats">${d.highlights.map((h) => `<div><b>${escapeHtml(h.value)}</b>${escapeHtml(h.label)}<br><span class="muted">${escapeHtml(h.detail)}</span></div>`).join("")}</div>
-${svg}
+  const marks: (Mark & { k: string; n: number })[] = [];
+  for (const e of d.events) {
+    const def = Object.hasOwn(MARK_LABEL, e.k) ? MARK_LABEL[e.k] : null;
+    if (!def) continue;
+    if (e.k === "lost" && !/flooded completely/.test(e.text)) continue;
+    const prev = marks.findLast((m) => m.k === e.k);
+    if (prev && e.t - prev.t < dur * 0.06) {
+      prev.n++;
+      continue;
+    }
+    marks.push({ t: e.t, kind: def[1], label: def[0], detail: e.text, k: e.k, n: 1 });
+  }
+  const peak = d.samples.reduce<Debrief["samples"][number] | null>((b, s) => (!b || s.danger > b.danger ? s : b), null);
+  if (peak && peak.danger >= 25 && peak.danger < 100) {
+    marks.push({ t: peak.t, kind: "peak", label: `CLOSEST CALL ${Math.round(peak.danger)}%`, detail: "The worst the flooding got", k: "peak", n: 1 });
+  }
+  const out = marks
+    .sort((a, b) => a.t - b.t)
+    .slice(0, 14)
+    .map(({ t, kind, label, detail, n }) => ({ t, kind, detail, label: n > 1 ? `${label} ×${n}` : label }));
+  out.push({ t: d.durationMs, kind: "end", label: d.result === "SURVIVED" ? "ESCAPED" : "SHIP LOST", detail: d.result === "SURVIVED" ? "Both crew off together" : "The flooding reached 100%" });
+  return out;
+}
+
+const SW = 720;
+const SH = 228;
+const SP = { l: 36, r: 14, t: 36, b: 148 };
+const TRACK = 164;
+const LANES = [184, 200, 216];
+const labelW = (s: string) => s.length * 6 + 8;
+
+function lanesOf(marks: { x: number; label: string; kind: MarkKind }[]): { lane: number; anchor: string; lx: number }[] {
+  const taken: [number, number][][] = LANES.map(() => []);
+  const out: { lane: number; anchor: string; lx: number }[] = [];
+  const order = marks.map((_, i) => i).sort((a, b) => Number(marks[b].kind === "end" || marks[b].kind === "peak") - Number(marks[a].kind === "end" || marks[a].kind === "peak") || a - b);
+  for (const i of order) {
+    const { x, label } = marks[i];
+    const w = labelW(label);
+    const anchor = x - w / 2 < 4 ? "start" : x + w / 2 > SW - 4 ? "end" : "middle";
+    const left = anchor === "start" ? x - 4 : anchor === "end" ? x - w + 4 : x - w / 2;
+    const right = left + w;
+    const lane = taken.findIndex((row) => row.every(([l, r]) => right + 10 < l || left > r + 10));
+    if (lane >= 0) taken[lane].push([left, right]);
+    out[i] = { lane, anchor, lx: anchor === "start" ? x - 4 : anchor === "end" ? x + 4 : x };
+  }
+  return out;
+}
+
+const glyph = (kind: MarkKind, x: number, y: number): string =>
+  kind === "bad"
+    ? `<path class="mk mk-bad" transform="translate(${x},${y})" d="M-5.5,-4 L5.5,-4 L0,5.5 Z"/>`
+    : kind === "good"
+      ? `<circle class="mk mk-good" cx="${x}" cy="${y}" r="5"/>`
+      : kind === "peak"
+        ? `<path class="mk mk-peak" transform="translate(${x},${y})" d="M0,-6 L6,0 L0,6 L-6,0 Z"/>`
+        : `<rect class="mk mk-end" x="${x - 5}" y="${y - 5}" width="10" height="10"/>`;
+
+function voyageStrip(d: Debrief): string {
+  const dur = Math.max(1000, d.durationMs);
+  const f = (n: number) => n.toFixed(1);
+  const x = (t: number) => SP.l + (Math.min(t, dur) / dur) * (SW - SP.l - SP.r);
+  const y = (v: number) => SP.t + (1 - Math.min(100, v) / 100) * (SP.b - SP.t);
+  const nearest = (t: number) => d.samples.reduce<Debrief["samples"][number] | null>((b, s) => (!b || Math.abs(s.t - t) < Math.abs(b.t - t) ? s : b), null);
+  const pts = d.samples.map((s) => [x(s.t), y(s.danger)] as const);
+  const line = pts.map(([px, py], i) => `${i ? "L" : "M"}${f(px)},${f(py)}`).join(" ");
+  const area = pts.length ? `${line} L${f(pts[pts.length - 1][0])},${SP.b} L${f(pts[0][0])},${SP.b} Z` : "";
+  const list = (Object.entries(d.actTimes) as [string, number][]).map(([a, t]) => ({ act: Number(a) as Act, t })).sort((a, b) => a.t - b.t);
+  const acts = list.map((a, i) => ({ ...a, end: list[i + 1]?.t ?? dur }));
+  const marks = turningPoints(d);
+  const lanes = lanesOf(marks.map((m) => ({ x: x(m.t), label: m.label, kind: m.kind })));
+  const peak = Math.round(Math.max(0, ...d.samples.map((s) => s.danger)));
+  const reached = acts[acts.length - 1];
+  const aria = `Voyage timeline: ship danger from 0 to ${peak}% over ${clock(d.durationMs)}${reached ? `, reaching Act ${ROMAN[reached.act]}` : ""}. Turning points: ${marks.map((m) => `${clock(m.t)} ${m.label}`).join("; ")}.`;
+  const bands = acts
+    .map((a, i) => {
+      const x0 = x(a.t);
+      const w = x(a.end) - x0;
+      const full = `${ROMAN[a.act]} · ${ACT_TITLE[a.act].toUpperCase()}`;
+      const label = labelW(full) < w ? full : labelW(ROMAN[a.act]) < w + 6 ? ROMAN[a.act] : "";
+      return `<rect x="${f(x0)}" y="${SP.t}" width="${f(Math.max(0, w))}" height="${SP.b - SP.t}" class="band${i % 2 ? " odd" : ""}"/><line x1="${f(x0)}" x2="${f(x0)}" y1="4" y2="${SP.b}" class="act-edge"/><text x="${f(x0 + 4)}" y="13" class="act-label">${escapeHtml(label)}</text>`;
+    })
+    .join("");
+  const grid = [25, 50, 75]
+    .map((v) => `<line x1="${SP.l}" x2="${SW - SP.r}" y1="${f(y(v))}" y2="${f(y(v))}" class="grid"/><text x="${SP.l - 5}" y="${f(y(v) + 3)}" class="axis" text-anchor="end">${v}</text>`)
+    .join("");
+  const markSvg = marks
+    .map((m, i) => {
+      const mx = x(m.t);
+      const my = y(m.kind === "end" && d.result === "LOST" ? 100 : (nearest(m.t)?.danger ?? 0));
+      const l = lanes[i];
+      return `<g class="strip-mark ${m.kind}"><title>${escapeHtml(`${clock(m.t)} ${m.label}: ${m.detail}`)}</title><line x1="${f(mx)}" x2="${f(mx)}" y1="${f(my)}" y2="${TRACK - 7}" class="leader"/><circle cx="${f(mx)}" cy="${f(my)}" r="2.2" class="on-curve"/>${glyph(m.kind, Number(f(mx)), TRACK)}${l.lane >= 0 ? `<line x1="${f(mx)}" x2="${f(mx)}" y1="${TRACK + 7}" y2="${LANES[l.lane] - 9}" class="leader faint"/><text x="${f(l.lx)}" y="${LANES[l.lane]}" text-anchor="${l.anchor}" class="mark-label">${escapeHtml(m.label)}</text>` : ""}</g>`;
+    })
+    .join("");
+  const key = (k: MarkKind, label: string) => `<span><svg width="14" height="14" viewBox="-7 -7 14 14" aria-hidden="true">${glyph(k, 0, 0)}</svg> ${label}</span>`;
+  return `<figure class="strip-fig"><div class="strip-scroll">
+<svg viewBox="0 0 ${SW} ${SH}" class="voyage-strip" role="img" aria-label="${escapeHtml(aria)}">
+<defs><linearGradient id="strip-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e86a50" stop-opacity="0.55"/><stop offset="1" stop-color="#e86a50" stop-opacity="0.04"/></linearGradient></defs>
+${bands}${grid}
+<line x1="${SP.l}" x2="${SW - SP.r}" y1="${y(100)}" y2="${y(100)}" class="limit"/><text x="${SP.l - 5}" y="${y(100) + 3}" class="axis" text-anchor="end">100</text>
+<text x="${SW - SP.r - 2}" y="${y(100) - 5}" class="axis limit-label" text-anchor="end">SHIP LOST AT 100%</text>
+<line x1="${SP.l}" x2="${SW - SP.r}" y1="${SP.b}" y2="${SP.b}" class="base"/><text x="${SP.l - 5}" y="${SP.b + 3}" class="axis" text-anchor="end">0</text>
+${area ? `<path d="${area}" fill="url(#strip-fill)"/>` : ""}${line ? `<path d="${line}" class="danger-line"/>` : ""}
+${markSvg}
+</svg></div>
+<p class="swipe-hint" aria-hidden="true">◂ swipe the timeline ▸</p>
+<figcaption class="strip-key"><span><svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" class="danger-line"/></svg> ship danger %</span>${key("bad", "setback")}${key("good", "recovery")}${key("peak", "closest call")}${key("end", "end of voyage")}<span><svg width="10" height="14" aria-hidden="true"><line x1="5" x2="5" y1="0" y2="14" class="act-edge"/></svg> act boundary</span></figcaption>
+</figure>`;
+}
+
+/** The log page's own look: the in-game voyage report (dark panel, stencil
+ * headings, mono figures). Scoped to this page; /readme/ and /history/ keep
+ * the shared paper style. */
+const REPORT_STYLE = `
+  @import url("https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Share+Tech+Mono&display=swap");
+  :root { --stencil: "Stardos Stencil", "Arial Black", Impact, sans-serif; --mono: "Share Tech Mono", ui-monospace, Menlo, monospace;
+    --r-ink:#e9e4d6; --r-dim:#9fb0b8; --r-line:#ffffff1c; --r-gold:#f0c674; --r-bad:#e86a50; --r-good:#6cc27b; }
+  body { background: #071219 radial-gradient(ellipse at top, #1d3b4d 0%, #0f2430 60%, #071219 100%) no-repeat; background-size: 100% 100vh; }
+  main td { vertical-align: baseline; }
+  main { max-width: 62rem; background:#0c171d; color:var(--r-ink); border:1px solid var(--r-line); border-top:6px solid var(--r-gold); }
+  main:has(#report.rep-lost) { border-top-color: var(--r-bad); } main:has(#report.rep-survived) { border-top-color: var(--r-good); }
+  main a { color:#8fc9e6; }
+  .report-head { text-align:center; }
+  .kicker { font:0.78rem var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--r-dim); margin:0; }
+  .kicker .pill { margin-left:.3rem; }
+  main h1 { border:0; font:1rem var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--r-dim); margin:.3rem 0 0; padding:0; }
+  .outcome { font-family:var(--stencil); font-size:clamp(2.4rem, 9vw, 4.6rem); line-height:.95; text-transform:uppercase; letter-spacing:.06em; margin:.2em 0 .15em; text-shadow:0 4px 0 #0009; }
+  .outcome.o-survived { color:var(--r-good); } .outcome.o-lost { color:var(--r-bad); }
+  .reached { display:inline-block; font:1.15rem var(--stencil); letter-spacing:.22em; text-transform:uppercase; color:var(--r-gold); border-top:2px solid; border-bottom:2px solid; padding:0 .9rem; margin:.2rem 0; }
+  .meta { font:.85rem var(--mono); color:var(--r-dim); letter-spacing:.06em; }
+  .cause { color:var(--r-bad); font-weight:700; }
+  main h2 { font:.95rem var(--stencil); letter-spacing:.2em; text-transform:uppercase; color:var(--r-gold); border:0; display:flex; align-items:center; gap:.6rem; margin:2rem 0 .6rem; }
+  main h2::after { content:""; flex:1; height:1px; background:var(--r-line); }
+  .strip-fig { margin:0; background:#071015; border:1px solid var(--r-line); border-radius:4px; padding:.5rem .5rem .4rem; }
+  .strip-scroll { overflow-x:auto; }
+  .voyage-strip { display:block; width:100%; min-width:560px; height:auto; font-family:var(--mono); }
+  .band { fill:#ffffff05; } .band.odd { fill:#ffffff0c; }
+  .act-edge { stroke:#f0c67499; stroke-dasharray:3 3; }
+  .act-label { fill:var(--r-gold); font-size:9.5px; letter-spacing:.1em; }
+  .voyage-strip .grid { stroke:#ffffff12; } .voyage-strip .base { stroke:#ffffff44; }
+  .voyage-strip .limit { stroke:#e86a5088; stroke-dasharray:6 3; }
+  .voyage-strip .axis { fill:#8796a0; font-size:9px; } .voyage-strip .limit-label { fill:#e86a50cc; font-size:8.5px; letter-spacing:.08em; }
+  .danger-line { fill:none; stroke:#e86a50; stroke-width:2.4; stroke-linejoin:round; }
+  .leader { stroke:#ffffff40; stroke-width:1; } .leader.faint { stroke:#ffffff22; }
+  .on-curve { fill:#fff; }
+  .mark-label { fill:#dfe7ea; font-size:9.5px; letter-spacing:.04em; }
+  .strip-mark.bad .mark-label { fill:#f2a593; } .strip-mark.good .mark-label { fill:#a6dcae; }
+  .strip-mark.peak .mark-label, .strip-mark.end .mark-label { fill:#fff; font-weight:700; }
+  .mk { stroke:#071015; stroke-width:1.5; } .mk-bad { fill:#e86a50; } .mk-good { fill:#6cc27b; } .mk-peak { fill:#f0c674; } .mk-end { fill:#e9e4d6; }
+  .strip-key { display:flex; flex-wrap:wrap; gap:.25rem 1rem; padding:.4rem .2rem 0; font:.75rem var(--mono); color:var(--r-dim); }
+  .strip-key span { display:inline-flex; align-items:center; gap:.35rem; }
+  .swipe-hint { display:none; margin:.2rem 0 0; text-align:center; font:.72rem var(--mono); letter-spacing:.1em; color:var(--r-dim); }
+  .tp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 13.5rem), 1fr)); gap:.6rem; }
+  .tp { display:flex; flex-direction:column; gap:.1rem; padding:.65rem .8rem .7rem; background:#101f27; border:1px solid var(--r-line); border-left:5px solid var(--r-gold); border-radius:3px; }
+  .tp.good { border-left-color:var(--r-good); } .tp.bad { border-left-color:var(--r-bad); }
+  .tp-tone { font:700 .66rem var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--r-gold); }
+  .tp.good .tp-tone { color:#a6dcae; } .tp.bad .tp-tone { color:#f2a593; }
+  .tp-label { font:.8rem var(--stencil); letter-spacing:.14em; }
+  .tp-value { font:1.5rem/1.15 var(--mono); color:#fff; }
+  .tp-detail { font-size:.82rem; color:var(--r-dim); }
+  .lesson-cards { list-style:none; margin:0; padding:0; display:grid; gap:.45rem; }
+  .lesson-cards li { display:grid; grid-template-columns:2.2rem 1fr; gap:.6rem; background:#e9e4d6; color:var(--ink); border-radius:3px; padding:.55rem .8rem; box-shadow:0 2px 0 #0006; }
+  .lesson-n { font:1.2rem/1.1 var(--stencil); color:var(--accent); }
+  main table { font-size:.9rem; } main th { color:var(--r-dim); } main th, main td { border-bottom-color:var(--r-line); }
+  table.log td:first-child, main table:not(.log) td:last-child { font-family:var(--mono); white-space:nowrap; }
+  td.ev-bad { color:#f2a593; } td.ev-good { color:#a6dcae; } tr.act td { color:var(--r-gold); font-weight:700; }
+  .who { font:700 .72rem var(--mono); letter-spacing:.08em; color:var(--r-dim); }
+  .crew-stats { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 9rem), 1fr)); gap:.45rem; margin:0; }
+  .crew-stats div { background:#101f27; border:1px solid var(--r-line); border-radius:3px; padding:.4rem .6rem; }
+  .crew-stats dt { font:700 .65rem var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--r-dim); }
+  .crew-stats dd { margin:0; font:1.15rem var(--mono); color:#fff; overflow-wrap:anywhere; }
+  .actions { margin-top:2rem; padding-top:1.1rem; border-top:1px solid var(--r-line); display:flex; flex-wrap:wrap; gap:.8rem; align-items:center; justify-content:center; }
+  .actions .ghost { padding:.55rem 1rem; border:2px solid #e9e4d6aa; border-radius:4px; color:var(--r-ink); text-decoration:none; font:700 .9rem var(--mono); letter-spacing:.06em; text-transform:uppercase; }
+  .pill { background:#2a3a42; color:var(--r-ink); }
+  @media (max-width: 640px) {
+    main { margin:0; border-radius:0; }
+    .swipe-hint { display:block; }
+    .actions > * { flex:1 1 100%; text-align:center; }
+  }
+`;
+
+const TONE: Record<string, [string, string]> = { good: ["▲", "Went right"], bad: ["▼", "Cost you"], info: ["◆", "Note"] };
+
+/** A voyage's debrief, server-rendered (no script needed): the outcome, the
+ * voyage strip as inline SVG, turning points, lessons, crew, the ordered
+ * event log and act times — the in-game voyage report's visual language. */
+export function debriefPage(code: string, d: Debrief, crew: { engineer: string | null; navigator: string | null }): string {
+  const survived = d.result === "SURVIVED";
+  const acts = (Object.entries(d.actTimes) as [string, number][]).map(([a, t]) => ({ act: Number(a) as Act, t })).sort((a, b) => a.t - b.t);
+  const reached = acts[acts.length - 1]?.act ?? 1;
+  const lostLine = d.events.findLast((e) => e.k === "lost")?.text;
+  const who = (a: string) => (a === "SHIP" ? "Ship" : a === "ENGINEER" ? "Engineer" : "Radio Officer");
+  const body = `<style>${REPORT_STYLE}</style>
+<div class="rep-${survived ? "survived" : "lost"}" id="report">
+<header class="report-head">
+<p class="kicker">Ship No. ${escapeHtml(d.shipNo)} ${d.practice ? `<span class="pill practice">PRACTICE FROM ACT ${ROMAN[d.practice]}</span>` : `<span class="pill">FULL VOYAGE</span>`}${d.mode !== "STANDARD" ? ` <span class="pill mode">${escapeHtml(MODE_RULES[d.mode]?.title ?? d.mode)}</span>` : ""}</p>
+<h1>Debrief — voyage ${escapeHtml(code)}</h1>
+<p class="outcome ${survived ? "o-survived" : "o-lost"}">${survived ? "▲ Survived" : "▼ Lost"}</p>
+<p class="reached">${survived ? "All five acts" : `Act ${ROMAN[reached]} · ${escapeHtml(ACT_TITLE[reached as Act])}`}</p>
+<p class="meta">${d.practice ? `PRACTICE from Act ${ROMAN[d.practice]}` : "FULL VOYAGE"} · ${escapeHtml(MODE_RULES[d.mode]?.title ?? d.mode)} · ${clock(d.durationMs)} · Engineer ${escapeHtml(crew.engineer ?? "—")}, Radio Officer ${escapeHtml(crew.navigator ?? "—")}</p>
+${!survived && lostLine ? `<p class="cause">${escapeHtml(lostLine)}.</p>` : ""}
+</header>
+<h2>The voyage</h2>
+${voyageStrip(d)}
+<h2>Turning points</h2>
+<div class="tp-grid">${d.highlights.map((h) => `<div class="tp ${h.tone}"><span class="tp-tone"><span aria-hidden="true">${TONE[h.tone][0]}</span> ${TONE[h.tone][1]}</span><span class="tp-label">${escapeHtml(h.label)}</span><b class="tp-value">${escapeHtml(h.value)}</b><span class="tp-detail">${escapeHtml(h.detail)}</span></div>`).join("")}</div>
 <h2>What decided it</h2>
-<ul>${d.lessons.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>
+<ol class="lesson-cards">${d.lessons.map((l, i) => `<li><span class="lesson-n" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span><span>${escapeHtml(l)}</span></li>`).join("")}</ol>
+<h2>Crew</h2>
+<dl class="crew-stats">
+<div><dt>Engineer</dt><dd>${escapeHtml(crew.engineer ?? "—")}</dd></div>
+<div><dt>Radio Officer</dt><dd>${escapeHtml(crew.navigator ?? "—")}</dd></div>
+<div><dt>Time</dt><dd>${clock(d.durationMs)}</dd></div>
+<div><dt>Reached</dt><dd>${survived ? "Escaped" : `Act ${ROMAN[reached]}`}</dd></div>
+<div><dt>Events logged</dt><dd>${d.events.length}</dd></div>
+</dl>
 <h2>Timeline</h2>
 <table class="log"><thead><tr><th>Time</th><th>Who</th><th>Event</th></tr></thead><tbody>
-${d.events.map((e) => `<tr><td>${clock(e.t)}</td><td>${e.actor === "SHIP" ? "Ship" : e.actor === "ENGINEER" ? "Engineer" : "Radio Officer"}</td><td class="${e.tone === "bad" ? "lost" : e.tone === "good" ? "survived" : ""}">${e.tone === "bad" ? "▼ " : e.tone === "good" ? "● " : ""}${escapeHtml(e.text)}</td></tr>`).join("\n")}
+${d.events.map((e) => `<tr${e.k === "act" ? ' class="act"' : ""}><td>${clock(e.t)}</td><td class="who">${who(e.actor)}</td><td class="${e.tone === "bad" ? "ev-bad" : e.tone === "good" ? "ev-good" : ""}">${e.tone === "bad" ? "▼ " : e.tone === "good" ? "● " : ""}${escapeHtml(e.text)}</td></tr>`).join("\n")}
 </tbody></table>
 ${acts.length ? `<h2>Act times</h2><table><tbody>${acts.map(({ act, t }, i) => `<tr><td>${ROMAN[act]} · ${ACT_TITLE[act]}</td><td>${clock((acts[i + 1]?.t ?? d.durationMs) - t)}</td></tr>`).join("")}</tbody></table>` : ""}
-<p><a class="play" href="/?ship=${encodeURIComponent(d.shipNo)}">▶ Sail this ship again</a> &nbsp; <a href="/history/">← Ship's Log</a></p>`;
+<p class="actions"><a class="play" href="/?ship=${encodeURIComponent(d.shipNo)}">▶ Sail this ship again</a> <a class="ghost" href="/">New voyage</a> <a class="ghost" href="/history/">← Ship's Log</a></p>
+</div>`;
   return shell(`Debrief ${code} — Below the Waterline`, body);
 }
 
