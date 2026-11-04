@@ -25,7 +25,7 @@ const NOISE = /* glsl */ `
     f = f*f*(3.0-2.0*f);
     return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
   }
-  float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a*vnoise(p); p = p*2.03 + 7.1; a *= 0.5; } return s; }
+  float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 3; i++){ s += a*vnoise(p); p = p*2.03 + 7.1; a *= 0.5; } return s; }
 `;
 
 // ------------------------------------------------------------ sky
@@ -50,7 +50,7 @@ const skyMat = new ShaderMaterial({
       // low scudding cloud: projected onto a plane, streaming past
       vec2 uv = vDir.xz / (vDir.y + 0.25) * 1.3;
       float n = fbm(uv * 0.9 + vec2(uTime * 0.035 * (0.6 + uLevel), uTime * 0.012));
-      float n2 = fbm(uv * 2.2 - vec2(uTime * 0.06, 0.0));
+      float n2 = vnoise(uv * 2.6 - vec2(uTime * 0.06, 0.0));
       float cloud = smoothstep(0.38, 0.72, n * 0.75 + n2 * 0.35) * smoothstep(-0.05, 0.1, h);
       vec3 cc = mix(vec3(0.012, 0.018, 0.026), vec3(0.075, 0.095, 0.115), n2);
       c = mix(c, cc, cloud * 0.9);
@@ -97,7 +97,7 @@ const seaMat = new ShaderMaterial({
       vec3 c = mix(deep, sky, fres * 0.8 + 0.06);
       c += vec3(0.02, 0.05, 0.05) * clamp(vH, 0.0, 1.0);
       // foam: crests broken up by noise, plus streaks
-      float fo = fbm(vP * 0.7 + vec2(uTime * 0.15, -uTime * 0.2));
+      float fo = vnoise(vP * 0.9 + vec2(uTime * 0.15, -uTime * 0.2));
       float crest = smoothstep(0.75 - uLevel * 0.15, 1.1, vH * 0.6 + fo * 0.7);
       c = mix(c, vec3(0.42, 0.47, 0.5) + uFlash, crest * 0.55);
       // distance haze toward the horizon colour
