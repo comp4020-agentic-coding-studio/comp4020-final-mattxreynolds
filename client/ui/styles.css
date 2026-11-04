@@ -104,6 +104,9 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .muted-tag { position: absolute; bottom: 1rem; right: 1rem; color: #fff; font: 600 0.8rem var(--mono); background: #0008; padding: 0.2rem 0.5rem; }
 .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; background: #050c10aa; padding: 1rem; overflow: auto; }
 .briefing { max-width: 36rem; text-align: center; }
+/* centred with auto margins, not align-items, so a card taller than the
+   viewport scrolls from its top instead of overflowing out of reach */
+.overlay:not(.ending) > .card { margin: auto; }
 .briefing h1 { margin-bottom: 0.2em; }
 .briefing .apart { background: #e6e0cf; border-left: 4px solid var(--ink); padding: 0.5rem 0.8rem; text-align: left; margin: 0.6rem 0; }
 .guide { list-style: none; padding: 0; margin: 0.4rem 0 0.8rem; text-align: left; }
@@ -163,6 +166,13 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
   .briefing .controls { margin: 0.5rem auto; gap: 0.15rem 1rem; font-size: 0.92rem; }
   .briefing .hint { margin: 0.4rem 0; }
   .primary.big { padding: 0.65rem 1.4rem; }
+}
+/* very short screens (1024×640): key table in two columns, smaller title */
+@media (max-height: 700px) {
+  .briefing h1 { font-size: 1.35rem; }
+  .briefing .controls { grid-template-columns: max-content 1fr max-content 1fr; max-width: 34rem; font-size: 0.85rem; }
+  .briefing .apart { padding: 0.35rem 0.6rem; font-size: 0.92rem; }
+  .briefing .objective-big { font-size: 1rem; }
 }
 @media (max-width: 760px) {
   .hud-top { flex-direction: column; }

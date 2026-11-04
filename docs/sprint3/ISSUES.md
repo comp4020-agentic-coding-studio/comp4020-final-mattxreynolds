@@ -17,3 +17,14 @@ scripted browsers, screenshot inspection). No human playtesting.
 | BRIDGE-3 | Medium | PowerConsole plates | rated plate overlapped HELM plate | fixed bf6f213 |
 | BRIDGE-4 | Medium | engine telegraph dial | crushed labels, clipped plate | assigned bridge-audit round 2 |
 | COOP-7 | Low | server/manager.ts unlocksFor | same-ship rerun wins count toward unlocks | won't fix overnight: design choice for student |
+| JOURNEY-1 | Medium | client/ui/styles.css .overlay | briefing card clipped top+bottom at 1024×640 (flex centring overflowed upward, out of scroll reach) | fixed + render verified (card y16–650 at 1024×640, volume row visible) |
+| JOURNEY-2 | Medium | Game.tsx take-controls | "Lighting the lamps…" wait under SwiftShader | by design (ReadyProbe, CLAUDE.md lesson); not changed |
+| JOURNEY-3 | — | ending cinematic | result hidden during cinematic | not a bug: CinematicOverlay clears after SHOT_SECONDS (QA waited 4 s of 14) |
+| JOURNEY-4 | Low | console | three.js deprecation warnings, one unexplained 404 | open |
+| JOURNEY-5 | Low | Home | empty-callsign error far from input | open |
+| JOURNEY-6 | Low | Home join | join-by-code asks callsign again | open |
+| CINE-0 | Medium | Cinematic.tsx | survived shot: ship sidelights read green-left/red-right from astern view — verify port red / starboard green | passed to cinematic agent |
+| ENG-1 | Medium | Switchboard.tsx | lit glyph/LOAD plates bloomed to white | fixed (merged ed6836d, lead-verified render) |
+| ENG-2 | Medium | Incident.tsx smoke plate | text overran plate | fixed (merged) |
+| ENG-3 | Low | Dressing.tsx | ESCAPE TRUNK sign clipped by ladder | fixed (merged) |
+| ENG-4 | Medium | engine room | DOOR RAM PRESSURE plate cut by post; ceiling lamp blowout; manifold gauge white-out | assigned engine-audit round 2 |
