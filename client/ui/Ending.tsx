@@ -34,7 +34,7 @@ export function Ending({ onHome }: { onHome: () => void }) {
           Voyage {view.code}
           {view.practice && <span className="tag practice">PRACTICE</span>}
         </p>
-        <h1 data-testid="outcome">{survived ? (view.practice ? "Practice survived" : "You made it off") : "The ship went down"}</h1>
+        <h1 className="headline" data-testid="outcome">{survived ? (view.practice ? "Practice survived" : "You made it off") : "The ship went down"}</h1>
         {o.debrief && (
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "on" : ""} onClick={() => setTab("summary")}>Summary</button>

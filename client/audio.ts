@@ -19,6 +19,10 @@ let gurgle: GainNode | null = null;
 let grind: GainNode | null = null;
 /** Engineer: the generator straining as its heat climbs. */
 let whine: { gain: GainNode; osc: OscillatorNode } | null = null;
+/** Both: rain/wind bed, shifts per act; and water rushing with the flood level. */
+let bed: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+let rush: { gain: GainNode; filter: BiquadFilterNode } | null = null;
+let drone: { gain: GainNode; osc: OscillatorNode } | null = null;
 let lastDoorMoveAt = -1e9;
 let started = false;
 
@@ -86,7 +90,55 @@ export const sfx = {
   clunk: () => {
     tone(90, 0.25, 0.5, "triangle", 0, 50);
     noise(0.12, 600, 1, 0.5, "lowpass");
+    // mechanical tail: contacts settling and a short metallic ring
+    noise(0.05, 2200, 5, 0.25, "bandpass", 0.14);
+    noise(0.04, 1500, 5, 0.18, "bandpass", 0.24);
+    tone(310, 0.5, 0.05, "triangle", 0.05, 280);
   },
+  /** Valve wheel turning: a dry rising squeal over a rattle. */
+  squeal: () => {
+    tone(900 + Math.random() * 300, 0.45, 0.04, "sawtooth", 0, 1500);
+    noise(0.4, 1800, 8, 0.12, "bandpass");
+  },
+  /** Radio static sweeping across the band. */
+  sweep: () => {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 3;
+    f.frequency.setValueAtTime(600, t);
+    f.frequency.exponentialRampToValueAtTime(4200, t + 0.9);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1);
+    src.connect(f).connect(g).connect(master);
+    src.start(t, Math.random());
+    src.stop(t + 1.1);
+  },
+  /** Distant thunder: a long low rumble with a late swell. */
+  thunder: () => {
+    noise(4, 90, 0.7, 0.5, "lowpass", 0.1);
+    noise(2.5, 180, 0.5, 0.25, "lowpass", 1.2);
+  },
+  /** Hull creak: a short stressed-metal glide. */
+  creak: () => {
+    const f = 140 + Math.random() * 160;
+    tone(f, 0.9, 0.05, "sawtooth", 0, f * (0.7 + Math.random() * 0.2));
+    tone(f * 1.5, 0.7, 0.025, "square", 0.05, f * 1.2);
+  },
+  /** Act stinger: low brass-like swell, more urgent in later acts. */
+  stinger: (act: number) => {
+    const base = 55 + act * 6;
+    tone(base, 1.8, 0.28, "sawtooth", 0, base * 0.8);
+    tone(base * 1.5, 1.6, 0.12, "square", 0.05, base * 1.4);
+    noise(1.2, 300 + act * 150, 1, 0.2, "lowpass", 0.1);
+    if (act >= 4) for (let i = 0; i < 3; i++) tone(880, 0.12, 0.06, "square", 0.3 + i * 0.22);
+  },
+  /** Failure: a falling minor figure and a hull groan. */
+  failure: () => [392, 349, 294, 220].forEach((f, i) => tone(f, 0.9, 0.14, "triangle", i * 0.35, f * 0.97)),
   spark: () => {
     for (let i = 0; i < 5; i++) noise(0.06, 3000 + Math.random() * 3000, 2, 0.5, "highpass", i * 0.04);
     tone(60, 0.5, 0.3, "sawtooth", 0, 30);
@@ -221,7 +273,59 @@ function setLoops(view: View | null): void {
     osc.start();
     whine = { gain, osc };
   }
+  if (!bed) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 500;
+    filter.Q.value = 0.4;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filter).connect(gain).connect(master);
+    src.start();
+    bed = { gain, filter };
+  }
+  if (!rush) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf;
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 400;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(filter).connect(gain).connect(master);
+    src.start();
+    rush = { gain, filter };
+  }
+  if (!drone) {
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = 41;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 140;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    osc.connect(filter).connect(gain).connect(master);
+    osc.start();
+    drone = { gain, osc };
+  }
   const phase = view?.phase;
+  const actNo = actOf(phase);
+  const playingNow = Boolean(phase && phase !== "LOBBY" && phase !== "SURVIVED" && phase !== "LOST");
+  // act-dependent bed: I uncertain (low drone, soft wind), V urgent (louder, higher, dissonant)
+  bed.gain.gain.setTargetAtTime(playingNow ? 0.02 + actNo * 0.012 : 0.01, t, 1);
+  bed.filter.frequency.setTargetAtTime(350 + actNo * 120, t, 1);
+  drone.gain.gain.setTargetAtTime(playingNow ? 0.09 - actNo * 0.008 : 0, t, 1);
+  drone.osc.frequency.setTargetAtTime(41 + actNo * 3.5, t, 2);
+  // water rushing scales with the flood level the view provides
+  const dng = view?.danger ?? 0;
+  const wet = playingNow && waterLive(phase) ? dng / 100 : 0;
+  rush.gain.gain.setTargetAtTime(wet * wet * 0.35, t, 0.6);
+  rush.filter.frequency.setTargetAtTime(300 + wet * 1400, t, 0.6);
   const playing = phase && phase !== "LOBBY" && phase !== "SURVIVED" && phase !== "LOST";
   const danger = view?.danger ?? 0;
   const engine = view?.you === "ENGINEER";
@@ -271,6 +375,8 @@ function loopedNoise(freq: number, q: number, type: BiquadFilterType): GainNode 
   src.start();
   return gain;
 }
+
+const actOf = (p: string | undefined): number => (p === "PROLOGUE" || p === "POWER" ? 1 : p === "FLOOD" ? 2 : p === "RADIO" ? 3 : p === "CASCADE" ? 4 : p === "ESCAPE" ? 5 : 1);
 
 const waterLive = (p: string | undefined): boolean => p === "FLOOD" || p === "RADIO" || p === "CASCADE" || p === "ESCAPE";
 
@@ -342,6 +448,7 @@ function onViewChange(v: View | null, prev: View | null): void {
         const now = b.open ? b.pressure > BACKFLOW_READING : b.pressure !== a.pressure ? b.pressure > a.pressure : was;
         lineDriven[c] = now;
         if (now !== was && a.open === b.open) sfx.motor(now);
+        if (a.open !== b.open) sfx.squeal();
       }
     }
     if (v.phase === "ESCAPE" && v.escape.pressure > prev.escape.pressure + 4) sfx.stroke();
@@ -351,6 +458,8 @@ function onViewChange(v: View | null, prev: View | null): void {
 let alarmPhase = 0;
 let lastGroan = 0;
 let lastRing = 0;
+let nextCreak = 0;
+let nextThunder = 0;
 function loop(): void {
   if (!ctx) return;
   const view = useStore.getState().view;
@@ -365,6 +474,16 @@ function loop(): void {
   if (view?.ship?.calling && Math.floor(now / 2700) !== lastRing) {
     lastRing = Math.floor(now / 2700);
     sfx.ring();
+  }
+  const live = Boolean(view && view.phase !== "LOBBY" && view.phase !== "SURVIVED" && view.phase !== "LOST");
+  // hull creaks at random intervals that shorten as danger grows
+  if (live && now > nextCreak) {
+    sfx.creak();
+    nextCreak = now + (3000 + Math.random() * 9000) * (1 - danger / 130);
+  }
+  if (live && now > nextThunder) {
+    sfx.thunder();
+    nextThunder = now + 14000 + Math.random() * 26000;
   }
   if (view && view.phase !== "LOBBY" && danger > 20 && now - lastGroan > 9000 - danger * 50 && Math.random() < 0.3) {
     lastGroan = now;
@@ -382,7 +501,7 @@ const FX_SOUND: Partial<Record<Fx["k"], (fx: Fx) => void>> = {
   arc: () => sfx.spark(),
   coupled: () => sfx.hum(),
   reply: (fx) => {
-    sfx.static();
+    sfx.sweep();
     if (fx.k === "reply") (fx.result === "contact" ? sfx.success : sfx.wrong)();
   },
   vent: () => sfx.steam(),
@@ -401,8 +520,9 @@ const FX_SOUND: Partial<Record<Fx["k"], (fx: Fx) => void>> = {
   phase: (fx) => {
     if (fx.k !== "phase") return;
     if (fx.phase === "POWER" || fx.phase === "FLOOD" || fx.phase === "RADIO" || fx.phase === "CASCADE" || fx.phase === "ESCAPE") sfx.chime();
+    if (fx.phase === "FLOOD" || fx.phase === "RADIO" || fx.phase === "CASCADE" || fx.phase === "ESCAPE") sfx.stinger(actOf(fx.phase));
     if (fx.phase === "SURVIVED") sfx.success();
-    if (fx.phase === "LOST") (sfx.groan(), sfx.door());
+    if (fx.phase === "LOST") (sfx.failure(), sfx.groan(), sfx.door());
   },
 };
 
