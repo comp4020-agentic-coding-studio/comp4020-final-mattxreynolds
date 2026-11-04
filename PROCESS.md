@@ -340,6 +340,15 @@ became a CLAUDE.md lesson.
 - Fire effects on both seats ([`4add6f9`](https://github.com/mattxreynolds/below-the-waterline/commit/4add6f9), [`135ab07`](https://github.com/mattxreynolds/below-the-waterline/commit/135ab07)).
 - End-of-voyage report, `/log/` page and cinematics ([`b62f2c4`](https://github.com/mattxreynolds/below-the-waterline/commit/b62f2c4),
   [`03672c4`](https://github.com/mattxreynolds/below-the-waterline/commit/03672c4), [`6b4d71a`](https://github.com/mattxreynolds/below-the-waterline/commit/6b4d71a)).
+- The engine lighting pass ([`0d3e7f1`](https://github.com/mattxreynolds/below-the-waterline/commit/0d3e7f1)) and a `--repatch` screenshot option ([`3c5be8c`](https://github.com/mattxreynolds/below-the-waterline/commit/3c5be8c)).
+- After the merge, `browser-full-voyage` timed out at the ending cinematic.
+  A CPU profile showed the canvas being torn down and rebuilt
+  (`forceContextLoss` 3.4 s plus `getContext` 1 s on SwiftShader). The fix keeps one
+  canvas for the whole voyage and swaps its contents ([`9998843`](https://github.com/mattxreynolds/below-the-waterline/commit/9998843)).
+  The full local check was then 199/199.
+- The voyage-strip layout had been copied between the client debrief and the
+  server log page; it now lives in `shared/timeline.ts`, with unit tests
+  ([`aeddeff`](https://github.com/mattxreynolds/below-the-waterline/commit/aeddeff)).
 
 ### Problems with running agents in parallel
 
