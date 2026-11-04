@@ -33,7 +33,7 @@ import {
 import { cinematicCue } from "../../audio.ts";
 import { useStore } from "../../store.ts";
 import { boltMat, fadeMat, frameMat, halo, paneMat, rain, rainGeometry, SEA_Y, sea, sky, spray, sprayGeometry, SURF, waveHeight } from "./materials.ts";
-import { DAVIT, hullGeometry, lifeboatParts, paneGeometry, shipPanes, shipParts } from "./models.ts";
+import { BRIDGE_N, bridgeFaceX, DAVIT, hullGeometry, lifeboatParts, paneGeometry, shipPanes, shipParts } from "./models.ts";
 import { kick, ramp, sampleShot, type Sequence, SEQUENCES, type ShotSample, shakeAt, T_HIT, transitions } from "./timeline.ts";
 
 declare global {
@@ -244,7 +244,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     const o = new Matrix4();
     const qq = new Quaternion();
     geo.panes.forEach((p, i) => {
-      qq.setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(...p.n));
+      paneFacing(p.n, qq);
       m.setMatrixAt(i, o.compose(new Vector3(...p.p), qq, new Vector3(p.w, p.h, 1)));
       m.setColorAt(i, DARK);
     });
@@ -258,7 +258,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     const qq = new Quaternion();
     geo.panes.forEach((p, i) => {
       const n = new Vector3(...p.n);
-      qq.setFromUnitVectors(new Vector3(0, 0, 1), n);
+      paneFacing(p.n, qq);
       const pad = p.kind === 0 ? 0.07 : 0.1;
       m.setMatrixAt(i, o.compose(new Vector3(...p.p).addScaledVector(n, -0.006), qq, new Vector3(p.w + pad, p.h + pad, 1)));
     });
@@ -270,7 +270,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     const m = new InstancedMesh(geo.pane, paneMat, 7);
     const o = new Matrix4();
     for (let i = 0; i < 7; i++) {
-      m.setMatrixAt(i, o.compose(new Vector3(-5.53, 5.55, -1.59 + i * 0.528), new Quaternion().setFromUnitVectors(new Vector3(0, 0, 1), new Vector3(1, 0, 0)), new Vector3(0.44, 0.6, 1)));
+      m.setMatrixAt(i, o.compose(new Vector3(bridgeFaceX(5.55) + 0.02, 5.55, -1.59 + i * 0.528), paneFacing(BRIDGE_N, new Quaternion()), new Vector3(0.44, 0.6, 1)));
       m.setColorAt(i, new Color(0.9, 0.7, 0.42).multiplyScalar(i % 3 === 1 ? 0.15 : 0.8));
     }
     return m;
@@ -665,6 +665,13 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
 }
 
 const _q0 = new Vector3();
+
+/** Turn a pane (a +z quad) to face n while keeping its edges level, so panes
+ * on the raked bridge front tilt back with it rather than rolling. */
+function paneFacing(n: readonly [number, number, number], out: Quaternion): Quaternion {
+  const up = Math.abs(n[1]) > 0.9 ? new Vector3(0, 0, 1) : new Vector3(0, 1, 0);
+  return out.setFromRotationMatrix(new Matrix4().lookAt(new Vector3(...n), new Vector3(), up));
+}
 
 /** A jagged bolt from cloud to sea, as a flat ribbon facing the camera. */
 function boltGeometry(seed: number) {

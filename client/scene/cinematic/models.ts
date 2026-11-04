@@ -115,6 +115,16 @@ class Kit {
     this.parts.push(g);
     return this;
   }
+  /** a box of size (sx, sy, sz) rotated about its own centre: a true rotation,
+   * unlike `box`'s `rot`, which turns the unit cube before stretching it */
+  slab(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, rot: [number, number, number]): this {
+    const g = BOX.clone();
+    g.scale(sx, sy, sz);
+    g.applyMatrix4(m4.makeRotationFromEuler(eulerOf(rot)));
+    g.translate(cx, cy, cz);
+    this.parts.push(g);
+    return this;
+  }
   /** cylinder (y-axis) at a centre, radii, height, optional tilt */
   cyl(x: number, y: number, z: number, rTop: number, rBot: number, h: number, rot: [number, number, number] = [0, 0, 0], squashZ = 1): this {
     const g = new CylinderGeometry(rTop, rBot, h, 14);
@@ -144,6 +154,15 @@ class Kit {
 }
 const eulerOf = (r: [number, number, number]) => new Euler(r[0], r[1], r[2]);
 
+/** The wheelhouse front is raked: the glazing leans out at the top, as on a
+ * real bridge (it sheds spray and kills reflections). RAKE is the lean in
+ * radians; BRIDGE_X is the face at mid-window height. */
+export const BRIDGE = { rake: 0.2, x: -5.55, midY: 5.45 };
+/** The raked bridge face's x at height y (ship coords). */
+export const bridgeFaceX = (y: number): number => BRIDGE.x + (y - BRIDGE.midY) * Math.tan(BRIDGE.rake);
+/** Outward normal of the raked bridge face (it looks slightly down). */
+export const BRIDGE_N: [number, number, number] = [Math.cos(BRIDGE.rake), -Math.sin(BRIDGE.rake), 0];
+
 /** Davit heads (ship coords) the lifeboat hangs from on the starboard side. */
 export const DAVIT = { x: -8.4, y: 5.0, z: 3.25, span: 1.1 };
 
@@ -153,7 +172,9 @@ export function shipParts(): Record<"house" | "steel" | "hatch" | "funnel" | "ba
   // accommodation aft: three tiers, the bridge with wings on top
   house.box(-11.3, 1.85, -2.15, -5.6, 3.4, 2.15);
   house.box(-10.9, 3.4, -1.95, -5.8, 4.75, 1.95);
-  house.box(-9.4, 4.75, -2.0, -5.55, 6.1, 2.0);
+  house.box(-9.4, 4.75, -2.0, -5.8, 6.1, 2.0);
+  // the raked front: a slab pivoted about mid-window height, top leaning forward
+  house.slab(bridgeFaceX(5.45) - 0.14 / Math.cos(BRIDGE.rake), 5.45, 0, 0.28, 1.75, 4.0, [0, 0, -BRIDGE.rake]);
   // bridge wings: open platforms running out past the ship's side
   house.box(-6.75, 4.75, -3.35, -5.6, 4.9, 3.35);
   house.box(-6.75, 4.9, 3.15, -5.6, 5.45, 3.35);
@@ -227,7 +248,8 @@ export function shipParts(): Record<"house" | "steel" | "hatch" | "funnel" | "ba
   const black = new Kit().cyl(-10.32, 7.7, 0, 0.78, 0.8, 0.32, [0, 0, 0.13], 0.73);
   // window mullions on the bridge front, so the glass reads as panes
   const glassFrame = new Kit();
-  for (let i = 0; i <= 7; i++) glassFrame.box(-5.56, 5.15, -1.85 + i * 0.528 - 0.03, -5.52, 5.95, -1.85 + i * 0.528 + 0.03);
+  const fx = bridgeFaceX(5.55);
+  for (let i = 0; i <= 7; i++) glassFrame.slab(fx, 5.55, -1.85 + i * 0.528, 0.06, 0.82, 0.06, [0, 0, -BRIDGE.rake]);
   return {
     house: house.build(),
     steel: steel.build(),
@@ -245,7 +267,7 @@ export type Pane = { p: [number, number, number]; n: [number, number, number]; w
 export function shipPanes(): Pane[] {
   const out: Pane[] = [];
   // bridge front: seven big panes
-  for (let i = 0; i < 7; i++) out.push({ p: [-5.53, 5.55, -1.59 + i * 0.528], n: [1, 0, 0], w: 0.44, h: 0.62, kind: 2 });
+  for (let i = 0; i < 7; i++) out.push({ p: [bridgeFaceX(5.55) + 0.02, 5.55, -1.59 + i * 0.528], n: BRIDGE_N, w: 0.44, h: 0.62, kind: 2 });
   // bridge sides
   for (const side of [-1, 1]) for (const x of [-6.2, -7.0, -7.8, -8.6]) out.push({ p: [x, 5.5, side * 2.01], n: [0, 0, side], w: 0.5, h: 0.48, kind: 2 });
   // accommodation: two decks of square windows, sides and front
