@@ -233,6 +233,8 @@ export type SurfaceKind = "paint" | "tread" | "metal";
  * Mutates and returns the material; call once per material at creation.
  */
 export function dressStd(mat: MeshStandardMaterial, kind: SurfaceKind, repeat: [number, number] = [1, 1], strength = 1): MeshStandardMaterial {
+  // kits are imported by node unit tests (no DOM): leave the material plain
+  if (typeof document === "undefined") return mat;
   const src = kind === "tread" ? treadPlate() : paintedSteel();
   const normal = src.normal.clone();
   const rough = src.rough.clone();
