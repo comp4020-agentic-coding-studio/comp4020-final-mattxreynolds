@@ -26,7 +26,7 @@ export function Decor() {
       </group>
       <Plate text="BRIDGE · RADIO ROOM" width={1.6} height={0.18} position={[0, 2.98, -3.87]} border={PALETTE.brass} />
       <ShipClock position={[-3.6, 2.5, 3.87]} />
-      <Plate text={"ABANDON SHIP STATION\nDOOR RAMS ▶"} width={0.9} height={0.2} position={[0.6, 2.4, 3.87]} rotation={[0, Math.PI, 0]} fg={PALETTE.lampAmber} />
+      <Plate text={"ABANDON SHIP STATION\nDOOR RAMS ▶"} width={0.9} height={0.2} position={[2.4, 2.45, 3.86]} rotation={[0, Math.PI, 0]} fg={PALETTE.lampAmber} />
     </group>
   );
 }
@@ -81,7 +81,7 @@ function ShipClock({ position }: { position: [number, number, number] }) {
     <group position={position} rotation={[0, Math.PI, 0]}>
       <mesh geometry={GEO.cyl} material={MAT.brass} rotation={[Math.PI / 2, 0, 0]} scale={[0.2, 0.04, 0.2]} />
       <mesh geometry={GEO.plane} position={[0, 0, 0.022]} scale={[0.34, 0.34, 1]}>
-        <meshBasicMaterial map={face} />
+        <meshBasicMaterial map={face} alphaTest={0.5} />
       </mesh>
       <group ref={hour} position={[0, 0, 0.03]}>
         <Block p={[0, 0.045, 0]} s={[0.018, 0.09, 0.005]} m={MAT.enamel} />
