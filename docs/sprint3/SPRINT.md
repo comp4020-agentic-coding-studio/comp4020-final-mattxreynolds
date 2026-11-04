@@ -37,3 +37,4 @@ See ISSUES.md.
 - 23:52 cinematic overhaul merged (d1effcf) after lead review of sheet-intro/sheet-endings; round 2 dispatched (CINE-1). Budget $81.28 (sprint ≈ $20).
 - 00:05 engine round 2 merged + DOOR RAM plate lead fix; JOURNEY-4/5 closed; check:local 21 files / 208 tests PASS on 2d35967+.
 - 00:55 cinematic round 2 merged after lead review; all agent worktrees removed; final check:local running.
+- 01:02 final check:local PASS (21/208); PR #2 opened (not merged). P4 cinematic polish round 3 dispatched (crane-post crop, lifeboat legibility, push-in end frame, wash colour).
