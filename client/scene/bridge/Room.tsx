@@ -269,7 +269,7 @@ export function RoomLights() {
     // critical flooding: a slow nervous flicker
     if (!reduced && danger > 0.75 && Math.sin(t * 13) * Math.sin(t * 3.1) > 0.92) k *= 0.6;
     for (const l of work.current) if (l) l.intensity = 8.5 * k;
-    if (hemi.current) hemi.current.intensity = 0.65 + 0.7 * k + storm.flash * 1.6;
+    if (hemi.current) hemi.current.intensity = 0.85 + 0.7 * k + storm.flash * 1.6;
     lampGlow.color.copy(warm).multiplyScalar(0.15 + 0.85 * k);
     if (redFill.current) {
       const pulse = red ? (reduced ? 0.8 : 0.5 + 0.5 * Math.abs(Math.sin(t * 2.2))) : 0;

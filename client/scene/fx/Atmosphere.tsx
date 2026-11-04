@@ -23,7 +23,7 @@ export function Atmosphere({ w = 10, d = 8, h = 3, cx = 0, cz = 0 }: { w?: numbe
       q.x = cx + (Math.random() - 0.5) * w;
       q.y = Math.random() * h;
       q.z = cz + (Math.random() - 0.5) * d;
-      q.s = 0.015 + Math.random() * 0.03;
+      q.s = 0.006 + Math.random() * 0.012;
       q.r = 0.7; q.g = 0.75; q.b = 0.78;
     }
     return p;
@@ -52,7 +52,7 @@ export function Atmosphere({ w = 10, d = 8, h = 3, cx = 0, cz = 0 }: { w?: numbe
 
     const k = (rm ? 0.25 : 1) * (0.5 + act * 0.25);
     const q = st.quality === "low" ? 0.5 : 1;
-    const a = (act === 1 ? 0.22 : 0.14 + danger * 0.16) * q;
+    const a = (act === 1 ? 0.14 : 0.08 + danger * 0.1) * q;
     const parts = pool.parts;
     for (let i = 0; i < N; i++) {
       const p = parts[i];

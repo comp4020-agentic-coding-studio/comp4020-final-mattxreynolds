@@ -58,7 +58,7 @@ const GradeShader = {
       float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
       c.rgb = mix(c.rgb * vec3(0.92, 0.98, 1.06), c.rgb * vec3(1.04, 1.0, 0.94), smoothstep(0.05, 0.6, l));
       // danger: a red edge pulse
-      c.rgb += vec3(0.5, 0.03, 0.02) * uAlarm * smoothstep(0.35, 0.9, r);
+      c.rgb = mix(c.rgb, c.rgb * vec3(1.25, 0.55, 0.5) + vec3(0.12, 0.0, 0.0), uAlarm * 0.7 * smoothstep(0.5, 0.95, r));
       // film grain
       float g = hash(vUv * 1024.0 + fract(uTime * 7.0)) - 0.5;
       c.rgb += g * uGrain * (0.4 + l);

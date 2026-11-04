@@ -267,11 +267,12 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .ready.yes { background: #dff0e3; padding: 0.1rem 0.5rem; border-radius: 3px; display: inline-block; }
 
 /* HUD gauge */
-.flood { position: relative; }
-.flood-label { display: block; font-size: 0.75rem; }
+.flood { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: baseline; column-gap: 0.8rem; }
+.flood-label { font-size: 0.75rem; grid-row: 1; grid-column: 1; }
+.flood .meter { grid-column: 1 / -1; }
 .flood .meter { height: 12px; position: relative; border: 1px solid #ffffff55; border-radius: 0; }
 .flood .meter i { position: absolute; top: 0; bottom: 0; width: 1px; background: #000a; }
-.flood-pct { position: absolute; right: 0.9rem; top: 0.5rem; font-size: 1.1rem; }
+.flood-pct { grid-row: 1; grid-column: 2; font-size: 1.1rem; }
 .flood.critical .flood-label::before { content: "⚠ "; }
 .phase { border-left-color: #f0c674; box-shadow: 0 4px 16px #0006; }
 .phase-name { font-family: var(--stencil); font-size: 0.95rem; }

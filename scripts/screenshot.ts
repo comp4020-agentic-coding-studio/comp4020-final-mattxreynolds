@@ -25,6 +25,8 @@ const { values } = parseArgs({
     views: { type: "string", default: "spawn;left;right;back" },
     width: { type: "string", default: "1280" },
     height: { type: "string", default: "800" },
+    /** render tier: "high" (bloom, reflections, relief) or "low" */
+    quality: { type: "string", default: "high" },
     /** screenshot the opening cinematic at these seconds (e.g. "3;9;15") instead of rooms */
     cinematic: { type: "string" },
   },
@@ -57,7 +59,13 @@ try {
   const pages: [string, Page][] = [];
   for (const [name, seat] of [["engineer", a], ["navigator", b]] as const) {
     const ctx = await browser.newContext({ viewport: { width: Number(values.width), height: Number(values.height) } });
-    await ctx.addInitScript(([code, token]) => localStorage.setItem(`btw.seat.${code}`, token), [seat.code, seat.token]);
+    await ctx.addInitScript(
+      ([code, token, q]) => {
+        localStorage.setItem(`btw.seat.${code}`, token);
+        localStorage.setItem("btw.quality", q);
+      },
+      [seat.code, seat.token, values.quality!],
+    );
     const page = await ctx.newPage();
     page.on("pageerror", (e) => console.error(`[${name}] pageerror`, e));
     page.on("console", (m) => m.type() === "error" && console.error(`[${name}]`, m.text()));
