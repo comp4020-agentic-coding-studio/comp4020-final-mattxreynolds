@@ -381,12 +381,12 @@ function Lockers() {
   return (
     <group>
       {/* two tall lockers on the port wall, aft end; clear of the radio desk */}
-      <group position={[-4.7, 0, 3.0]} rotation={[0, 0, 0]}>
+      <group position={[-4.7, 0, 3.15]} rotation={[0, 0, 0]}>
         <Block p={[0, 0.95, 0.5]} s={[0.5, 1.9, 0.4]} m={DM.locker} />
         <Block p={[0.255, 1.0, 0.5]} s={[0.01, 1.5, 0.02]} m={MAT.enamel} />
         <Block p={[0.26, 0.9, 0.42]} s={[0.02, 0.1, 0.03]} m={MAT.chrome} />
       </group>
-      <Instanced geo={GEO.box} mat={DM.vent} items={vents} position={[-4.7, 0, 3.5]} />
+      <Instanced geo={GEO.box} mat={DM.vent} items={vents} position={[-4.7, 0, 3.65]} />
     </group>
   );
 }
@@ -446,7 +446,7 @@ export const DRESS_SOLIDS = {
   binnacle: { x: -1.0, z: -3.7, w: 0.4, d: 0.4 },
   counter: { x: -2.0, z: 3.62, w: 1.7, d: 0.55 },
   chair: { x: -3.3, z: 3.3, w: 0.5, d: 0.5 },
-  lockers: { x: -4.7, z: 3.5, w: 0.5, d: 0.4 },
+  lockers: { x: -4.7, z: 3.65, w: 0.5, d: 0.4 },
 } as const;
 
 export function Dressing() {
