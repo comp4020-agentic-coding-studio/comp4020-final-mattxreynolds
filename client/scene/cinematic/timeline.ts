@@ -171,7 +171,7 @@ export const SEQUENCES: Record<Sequence, SequenceDef> = {
         name: "pull-away",
         dur: 5.3,
         frame: "boat",
-        pos: [[6.5, 3.2, 10], [7.0, 2.8, 11]],
+        pos: [[6.5, 4.2, 10], [7.0, 3.4, 11]],
         look: [[-1.5, 0.6, -4], [-2, 0.9, -5]],
         fov: [44, 42],
         hand: 0.18,

@@ -138,8 +138,10 @@ export const sea = new ShaderMaterial({
       // white water boiling along the hull as the sea comes over the deck edge
       vec2 hb = abs(q - shipPos.xz) - vec2(11.0, 2.6 + wash * 1.2);
       float edge = length(max(hb, 0.0)) + min(max(hb.x, hb.y), 0.0);
-      foam += wash * smoothstep(2.4, 0.0, abs(edge)) * (0.8 + 0.8 * fbm(q * 2.6 + vec2(t * 1.3, -t * 0.9)));
+      float wsh = wash * smoothstep(2.6, 0.2, abs(edge)) * smoothstep(0.3, 0.6, fbm(q * 2.6 + vec2(t * 1.3, -t * 0.9)));
       c = mix(c, vec3(0.42, 0.48, 0.5) * (0.6 + flash + dawn * 0.3), clamp(foam, 0.0, 1.0) * 0.55);
+      // the wash is churned, aerated and lit by the ship's own lights
+      c = mix(c, vec3(0.55, 0.6, 0.62) * (0.7 + flash) + vec3(0.9, 0.12, 0.06) * shipRed * 0.6, clamp(wsh, 0.0, 1.0) * 0.8);
       vec3 L = normalize(shipPos + vec3(0.0, 5.0, 0.0) - vW);
       float d = length(q - shipPos.xz);
       float glint = pow(max(dot(n, normalize(L + v)), 0.0), 60.0) * 2.5 / (1.0 + d * d * 0.012);
