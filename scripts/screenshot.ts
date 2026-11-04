@@ -115,6 +115,8 @@ try {
     const t0 = Date.now();
     await page.getByTestId("cinematic").waitFor();
     const mounted = Date.now() - t0;
+    // let the first shader compiles land before the first deterministic frame
+    if (!values.live) for (let i = 0; i < 8; i++) await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
     for (const sec of times) {
       if (values.live) await page.waitForTimeout(Math.max(0, sec * 1000 - (Date.now() - t0)));
       else {

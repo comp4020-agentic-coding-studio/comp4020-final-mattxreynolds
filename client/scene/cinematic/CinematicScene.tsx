@@ -77,7 +77,7 @@ function shipPose(seq: Sequence, t: number, out: Pose): Pose {
     out.yaw = 0;
   } else {
     out.x = 0;
-    out.sink = 0.5 + ramp(t, 0, 5) * 1.8 + ramp(t, 4.5, 13.2) * 10;
+    out.sink = 0.5 + ramp(t, 0, 6) * 1.6 + ramp(t, 7.5, 13.5) * 3.2 + ramp(t, 10.5, 13.6) * 6;
     out.list = 0.2 + 0.3 * ramp(t, 0, 10);
     out.trim = 0.06 + 0.18 * ramp(t, 2, 13);
     out.yaw = 0;
@@ -300,7 +300,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     sky.uniforms.t.value = t;
     rain.uniforms.t.value = t;
     rain.uniforms.fall.value = reduced ? 0.45 : 1;
-    const dawn = seq === "survived" ? ramp(t, 9, 20) : 0;
+    const dawn = seq === "survived" ? ramp(t, 9, 20) * 0.8 : 0;
     rain.uniforms.density.value = (reduced ? 0.4 : 1) * (seq === "intro" ? 0.45 + ramp(t, 5, 16) * 0.55 : seq === "survived" ? 1 - ramp(t, 6, 16) * 0.95 : 1);
     sea.uniforms.dawn.value = dawn;
     sky.uniforms.cloud.value = 1 - dawn * 0.35;
@@ -433,7 +433,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
         k *= ramp(d.x * l.face[0] + d.y * l.face[1] + d.z * l.face[2], l.cos! - 0.08, l.cos! + 0.04);
       }
       mats.lamp[i].opacity = k * 0.95;
-      mats.bulb[i].color.set(l.color).multiplyScalar(0.12 + 0.88 * k);
+      mats.bulb[i].color.set(l.color).multiplyScalar(0.03 + 0.97 * k);
     });
     if (other.visible) {
       other.updateMatrixWorld();
@@ -576,7 +576,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
         <pointLight ref={refs.deckA} position={[3, 6.2, 1.2]} distance={18} decay={1.5} color="#ffcf8a" intensity={0} />
         <pointLight ref={refs.deckB} position={[-4.6, 5.2, 3.6]} distance={12} decay={1.6} color="#ffcf8a" intensity={0} />
         <pointLight ref={refs.emergency} position={[-5.0, 6.8, 0]} distance={22} decay={1.4} color="#ff2a18" intensity={0} />
-        <pointLight ref={refs.redDeck} position={[1.6, 4.6, -0.4]} distance={14} decay={1.4} color="#ff2a18" intensity={0} />
+        <pointLight ref={refs.redDeck} position={[-3.2, 4.4, 2.8]} distance={16} decay={1.4} color="#ff2a18" intensity={0} />
         <sprite ref={refs.strobe} material={mats.strobe} position={[-7.6, 8.25, 0]} />
       </group>
       <group ref={refs.other} visible={false}>

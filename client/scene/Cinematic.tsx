@@ -35,8 +35,8 @@ export const CAPTIONS: Record<Shot, { at: number; until: number; text: string; b
   ],
   survived: [
     { at: 1.0, until: 5.0, text: "The lifeboat drops clear.", big: true },
-    { at: 11.0, until: 15.8, text: "Behind you, the Kestrel Meridian goes down by the head." },
-    { at: 16.6, until: 20.6, text: "Dawn. Somewhere out there, a station has your position." },
+    { at: 11.0, until: 15.2, text: "Behind you, the Kestrel Meridian goes down by the head." },
+    { at: 15.8, until: 19.8, text: "Dawn. Somewhere out there, a station has your position." },
   ],
   lost: [
     { at: 1.0, until: 6.5, text: "The lights go out below the waterline.", big: true },
