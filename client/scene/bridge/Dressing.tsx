@@ -305,7 +305,7 @@ function Chair({ position, rotationY = 0 }: { position: [number, number, number]
 
 // ------------------------------------------------------------ wall dressing
 
-function Extinguisher({ position, rotationY }: { position: [number, number, number]; rotationY: number }) {
+export function Extinguisher({ position, rotationY }: { position: [number, number, number]; rotationY: number }) {
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
       <Cyl p={[0, 0, 0.06]} s={[0.065, 0.42, 0.065]} m={DM.red} />
