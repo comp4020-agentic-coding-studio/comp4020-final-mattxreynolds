@@ -24,7 +24,9 @@ import { PALETTE } from "../palette.ts";
 import type { Glyph } from "../../../shared/glyphs.ts";
 import { MONO, roundel } from "./draw.ts";
 import { fxClock, navView, nowS } from "./state.ts";
-import { dressStd } from "../look/surfaces.ts";
+import { dressStd as dress } from "../look/surfaces.ts";
+// unit tests import this module without a DOM: skip the canvas-built relief there
+const dressStd: typeof dress = (m, ...a) => (typeof document === "undefined" ? m : dress(m, ...a));
 
 // ------------------------------------------------------------ shared assets
 
