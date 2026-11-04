@@ -2,10 +2,11 @@
 
 ## CURRENT
 - Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md).
-  Round 1 integrated and green (199/199): shared look, Engine/Aux and
-  Bridge/Comms rebuilds, disaster FX, compartment fire (ADR 006), UI/audio.
-  Round 2 running: engine lighting pass, debrief/log/cinematic polish, fire
-  world feedback + Bridge distress mount.
+  Rounds 1–2 integrated: shared look + quality tiers (ADR 007), Engine/Aux and
+  Bridge/Comms rebuilds, lighting, disaster FX, compartment fire (ADR 006),
+  UI/audio, debrief/log page, Gerstner-sea cinematics. One persistent canvas
+  across cinematics (ending freeze fix). Voyage-strip layout shared in
+  shared/timeline.ts. Now: final hardening, push, PR, handoff report.
 
 ## NEXT
 - Human playtests of the five-act voyage: is Act IV readable, is the

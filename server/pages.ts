@@ -5,6 +5,7 @@ import { marked } from "marked";
 import { MODE_RULES, type Mode } from "../shared/config.ts";
 import { COMPARTMENT_LABEL, COMPARTMENTS } from "../shared/glyphs.ts";
 import { ACT_TITLE, type Act, type Debrief } from "../shared/protocol.ts";
+import { clock, laneOf, LANES, ROMAN, SH, SP, SW, TRACK, turningPoints, LABEL_W, type MarkKind } from "../shared/timeline.ts";
 import type { HistoryRow } from "./db.ts";
 
 export const escapeHtml = (s: string): string =>
@@ -143,85 +144,7 @@ ${body}
   );
 }
 
-const ROMAN = ["", "I", "II", "III", "IV", "V"];
-const clock = (ms: number): string => {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
-
-// ---- the voyage strip, server-side ------------------------------------------
-// Mirrors VoyageStrip/turningPoints/laneOf in client/ui/Debrief.tsx (the
-// production image ships server/ and shared/ only, so it can't import the
-// client). Keep the constants, marker kinds and shapes in step.
-
-type MarkKind = "bad" | "good" | "peak" | "end";
-type Mark = { t: number; kind: MarkKind; label: string; detail: string };
-const MARK_LABEL: Record<string, [string, MarkKind]> = {
-  trip: ["BREAKER TRIP", "bad"],
-  gridTrip: ["GENERATOR TRIP", "bad"],
-  burst: ["PUMP BURST", "bad"],
-  lost: ["COMPARTMENT LOST", "bad"],
-  callMissed: ["CALL MISSED", "bad"],
-  wrongStation: ["WRONG STATION", "bad"],
-  fireIgnite: ["FIRE", "bad"],
-  fireBurnout: ["FLASHOVER", "bad"],
-  davits: ["DAVITS DROPPED", "bad"],
-  powerOnline: ["POWER ON", "good"],
-  contact: ["MAYDAY HEARD", "good"],
-  floodStable: ["HULL SHORED", "good"],
-  fireOut: ["FIRE OUT", "good"],
-  doorOpen: ["DOOR OPEN", "good"],
-};
-
-function turningPoints(d: Debrief): Mark[] {
-  const dur = Math.max(1000, d.durationMs);
-  const marks: (Mark & { k: string; n: number })[] = [];
-  for (const e of d.events) {
-    const def = Object.hasOwn(MARK_LABEL, e.k) ? MARK_LABEL[e.k] : null;
-    if (!def) continue;
-    if (e.k === "lost" && !/flooded completely/.test(e.text)) continue;
-    const prev = marks.findLast((m) => m.k === e.k);
-    if (prev && e.t - prev.t < dur * 0.06) {
-      prev.n++;
-      continue;
-    }
-    marks.push({ t: e.t, kind: def[1], label: def[0], detail: e.text, k: e.k, n: 1 });
-  }
-  const peak = d.samples.reduce<Debrief["samples"][number] | null>((b, s) => (!b || s.danger > b.danger ? s : b), null);
-  if (peak && peak.danger >= 25 && peak.danger < 100) {
-    marks.push({ t: peak.t, kind: "peak", label: `CLOSEST CALL ${Math.round(peak.danger)}%`, detail: "The worst the flooding got", k: "peak", n: 1 });
-  }
-  const out = marks
-    .sort((a, b) => a.t - b.t)
-    .slice(0, 14)
-    .map(({ t, kind, label, detail, n }) => ({ t, kind, detail, label: n > 1 ? `${label} ×${n}` : label }));
-  out.push({ t: d.durationMs, kind: "end", label: d.result === "SURVIVED" ? "ESCAPED" : "SHIP LOST", detail: d.result === "SURVIVED" ? "Both crew off together" : "The flooding reached 100%" });
-  return out;
-}
-
-const SW = 720;
-const SH = 228;
-const SP = { l: 36, r: 14, t: 36, b: 148 };
-const TRACK = 164;
-const LANES = [184, 200, 216];
-const labelW = (s: string) => s.length * 6 + 8;
-
-function lanesOf(marks: { x: number; label: string; kind: MarkKind }[]): { lane: number; anchor: string; lx: number }[] {
-  const taken: [number, number][][] = LANES.map(() => []);
-  const out: { lane: number; anchor: string; lx: number }[] = [];
-  const order = marks.map((_, i) => i).sort((a, b) => Number(marks[b].kind === "end" || marks[b].kind === "peak") - Number(marks[a].kind === "end" || marks[a].kind === "peak") || a - b);
-  for (const i of order) {
-    const { x, label } = marks[i];
-    const w = labelW(label);
-    const anchor = x - w / 2 < 4 ? "start" : x + w / 2 > SW - 4 ? "end" : "middle";
-    const left = anchor === "start" ? x - 4 : anchor === "end" ? x - w + 4 : x - w / 2;
-    const right = left + w;
-    const lane = taken.findIndex((row) => row.every(([l, r]) => right + 10 < l || left > r + 10));
-    if (lane >= 0) taken[lane].push([left, right]);
-    out[i] = { lane, anchor, lx: anchor === "start" ? x - 4 : anchor === "end" ? x + 4 : x };
-  }
-  return out;
-}
+// ---- the voyage strip, server-side (layout in shared/timeline.ts) ----------
 
 const glyph = (kind: MarkKind, x: number, y: number): string =>
   kind === "bad"
@@ -244,7 +167,7 @@ function voyageStrip(d: Debrief): string {
   const list = (Object.entries(d.actTimes) as [string, number][]).map(([a, t]) => ({ act: Number(a) as Act, t })).sort((a, b) => a.t - b.t);
   const acts = list.map((a, i) => ({ ...a, end: list[i + 1]?.t ?? dur }));
   const marks = turningPoints(d);
-  const lanes = lanesOf(marks.map((m) => ({ x: x(m.t), label: m.label, kind: m.kind })));
+  const lanes = laneOf(marks.map((m) => ({ x: x(m.t), label: m.label, kind: m.kind })), SW);
   const peak = Math.round(Math.max(0, ...d.samples.map((s) => s.danger)));
   const reached = acts[acts.length - 1];
   const aria = `Voyage timeline: ship danger from 0 to ${peak}% over ${clock(d.durationMs)}${reached ? `, reaching Act ${ROMAN[reached.act]}` : ""}. Turning points: ${marks.map((m) => `${clock(m.t)} ${m.label}`).join("; ")}.`;
@@ -253,7 +176,7 @@ function voyageStrip(d: Debrief): string {
       const x0 = x(a.t);
       const w = x(a.end) - x0;
       const full = `${ROMAN[a.act]} · ${ACT_TITLE[a.act].toUpperCase()}`;
-      const label = labelW(full) < w ? full : labelW(ROMAN[a.act]) < w + 6 ? ROMAN[a.act] : "";
+      const label = LABEL_W(full) < w ? full : LABEL_W(ROMAN[a.act]) < w + 6 ? ROMAN[a.act] : "";
       return `<rect x="${f(x0)}" y="${SP.t}" width="${f(Math.max(0, w))}" height="${SP.b - SP.t}" class="band${i % 2 ? " odd" : ""}"/><line x1="${f(x0)}" x2="${f(x0)}" y1="4" y2="${SP.b}" class="act-edge"/><text x="${f(x0 + 4)}" y="13" class="act-label">${escapeHtml(label)}</text>`;
     })
     .join("");
