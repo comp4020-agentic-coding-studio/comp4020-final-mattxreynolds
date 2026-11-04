@@ -415,6 +415,43 @@ export function EngineDressing() {
   );
 }
 
+/** Diesel detail: n cylinders from x = cx (0.4 m pitch), authored along +x facing +z. */
+function dieselBuild(k: Kit, cx: number, n: number, yTop: number) {
+  const m = M();
+  const x = D();
+  const step = 0.4;
+  for (let i = 0; i < n; i++) {
+    const px = cx + i * step;
+    k.box(x.safetyGreen, [px, yTop, 0], [0.3, 0.1, 0.46]); // rocker cover
+    k.box(m.steel, [px, yTop + 0.06, 0], [0.34, 0.03, 0.5]);
+    for (const dz of [-0.2, 0.2]) k.sphere(m.brass, [px, yTop + 0.09, dz], 0.04);
+    k.cyl(m.brass, [px, yTop + 0.14, 0], 0.05, 0.1, "y", 8); // injector
+    k.run(x.copper, [px, yTop + 0.15, 0], [px, yTop + 0.15, 0.27], 0.018, 5);
+    k.run(x.copper, [px, yTop + 0.15, 0.27], [px, yTop - 0.4, 0.27], 0.018, 5);
+    k.cyl(m.pipe, [px, yTop - 0.18, 0.3], 0.1, 0.2, "z", 10); // intake runner
+    k.cyl(m.pipeDark, [px, yTop - 0.22, -0.4], 0.1, 0.16, "z", 10); // exhaust stub
+  }
+  const x0 = cx - 0.2;
+  const x1 = cx + (n - 1) * step + 0.2;
+  k.run(m.pipe, [x0, yTop - 0.18, 0.43], [x1, yTop - 0.18, 0.43], 0.14, 12);
+  k.run(x.lag, [x0, yTop - 0.22, -0.5], [x1, yTop - 0.22, -0.5], 0.22, 12);
+  for (let i = 0; i <= n; i++) {
+    k.box(m.pipeDark, [cx - 0.2 + i * step, 0.7, 0.415], [0.04, 0.8, 0.02]);
+    for (let j = 0; j < 3; j++) k.sphere(m.brass, [cx - 0.2 + i * step, 0.4 + j * 0.3, 0.43], 0.03);
+  }
+  k.cyl(x.jacket, [x1 + 0.3, 0.5, 0.46], 0.14, 0.3, "y", 12); // oil filters
+  k.cyl(x.jacket, [x1 + 0.5, 0.5, 0.46], 0.14, 0.3, "y", 12);
+  k.run(x.tool, [x0 + 0.1, 1.15, 0.43], [x0 + 0.1, 0.8, 0.43], 0.015, 5); // dipstick
+  k.run(m.steel, [x0, yTop + 0.2, 0.12], [x1, yTop + 0.2, 0.12], 0.02, 5); // control rack
+}
+
+export function GeneratorDetail() {
+  return <Merged build={(k) => dieselBuild(k, -0.85, 4, 1.62)} />;
+}
+export function AuxGeneratorDetail() {
+  return <Merged build={(k) => dieselBuild(k, -1.05, 4, 1.53)} />;
+}
+
 export function AuxDressing() {
   return (
     <group>

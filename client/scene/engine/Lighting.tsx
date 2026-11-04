@@ -90,7 +90,7 @@ export function Lighting() {
 
     tmp.copy(lit.current > 0.6 ? WARM : COOL).lerp(RED, redTint);
     if (hemi.current) {
-      hemi.current.intensity = 0.45 + L * 0.9;
+      hemi.current.intensity = 0.6 + L * 0.95;
       hemi.current.color.copy(tmp);
     }
     if (amb.current) amb.current.intensity = 0.18 + L * 0.25;
