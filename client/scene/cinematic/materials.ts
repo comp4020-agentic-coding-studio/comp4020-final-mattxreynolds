@@ -73,6 +73,7 @@ export const sea = new ShaderMaterial({
     shipPos: { value: new Vector3() },
     shipLight: { value: 1 },
     shipRed: { value: 0 },
+    wash: { value: 0 },
     dawn: { value: 0 },
     fogC: { value: new Color("#0a1218") },
   },
@@ -103,7 +104,7 @@ export const sea = new ShaderMaterial({
       gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
     }`,
   fragmentShader: /* glsl */ `
-    uniform float t, shipLight, shipRed;
+    uniform float t, shipLight, shipRed, wash;
     uniform vec3 shipPos, fogC;
     varying vec3 vW;
     varying vec3 vN;
@@ -112,19 +113,35 @@ export const sea = new ShaderMaterial({
     ${SKY_FN}
     void main() {
       vec2 q = vW.xz;
-      vec3 n = normalize(vN + vec3(noise(q * 1.7 + t * 0.7) - 0.5, 0.0, noise(q * 1.5 - t * 0.6) - 0.5) * 0.45);
+      // ripples calm as the storm breaks, so dawn water reads smooth, not mottled
+      float chop = 0.45 * (1.0 - dawn * 0.6);
+      vec3 n = normalize(vN + vec3(noise(q * 1.7 + t * 0.7) - 0.5, 0.0, noise(q * 1.5 - t * 0.6) - 0.5) * chop);
       vec3 v = normalize(cameraPosition - vW);
       float fres = pow(1.0 - max(dot(n, v), 0.0), 4.0);
       vec3 r = reflect(-v, n);
       r.y = max(r.y, 0.02);
       vec3 c = vec3(0.008, 0.03, 0.042) + vec3(0.02, 0.085, 0.09) * smoothstep(-0.3, 1.2, vH);
-      c += vec3(0.1, 0.08, 0.06) * dawn * 0.5;
-      c = mix(c, skyCol(r) + flash * vec3(0.5, 0.55, 0.65), (0.12 + 0.88 * fres) * (1.0 - dawn * 0.35));
+      // dawn: a grey-blue body of water, lifted evenly
+      c = mix(c, vec3(0.13, 0.17, 0.2) + vec3(0.03, 0.05, 0.06) * smoothstep(-0.3, 1.2, vH), dawn * 0.85);
+      vec3 sk = skyCol(r);
+      // the reflected dawn sky, desaturated toward grey: no orange leopard-print
+      sk = mix(sk, vec3(dot(sk, vec3(0.3, 0.45, 0.25))) * vec3(0.9, 0.95, 1.05), dawn * 0.75);
+      c = mix(c, sk + flash * vec3(0.5, 0.55, 0.65), (0.12 + 0.88 * fres) * (1.0 - dawn * 0.5));
+      // a narrow sun path toward the glow on the horizon
+      vec3 sunL = normalize(glowDir + vec3(0.0, 0.08, 0.0));
+      float sunSpec = pow(max(dot(n, normalize(sunL + v)), 0.0), 220.0);
+      c += vec3(1.0, 0.78, 0.55) * sunSpec * dawn * 1.4;
       float foam = smoothstep(0.55, 1.05, vH + fbm(q * 0.6 + t * 0.25) * 0.6 - 0.25);
       foam += smoothstep(0.72, 0.95, fbm(q * vec2(0.5, 2.2) + vec2(t * 0.4, 0.0))) * 0.35;
       vec2 rel = (q - shipPos.xz) * vec2(0.075, 0.3);
       foam += smoothstep(1.0, 0.55, length(rel)) * smoothstep(0.35, 0.75, fbm(q * 1.4 + t)) * 0.9;
+      // white water boiling along the hull as the sea comes over the deck edge
+      vec2 hb = abs(q - shipPos.xz) - vec2(11.0, 2.6 + wash * 1.2);
+      float edge = length(max(hb, 0.0)) + min(max(hb.x, hb.y), 0.0);
+      float wsh = wash * smoothstep(2.6, 0.2, abs(edge)) * smoothstep(0.3, 0.6, fbm(q * 2.6 + vec2(t * 1.3, -t * 0.9)));
       c = mix(c, vec3(0.42, 0.48, 0.5) * (0.6 + flash + dawn * 0.3), clamp(foam, 0.0, 1.0) * 0.55);
+      // the wash is churned, aerated and lit by the ship's own lights
+      c = mix(c, vec3(0.55, 0.6, 0.62) * (0.7 + flash) + vec3(0.9, 0.12, 0.06) * shipRed * 0.6, clamp(wsh, 0.0, 1.0) * 0.8);
       vec3 L = normalize(shipPos + vec3(0.0, 5.0, 0.0) - vW);
       float d = length(q - shipPos.xz);
       float glint = pow(max(dot(n, normalize(L + v)), 0.0), 60.0) * 2.5 / (1.0 + d * d * 0.012);

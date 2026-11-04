@@ -16,11 +16,13 @@
 // relative to the room's spawn direction).
 
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { chromium, type Page } from "playwright";
+
+const sessions = new WeakMap<Page, Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>>();
 
 const { values } = parseArgs({
   options: {
@@ -41,6 +43,8 @@ const { values } = parseArgs({
     ending: { type: "string" },
     /** with --cinematic: play in real time instead of pinning the cinematic clock */
     live: { type: "boolean", default: false },
+    /** with --cinematic: write a CPU profile of the first seconds after the cinematic starts (to --out) */
+    profile: { type: "boolean", default: false },
   },
 });
 
@@ -110,6 +114,7 @@ try {
       await page.getByTestId("take-controls").waitFor({ timeout: 60000 });
       if (!values.live) await pin(times[0]);
       await resetGap();
+      if (values.profile) await startProfile(page);
       await post(`/api/test/voyages/${a.code}/patch`, { phase: values.ending === "lost" ? "LOST" : "SURVIVED", practice: false });
     } else if (!values.live) await pin(times[0]);
     const t0 = Date.now();
@@ -128,6 +133,7 @@ try {
       await page.screenshot({ path: file });
       console.log(file);
     }
+    if (values.profile) await stopProfile(page, join(values.out!, `${prefix}.cpuprofile`));
     const g = await gap();
     console.log(`cinematic visible ${mounted} ms after request; longest frame gap ${Math.round(g.max)} ms over ${g.frames} frames`);
   } else await roomShots(pages, a.code);
@@ -169,4 +175,29 @@ async function roomShots(pages: [string, Page][], code: string): Promise<void> {
       console.log(file);
     }
   }
+}
+
+async function startProfile(page: Page): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 500 });
+  await cdp.send("Profiler.start");
+  sessions.set(page, cdp);
+}
+/** Saves the profile and prints the heaviest self-time functions. */
+async function stopProfile(page: Page, file: string): Promise<void> {
+  const cdp = sessions.get(page);
+  if (!cdp) return;
+  await page.waitForTimeout(500);
+  const { profile } = (await cdp.send("Profiler.stop")) as { profile: { nodes: { id: number; callFrame: { functionName: string; url: string; lineNumber: number } }[]; samples: number[]; timeDeltas: number[] } };
+  writeFileSync(file, JSON.stringify(profile));
+  const self = new Map<number, number>();
+  profile.samples.forEach((id, i) => self.set(id, (self.get(id) ?? 0) + (profile.timeDeltas[i] ?? 0)));
+  const byName = new Map<string, number>();
+  for (const n of profile.nodes) {
+    const k = `${n.callFrame.functionName || "(anon)"} ${n.callFrame.url.split("/").pop()}:${n.callFrame.lineNumber}`;
+    byName.set(k, (byName.get(k) ?? 0) + (self.get(n.id) ?? 0));
+  }
+  console.log("profile top self time:");
+  for (const [k, us] of [...byName].sort((a, b) => b[1] - a[1]).slice(0, 12)) console.log(`  ${Math.round(us / 1000)} ms  ${k}`);
 }

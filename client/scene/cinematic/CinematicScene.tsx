@@ -19,6 +19,7 @@ import {
   InstancedMesh,
   Matrix4,
   type Mesh,
+  type Object3D,
   MeshBasicMaterial,
   type PerspectiveCamera,
   PlaneGeometry,
@@ -31,7 +32,7 @@ import {
 } from "three";
 import { cinematicCue } from "../../audio.ts";
 import { useStore } from "../../store.ts";
-import { boltMat, fadeMat, halo, paneMat, rain, rainGeometry, SEA_Y, sea, sky, spray, sprayGeometry, SURF, waveHeight } from "./materials.ts";
+import { boltMat, fadeMat, frameMat, halo, paneMat, rain, rainGeometry, SEA_Y, sea, sky, spray, sprayGeometry, SURF, waveHeight } from "./materials.ts";
 import { DAVIT, hullGeometry, lifeboatParts, paneGeometry, shipPanes, shipParts } from "./models.ts";
 import { kick, ramp, sampleShot, type Sequence, SEQUENCES, type ShotSample, shakeAt, T_HIT, transitions } from "./timeline.ts";
 
@@ -45,8 +46,13 @@ declare global {
 /** Seconds into the sequence. A screenshot run may pin the clock. */
 export function cinematicTime(start: number): number {
   const pinned = typeof window !== "undefined" ? window.__btwCineClock : undefined;
-  return typeof pinned === "number" ? pinned : performance.now() / 1000 - start;
+  if (typeof pinned === "number") return pinned;
+  // the clock holds at 0 until the scene's shaders have compiled (see below)
+  const held = warmedAt.get(start);
+  return held === undefined ? 0 : performance.now() / 1000 - Math.max(start, held);
 }
+/** start -> performance.now()/1000 when that cinematic's programs were ready. */
+const warmedAt = new Map<number, number>();
 
 // ---- the ship's motion: a pure function of the sequence and t ------------------
 
@@ -245,6 +251,19 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     m.frustumCulled = false;
     return m;
   }, [geo]);
+  /** window recesses: a dark surround a little larger than each pane, just proud of the wall */
+  const recessMesh = useMemo(() => {
+    const m = new InstancedMesh(geo.pane, frameMat, geo.panes.length);
+    const o = new Matrix4();
+    const qq = new Quaternion();
+    geo.panes.forEach((p, i) => {
+      const n = new Vector3(...p.n);
+      qq.setFromUnitVectors(new Vector3(0, 0, 1), n);
+      const pad = p.kind === 0 ? 0.07 : 0.1;
+      m.setMatrixAt(i, o.compose(new Vector3(...p.p).addScaledVector(n, -0.006), qq, new Vector3(p.w + pad, p.h + pad, 1)));
+    });
+    return m;
+  }, [geo]);
   /** cabins asleep at 02:14: a fixed half of the accommodation is dark */
   const awake = useMemo(() => geo.panes.map((p, i) => p.kind !== 1 || (i * 7919) % 13 < 7), [geo]);
   const otherPanes = useMemo(() => {
@@ -261,11 +280,47 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     () => () => {
       for (const g of [geo.sea, geo.sky, geo.rain, geo.spray, geo.hull, geo.boat.hull, geo.boat.canopy, geo.pane, geo.bulb, geo.rod, ...geo.bolts, ...Object.values(geo.parts)]) g.dispose();
       paneMesh.dispose();
+      recessMesh.dispose();
       otherPanes.dispose();
       [...mats.lamp, ...mats.other, ...mats.bulb, mats.strobe, mats.boatLamp].forEach((m) => m.dispose());
     },
-    [geo, mats, paneMesh, otherPanes],
+    [geo, mats, paneMesh, recessMesh, otherPanes],
   );
+
+  // Compile every program off the main thread before the first visible frame
+  // (KHR_parallel_shader_compile), as bridge/kit.tsx Warm does: a synchronous
+  // link of the sea/sky/standard materials froze a software-rendered page for
+  // 2-4 s when an ending mounted. Until then the root is hidden (black) and
+  // the cinematic clock holds at 0, so no shot or caption is lost.
+  const root = useRef<Group>(null);
+  const gl = useThree((x) => x.gl);
+  useEffect(() => {
+    const g = root.current;
+    if (!g) return;
+    let live = true;
+    const hidden: Object3D[] = [];
+    g.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    const done = () => {
+      if (!live) return;
+      if (!warmedAt.has(start)) warmedAt.set(start, performance.now() / 1000);
+      if (root.current) root.current.visible = true;
+    };
+    gl.compileAsync(g, camera, scene).catch(() => undefined).then(done);
+    for (const o of hidden) o.visible = false;
+    if (!warmedAt.has(start)) g.visible = false;
+    // never strand the cinematic on a renderer that can't report completion
+    const cap = setTimeout(done, 6000);
+    if (warmedAt.size > 8) warmedAt.delete(warmedAt.keys().next().value!);
+    return () => {
+      live = false;
+      clearTimeout(cap);
+    };
+  }, [gl, camera, scene, start, tier]);
 
   const st = useMemo(
     () => ({
@@ -458,6 +513,8 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     const redAft = st.pw.red;
     sea.uniforms.shipLight.value = Math.min(1, mainAvg * 2.2);
     sea.uniforms.shipRed.value = Math.min(1, redAvg * 3);
+    // white water along the hull while the sea is coming over her deck edge
+    sea.uniforms.wash.value = seq === "lost" ? ramp(t, 2, 4) * (1 - ramp(t, 12.4, 13.2)) : seq === "survived" ? ramp(t, 6, 10) * 0.7 * (1 - ramp(t, 16, 18)) : ramp(t, T_HIT + 6, T_HIT + 10) * 0.35;
     // the emergency strobe over the bridge: red, slow, relentless
     const pulse = reduced ? 0.7 : Math.sin(t * 5.5) > 0.2 ? 1 : 0.08;
     const strobeOn = seq === "intro" ? ramp(t, T_HIT + 4.4, T_HIT + 4.6) : seq === "survived" ? failing(t, 10.5, reduced, 4) : failing(t, 9.6, reduced, 4);
@@ -545,6 +602,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     <>
       <color attach="background" args={["#0a1218"]} />
       <fog ref={refs.fog} attach="fog" args={["#0a1218", 35, 240]} />
+      <group ref={root}>
       <ambientLight intensity={0.35} color="#9fb3c4" />
       <hemisphereLight args={["#6a8098", "#0a1014", 0.9]} />
       {/* a cold rim from the lit horizon behind her, so she reads in silhouette */}
@@ -566,6 +624,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
         <mesh geometry={P.black} material={S("black")} />
         <mesh geometry={P.glassFrame} material={S("black")} />
         <primitive object={paneMesh} />
+        <primitive object={recessMesh} />
         {LAMPS.map((l, i) => (
           <group key={i} position={l.p}>
             <mesh geometry={geo.bulb} material={mats.bulb[i]} />
@@ -600,6 +659,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
       <mesh ref={refs.fallA} geometry={geo.rod} material={S("steel")} visible={false} />
       <mesh ref={refs.fallB} geometry={geo.rod} material={S("steel")} visible={false} />
       <mesh ref={refs.fade} geometry={geo.pane} material={fadeMat} scale={[4, 4, 1]} renderOrder={999} frustumCulled={false} visible={false} />
+      </group>
     </>
   );
 }
