@@ -59,6 +59,8 @@ export type Voyage = {
   id: string;
   code: string;
   seed: number;
+  /** created by dev mode (docs/DEV_MODE.md): everything unlocked, never in production */
+  dev?: true;
   /** links the voyages of one pair (create → sail again → …): unlocks follow it */
   crewId: string;
   mode: Mode;

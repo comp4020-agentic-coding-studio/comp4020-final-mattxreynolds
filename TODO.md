@@ -28,6 +28,8 @@
 - reflections/crit-10.md: the student's own words.
 
 ## COMPLETED
+- Dev mode (docs/DEV_MODE.md): one browser holds both seats, F2 switches,
+  skip/danger/sink panel; off in production, spec/dev-mode.test.ts.
 - Second cycle: ship simulation (grid/water/hull), five acts with CASCADE,
   Aux Machinery + Comms rooms, seeded Act IV, cross-act consequences (wear,
   seams, lost compartments, answered calls), davits finale, debrief

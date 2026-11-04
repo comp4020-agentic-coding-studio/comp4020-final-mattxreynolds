@@ -20,6 +20,7 @@ import { hashToken, type Db } from "./db.ts";
 import { log } from "./log.ts";
 import { advance, applyIntent, bothSeatsReady, createVoyage, tick, upgradeVoyage, type Voyage } from "./game/voyage.ts";
 import { viewFor, type Presence } from "./game/views.ts";
+import { applyDevAction, type DevAction } from "./game/dev.ts";
 
 /** The slice of a Socket.IO socket the manager uses (fakeable in tests). */
 export type Conn = { id: string; emit(event: string, data: unknown): void };
@@ -100,6 +101,10 @@ export class Manager {
 
   private refreshUnlocks(v: Voyage): void {
     if (v.phase !== "LOBBY") return;
+    if (v.dev) {
+      v.unlocks = { modes: [...MODES], acts: 5 };
+      return;
+    }
     v.unlocks = this.unlocksFor(v.crewId);
     if (!v.unlocks.modes.includes(v.mode)) v.mode = "STANDARD";
     if (v.practice !== null && v.practice > v.unlocks.acts) v.practice = null;
@@ -304,6 +309,7 @@ export class Manager {
       const now = this.clock();
       const seed = sameShip ? l.v.seed : randomInt(2 ** 31);
       const next = createVoyage(randomUUID(), this.newCode(), seed, now, { crewId: l.v.crewId, mode: l.v.mode, practice: l.v.practice });
+      if (l.v.dev) next.dev = true;
       for (const r of ROLES) {
         if (l.v.seats[r]) next.seats[r] = { callsign: l.v.seats[r]!.callsign, ready: false };
       }
@@ -391,6 +397,44 @@ export class Manager {
       conn.emit("view", views[role]);
       if (fx.length) conn.emit("fx", fx);
     }
+  }
+
+  // ------------------------------------------------------------ dev tools
+
+  /** Dev mode (docs/DEV_MODE.md): one voyage with both seats filled and
+   * every act and mode unlocked, so one browser can play both roles. */
+  devCreate(rawShip?: unknown): { code: string; seats: SeatGrant[] } {
+    const now = this.clock();
+    const ship = typeof rawShip === "number" && Number.isInteger(rawShip) && rawShip >= 0 && rawShip < 2 ** 31 ? rawShip : randomInt(2 ** 31);
+    const v = createVoyage(randomUUID(), this.newCode(), ship, now);
+    v.dev = true;
+    this.refreshUnlocks(v);
+    const seats: SeatGrant[] = [];
+    this.db.insertVoyage(v);
+    for (const [role, callsign] of [["ENGINEER", "DEV-ENG"], ["NAVIGATOR", "DEV-NAV"]] as const) {
+      v.seats[role] = { callsign, ready: false };
+      const token = randomBytes(32).toString("base64url");
+      this.db.insertSeat(v.id, role, callsign, hashToken(token));
+      seats.push({ code: v.code, token, role });
+    }
+    this.db.saveVoyage(v);
+    this.db.event(v.id, "created", "dev mode");
+    this.live.set(v.code, this.wrap(v));
+    log("voyage.created", { code: v.code, dev: true });
+    return { code: v.code, seats };
+  }
+
+  /** Applies a dev action; the caller must prove a seat with its token. */
+  devAction(rawCode: unknown, token: unknown, action: DevAction): "ok" | "not-found" | "bad-token" | "wrong-phase" {
+    const l = this.get(normaliseCode(rawCode));
+    if (!l) return "not-found";
+    if (typeof token !== "string" || !this.db.roleForToken(l.v.id, token)) return "bad-token";
+    const now = this.clock();
+    const fx = tick(l.v, now);
+    if (!applyDevAction(l.v, action, now, fx)) return "wrong-phase";
+    log("voyage.dev", { code: l.v.code, action: action.k });
+    this.afterChange(l, fx);
+    return "ok";
   }
 
   // ------------------------------------------------------------ tests

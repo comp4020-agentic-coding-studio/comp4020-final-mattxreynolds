@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Db } from "./db.ts";
 import type { Manager, SeatError } from "./manager.ts";
+import { parseDevAction } from "./game/dev.ts";
 import { debriefPage, historyPage, notFoundPage, readmePage } from "./pages.ts";
 
 const SEAT_ERROR_STATUS: Record<SeatError, number> = {
@@ -19,6 +20,8 @@ export type HttpOptions = {
   db: Db;
   manager: Manager;
   testHooks: boolean;
+  /** Dev mode (docs/DEV_MODE.md): one browser plays both seats. Off in production. */
+  devTools: boolean;
   /** Serves the client: static dist/ in production, Vite middleware in dev. */
   client: (app: express.Express) => Promise<void> | void;
 };
@@ -98,6 +101,25 @@ export async function createApp(opts: HttpOptions): Promise<express.Express> {
       const v = manager.testVoyage(String(req.params.code));
       if (!v) res.status(404).end();
       else res.json(db.events(v.id));
+    });
+  }
+
+  // Always answers (never a 404 in the visitor's console); the home page
+  // shows the dev card only when this says dev: true.
+  app.get("/api/dev/status", (_req, res) => {
+    res.json({ dev: opts.devTools });
+  });
+  if (opts.devTools) {
+    // Dev-only: both seats in one browser, plus skip/danger/lose.
+    app.post("/api/dev/voyages", (req, res) => {
+      res.status(201).json(manager.devCreate(req.body?.ship));
+    });
+    app.post("/api/dev/voyages/:code/action", (req, res) => {
+      const action = parseDevAction(req.body?.action);
+      if (!action) return void res.status(400).json({ error: "bad-input" });
+      const r = manager.devAction(req.params.code, req.body?.token, action);
+      const status = { ok: 200, "not-found": 404, "bad-token": 403, "wrong-phase": 409 }[r];
+      res.status(status).json(r === "ok" ? { ok: true } : { error: r });
     });
   }
 

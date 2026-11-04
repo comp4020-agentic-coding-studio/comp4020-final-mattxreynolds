@@ -2,7 +2,7 @@
 // (docs/MULTIPLAYER.md); every (re)connect re-sends hello for a full snapshot.
 
 import { io, type Socket } from "socket.io-client";
-import type { HelloAck, Intent, IntentAck, RejectReason, View, Fx } from "../shared/protocol.ts";
+import type { HelloAck, Intent, IntentAck, RejectReason, Role, View, Fx } from "../shared/protocol.ts";
 import { playUse } from "./audio.ts";
 import { emitFx, toast, useStore } from "./store.ts";
 
@@ -132,25 +132,37 @@ export function connect(code: string, onFail: (reason: string) => void): void {
   current = { code, token };
   useStore.setState({ code, conn: "connecting", view: null, cinematic: null });
   if (!socket) {
-    socket = io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000 });
-    socket.on("connect", () => hello());
-    socket.on("disconnect", () => useStore.setState({ conn: "offline" }));
-    socket.on("view", (v: View) => {
-      const prev = useStore.getState().view;
-      // views carry a monotonic rev; drop any that arrive out of order
-      if (prev && prev.code === v.code && v.rev < prev.rev) return;
-      useStore.setState({ view: v, ...cinematicFor(prev, v) });
-    });
-    socket.on("fx", (list: Fx[]) => list.forEach(emitFx));
-    socket.on("moved", (m: { code: string; by: string }) => {
-      if (!current) return;
-      saveToken(m.code, current.token);
-      history.replaceState(null, "", `/v/${m.code}`);
-      connect(m.code, failHandler);
-    });
+    socket = wire(io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000 }));
   } else if (socket.connected) {
     hello();
   }
+  devAttach(code);
+}
+
+/** Handlers act only while this socket is the active one: in dev mode two
+ * sockets swap roles (active seat ↔ partner seat), so each checks. */
+function wire(s: Socket): Socket {
+  s.on("connect", () => (s === socket ? hello() : devHello()));
+  s.on("disconnect", () => s === socket && useStore.setState({ conn: "offline" }));
+  s.on("view", (v: View) => {
+    if (s !== socket) {
+      if (dev) dev.view = v;
+      return;
+    }
+    const prev = useStore.getState().view;
+    // views carry a monotonic rev; drop any that arrive out of order
+    if (prev && prev.code === v.code && v.rev < prev.rev) return;
+    useStore.setState({ view: v, ...cinematicFor(prev, v) });
+  });
+  s.on("fx", (list: Fx[]) => s === socket && list.forEach(emitFx));
+  s.on("moved", (m: { code: string; by: string }) => {
+    if (s !== socket || !current) return;
+    if (dev) saveDevSeats(m.code, loadDevSeats(current.code)!);
+    saveToken(m.code, current.token);
+    history.replaceState(null, "", `/v/${m.code}`);
+    connect(m.code, failHandler);
+  });
+  return s;
 }
 
 function hello(): void {
@@ -167,6 +179,9 @@ export function disconnect(): void {
   current = null;
   socket?.disconnect();
   socket = null;
+  dev?.socket.disconnect();
+  dev = null;
+  useStore.setState({ dev: null });
   useStore.setState({ conn: "idle", view: null, code: null });
 }
 
@@ -190,4 +205,136 @@ export function send(intent: Intent): Promise<IntentAck> {
       resolve(ack);
     });
   });
+}
+
+// ---------------------------------------------------------------- dev mode
+// docs/DEV_MODE.md. A dev voyage gives this browser both seats' tokens. The
+// partner seat stays connected on a second socket, so the server sees two
+// present crew and never pauses; switching seats swaps which socket feeds
+// the store and carries intents. Only reachable when /api/dev/* exists.
+
+type DevSeats = Record<Role, string>;
+const DEV_KEY = (code: string) => `btw.dev.${code}`;
+let dev: { socket: Socket; code: string; role: Role; token: string; view: View | null } | null = null;
+
+function loadDevSeats(code: string): DevSeats | null {
+  try {
+    const raw = localStorage.getItem(DEV_KEY(code));
+    return raw ? (JSON.parse(raw) as DevSeats) : null;
+  } catch {
+    return null;
+  }
+}
+function saveDevSeats(code: string, seats: DevSeats): void {
+  try {
+    localStorage.setItem(DEV_KEY(code), JSON.stringify(seats));
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function devAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/dev/status");
+    return res.ok && ((await res.json()) as { dev?: boolean }).dev === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Creates a voyage with both seats held by this browser (you start as the Engineer). */
+export async function devCreate(ship?: number): Promise<SeatResult> {
+  try {
+    const res = await fetch("/api/dev/voyages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ship }),
+    });
+    if (!res.ok) return { error: "network" };
+    const r = (await res.json()) as { code: string; seats: { role: Role; token: string }[] };
+    const seats = Object.fromEntries(r.seats.map((x) => [x.role, x.token])) as DevSeats;
+    saveDevSeats(r.code, seats);
+    try {
+      localStorage.setItem(KEY(r.code), seats.ENGINEER);
+    } catch {
+      /* ignore */
+    }
+    return { code: r.code, token: seats.ENGINEER, role: "ENGINEER" };
+  } catch {
+    return { error: "network" };
+  }
+}
+
+/** On connect(): if this browser holds both seats, seat the partner too. */
+function devAttach(code: string): void {
+  const seats = loadDevSeats(code);
+  if (!seats || !current) {
+    if (dev && dev.code !== code) {
+      dev.socket.disconnect();
+      dev = null;
+      useStore.setState({ dev: null });
+    }
+    return;
+  }
+  const role: Role = seats.ENGINEER === current.token ? "NAVIGATOR" : "ENGINEER";
+  if (dev && dev.code === code && dev.role === role) return;
+  if (dev) {
+    dev.code = code;
+    dev.role = role;
+    dev.token = seats[role];
+    dev.view = null;
+  } else {
+    dev = { socket: wire(io({ transports: ["websocket", "polling"], reconnectionDelayMax: 3000, forceNew: true })), code, role, token: seats[role], view: null };
+  }
+  useStore.setState({ dev: { partner: role } });
+  if (dev.socket.connected) devHello();
+}
+
+function devHello(): void {
+  if (!dev) return;
+  dev.socket.emit("hello", { code: dev.code, token: dev.token }, (ack: HelloAck) => {
+    if (!ack.ok) toast(`Dev: partner seat refused (${ack.reason})`, "warn");
+  });
+}
+
+/** Swap seats: the partner socket becomes the active one and vice versa.
+ * Neither socket reconnects, so the server sees no presence change. */
+export function devSwitch(): void {
+  if (!dev?.view || !socket || !current) return;
+  const next = dev;
+  const activeRole: Role = next.role === "ENGINEER" ? "NAVIGATOR" : "ENGINEER";
+  const prevSocket = socket;
+  const prevToken = current.token;
+  socket = next.socket;
+  current = { code: current.code, token: next.token };
+  dev = { socket: prevSocket, code: current.code, role: activeRole, token: prevToken, view: useStore.getState().view };
+  try {
+    localStorage.setItem(KEY(current.code), current.token);
+  } catch {
+    /* ignore */
+  }
+  if (document.pointerLockElement) document.exitPointerLock();
+  useStore.setState({ view: next.view, cinematic: null, prompt: null, dev: { partner: activeRole } });
+}
+
+/** Sends an intent from the partner seat (e.g. "ready both" in the lobby). */
+export function devSendPartner(intent: Intent): Promise<IntentAck> {
+  return new Promise((resolve) => {
+    if (!dev?.socket.connected) return resolve({ ok: false, reason: "not-seated", rev: 0 });
+    dev.socket.timeout(5000).emit("intent", { seq: ++seq, intent }, (err: unknown, ack: IntentAck) => resolve(err ? { ok: false, reason: "bad-input", rev: 0 } : ack));
+  });
+}
+
+export async function devAction(action: { k: "skip" } | { k: "lose" } | { k: "danger"; value: number }): Promise<void> {
+  if (!current) return;
+  try {
+    const res = await fetch(`/api/dev/voyages/${current.code}/action`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: current.token, action }),
+    });
+    if (!res.ok) toast(`Dev: ${((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? res.status}`, "warn");
+  } catch {
+    toast("Dev: no answer from the server", "warn");
+  }
 }

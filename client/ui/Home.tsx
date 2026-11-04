@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { CALLSIGN_MAX } from "../../shared/config.ts";
-import { createVoyage } from "../net.ts";
+import { createVoyage, devAvailable, devCreate } from "../net.ts";
 import { Controls } from "./Controls.tsx";
 
 export const callsignError = (s: string): string | null =>
@@ -16,6 +16,19 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
     const n = Number(new URLSearchParams(location.search).get("ship"));
     return Number.isInteger(n) && n > 0 ? n : undefined;
   });
+
+  // dev mode card: only when the server exposes /api/dev (never production)
+  const [dev, setDev] = useState(false);
+  useEffect(() => {
+    void devAvailable().then(setDev);
+  }, []);
+  const devStart = async () => {
+    setBusy(true);
+    const r = await devCreate(ship);
+    setBusy(false);
+    if ("error" in r) setError("Dev voyage failed.");
+    else onVoyage(r.code);
+  };
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -96,6 +109,15 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
         </form>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+      {dev && (
+        <div className="card dev-card" data-testid="dev-card">
+          <h2>Dev mode</h2>
+          <p className="hint">Both seats in this browser. Switch seat with F2; skip acts, set danger and sink the ship from the panel (` toggles it).</p>
+          <button className="primary" data-testid="dev-start" disabled={busy} onClick={devStart}>
+            Start dev voyage
+          </button>
+        </div>
+      )}
 
       <ul className="strip" aria-label="How it works">
         <li><b>TWO SEATS</b><span>Engineer below, Radio Officer on the Bridge.</span></li>

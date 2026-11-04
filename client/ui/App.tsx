@@ -6,6 +6,7 @@ import { isPlaying } from "../../shared/protocol.ts";
 import { connect, disconnect, forgetToken, savedToken } from "../net.ts";
 import { useStore } from "../store.ts";
 import { exposeTestApi } from "../testApi.ts";
+import { DevPanel } from "./DevPanel.tsx";
 import { Ending } from "./Ending.tsx";
 import { Game } from "./Game.tsx";
 import { Home } from "./Home.tsx";
@@ -81,6 +82,7 @@ export function App() {
   return (
     <>
       {body}
+      {code && seated && <DevPanel />}
       <Toasts />
     </>
   );

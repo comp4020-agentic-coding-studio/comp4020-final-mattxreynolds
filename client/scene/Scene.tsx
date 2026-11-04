@@ -89,7 +89,7 @@ export const Scene = memo(function Scene() {
           <Look />
           {engineer ? <EngineRoom /> : <Bridge />}
           <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
-          <ReadyProbe />
+          <ReadyProbe key={role} />
         </>
       )}
     </Canvas>

@@ -58,7 +58,7 @@ function exited(proc: ChildProcess): Promise<void> {
   return new Promise((resolve) => proc.once("exit", () => resolve()));
 }
 
-export async function startServer(opts: { dbPath?: string; testHooks?: boolean } = {}): Promise<TestServer> {
+export async function startServer(opts: { dbPath?: string; testHooks?: boolean; env?: Record<string, string> } = {}): Promise<TestServer> {
   const dir = opts.dbPath ? null : mkdtempSync(join(tmpdir(), "btw-spec-"));
   const dbPath = opts.dbPath ?? join(dir!, "db.sqlite");
   const port = await freePort();
@@ -77,6 +77,8 @@ export async function startServer(opts: { dbPath?: string; testHooks?: boolean }
         DATABASE_PATH: dbPath,
         LOG_QUIET: "1",
         ENABLE_TEST_HOOKS: opts.testHooks ? "1" : "0",
+        ENABLE_DEV_TOOLS: "0",
+        ...opts.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

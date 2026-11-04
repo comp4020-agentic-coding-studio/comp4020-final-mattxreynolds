@@ -16,6 +16,9 @@ const host = process.env.HOST ?? "0.0.0.0";
 const dbPath = process.env.DATABASE_PATH ?? resolve(root, "data/below-waterline.sqlite");
 const production = process.env.NODE_ENV === "production";
 const testHooks = process.env.ENABLE_TEST_HOOKS === "1";
+// Dev mode is on by default under `pnpm dev`, never in a production build
+// unless explicitly asked for (the dev spec does that on a throwaway server).
+const devTools = production ? process.env.ENABLE_DEV_TOOLS === "1" : process.env.ENABLE_DEV_TOOLS !== "0";
 
 let db: ReturnType<typeof openDb>;
 try {
@@ -52,6 +55,7 @@ const app = await createApp({
   db,
   manager,
   testHooks,
+  devTools,
   client: production ? staticClient(root) : devClient,
 });
 http.on("request", app);
@@ -59,7 +63,7 @@ attachSockets(http, manager);
 manager.start();
 
 http.listen(port, host, () => {
-  log("server.listening", { host, port, mode: production ? "production" : "development", testHooks });
+  log("server.listening", { host, port, mode: production ? "production" : "development", testHooks, devTools });
 });
 
 let stopping = false;

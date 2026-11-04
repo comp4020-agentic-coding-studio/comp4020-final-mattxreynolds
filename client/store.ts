@@ -31,6 +31,8 @@ type State = {
   cinematic: { shot: "intro" | "survived" | "lost"; start: number } | null;
   /** Render quality tier (scene/look/quality.ts): a per-viewer setting. */
   quality: Quality;
+  /** Dev mode (docs/DEV_MODE.md): this browser also holds the partner seat. */
+  dev: { partner: "ENGINEER" | "NAVIGATOR" } | null;
 };
 
 export const useStore = create<State>(() => ({
@@ -49,6 +51,7 @@ export const useStore = create<State>(() => ({
   sceneReady: false,
   cinematic: null,
   quality: storedQuality(),
+  dev: null,
 }));
 
 let toastId = 0;

@@ -413,3 +413,21 @@ button.link { background: none; border: 0; color: #1d5a7a; text-decoration: unde
 .report .hl.good { border-left-color: var(--r-good); } .report .hl.bad { border-left-color: var(--r-bad); } .report .hl.info { border-left-color: var(--r-gold); }
 .report .hl-value { font-family: var(--mono); color: #fff; }
 .report .hl-detail { color: var(--r-dim); opacity: 1; }
+
+/* dev mode (docs/DEV_MODE.md) */
+.dev-card { max-width: 40rem; margin: 1rem auto; border: 2px dashed var(--warn); }
+.dev-panel {
+  position: fixed; top: 0.6rem; right: 0.6rem; z-index: 60; width: 14rem;
+  display: flex; flex-direction: column; gap: 0.35rem; padding: 0.6rem;
+  background: #0b1820ee; color: #fff; font: 0.8rem/1.4 var(--mono);
+  border: 2px dashed var(--warn); border-radius: 4px;
+}
+.dev-panel button { text-align: left; padding: 0.3rem 0.5rem; border: 1px solid #fff4; border-radius: 3px; background: #ffffff14; color: #fff; }
+.dev-panel button:hover { background: #ffffff2a; }
+.dev-panel kbd { color: var(--ink); font-size: 0.7rem; }
+.dev-panel p { margin: 0; }
+.dev-title { font-weight: 700; color: var(--warn); }
+.dev-danger { margin: 0; font-weight: 400; font-size: 0.8rem; }
+.dev-danger input { padding: 0; margin: 0.2rem 0 0; }
+.dev-hint { opacity: 0.7; font-size: 0.7rem; }
+.dev-tab { position: fixed; top: 0.6rem; right: 0.6rem; z-index: 60; padding: 0.15rem 0.4rem; background: #0b1820cc; color: var(--warn); font: 700 0.7rem var(--mono); border: 1px dashed var(--warn); }
