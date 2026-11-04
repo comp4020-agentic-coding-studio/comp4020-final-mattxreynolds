@@ -27,6 +27,8 @@ const { values } = parseArgs({
     height: { type: "string", default: "800" },
     /** render tier: "high" (bloom, reflections, relief) or "low" */
     quality: { type: "string", default: "high" },
+    /** re-apply the patch before every view (for state that evolves, e.g. a growing fire) */
+    repatch: { type: "boolean", default: false },
     /** screenshot the opening cinematic at these seconds (e.g. "3;9;15") instead of rooms */
     cinematic: { type: "string" },
   },
@@ -99,6 +101,10 @@ try {
     await page.waitForTimeout(1500);
     for (const v of values.views!.split(";")) {
       const [label, pose] = v.split(":");
+      if (values.repatch) {
+        await post(`/api/test/voyages/${a.code}/patch`, patch);
+        await page.waitForTimeout(400);
+      }
       if (pose || label !== "spawn") {
         const preset: Record<string, string> = { left: "0,0,1.2,0", right: "0,0,-1.2,0", back: "0,0,3.14,0", down: "0,0,0,-0.5" };
         const [x, z, yaw, pitch] = (pose ?? preset[label] ?? "0,0,0,0").split(",").map(Number);
