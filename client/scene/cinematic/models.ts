@@ -162,7 +162,26 @@ export function shipParts(): Record<"house" | "steel" | "hatch" | "funnel" | "ba
   // forecastle bulwark and the poop rail
   house.box(10.6, 2.6, -1.5, 11.0, 3.15, 1.5);
   const steel = new Kit();
-  // wheelhouse visor, radar mast + scanner, foremast with crosstree
+  // deck-edge fascia round each tier: a dark proud band where the deck overhangs,
+  // so the house reads as stacked decks rather than one block
+  const fascia = (x0: number, x1: number, z: number, y: number) => {
+    steel.box(x0 - 0.06, y - 0.07, -z - 0.06, x1 + 0.06, y + 0.05, -z + 0.02);
+    steel.box(x0 - 0.06, y - 0.07, z - 0.02, x1 + 0.06, y + 0.05, z + 0.06);
+    steel.box(x1 - 0.02, y - 0.07, -z - 0.06, x1 + 0.06, y + 0.05, z + 0.06);
+    steel.box(x0 - 0.06, y - 0.07, -z - 0.06, x0 + 0.02, y + 0.05, z + 0.06);
+  };
+  fascia(-11.3, -5.6, 2.15, 3.4);
+  fascia(-10.9, -5.8, 1.95, 4.75);
+  // rails along the open deck edges of the lower tiers
+  for (const [x0, x1, z, y] of [[-11.3, -5.6, 2.15, 3.4], [-10.9, -5.8, 1.95, 4.75]] as const) {
+    for (const side of [-1, 1]) steel.box(x0, y + 0.42, side * z - 0.02, x1, y + 0.46, side * z + 0.02);
+    steel.box(x1 - 0.02, y + 0.42, -z, x1 + 0.02, y + 0.46, z);
+    for (let x = x0 + 0.2; x < x1; x += 0.7) for (const side of [-1, 1]) steel.box(x - 0.02, y, side * z - 0.02, x + 0.02, y + 0.44, side * z + 0.02);
+  }
+  // wheelhouse: a raked sun visor over the front windows, and chamfered front corners
+  steel.box(-5.75, 5.95, -2.1, -5.2, 6.02, 2.1, [0, 0, -0.32]);
+  for (const side of [-1, 1]) steel.box(-5.75, 4.75, side * 2.0 - 0.18, -5.45, 6.1, side * 2.0 + 0.18, [0, Math.PI / 4, 0]);
+  // wheelhouse roof, radar mast + scanner, foremast with crosstree
   steel.box(-9.6, 6.1, -2.15, -5.35, 6.22, 2.15);
   steel.cyl(-7.6, 7.4, 0, 0.07, 0.09, 2.4);
   steel.box(-7.62, 7.9, -0.9, -7.5, 7.98, 0.9);
