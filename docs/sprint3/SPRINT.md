@@ -11,7 +11,8 @@ Durable state for the overnight sprint. If context is lost, start here.
 ## Budget ledger (strproxy /api/me, weekly cap $300)
 | time | confirmed spend this week | sprint spend |
 |---|---|---|
-| start | $61.20 | $0 |
+| start 22:10 | $61.20 | $0 |
+| 23:15 | $75.12 | $13.92 (lag possible) |
 
 ## Process registry
 | pid/pgid | owner | purpose | port | status |
@@ -32,3 +33,4 @@ See ISSUES.md.
 - 22:30 Spawned: cinematic (worktree, Cinematic.tsx), bridge-audit (worktree, client/scene/bridge + Bridge.tsx),
   engine-audit (worktree, client/scene/engine + EngineRoom.tsx), QA-coop (read-only), QA-journey (read-only, browser),
   QA-render (read-only, browser). Ports: cinematic 9110-9119, bridge 9120-9129, engine 9130-9139, QA 9140-9169.
+- 23:15 merged bridge-audit round 1 (bf6f213); sent round 2 (telegraph dial, full workstation audit). COOP fixes f3da2ff.

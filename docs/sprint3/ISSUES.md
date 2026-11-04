@@ -12,4 +12,8 @@ scripted browsers, screenshot inspection). No human playtesting.
 | COOP-4 | Low | server/manager.ts devAction | dev skip worked on non-dev voyages when dev tools on | fixed (gate on v.dev) + spec |
 | COOP-5 | Low | ship.ts setIsolator / net.ts | fire panel lockout toasted "Steady strokes" | fixed: reason `panel-locked` |
 | COOP-6 | Low | client/net.ts | grid-down message addressed the Engineer in 3rd person | fixed: role-neutral text |
+| BRIDGE-1 | High | Bridge codebook | locker at codebook edge | fixed bf6f213 (lead-verified render) |
+| BRIDGE-2 | High | routing diagram | SHORTED stamp over icons | fixed bf6f213 (lead-verified) |
+| BRIDGE-3 | Medium | PowerConsole plates | rated plate overlapped HELM plate | fixed bf6f213 |
+| BRIDGE-4 | Medium | engine telegraph dial | crushed labels, clipped plate | assigned bridge-audit round 2 |
 | COOP-7 | Low | server/manager.ts unlocksFor | same-ship rerun wins count toward unlocks | won't fix overnight: design choice for student |
