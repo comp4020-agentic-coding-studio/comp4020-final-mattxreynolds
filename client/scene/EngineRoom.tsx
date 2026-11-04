@@ -15,6 +15,7 @@ import type { Group } from "three";
 import { onFx, useStore } from "../store.ts";
 import type { RoomLayout } from "./colliders.ts";
 import { BusPanel } from "./engine/BusPanel.tsx";
+import { EngineDressing } from "./engine/Dressing.tsx";
 import { Effects, kicks, spawnSparks, spawnSteam } from "./engine/Effects.tsx";
 import { EscapeWall } from "./engine/EscapeWall.tsx";
 import { Generator } from "./engine/Generator.tsx";
@@ -133,6 +134,7 @@ export function EngineRoom() {
       <Manifold />
       <EscapeWall />
       <ShipPanel />
+      <EngineDressing />
       <AuxRoom />
       <Water />
       <Effects />

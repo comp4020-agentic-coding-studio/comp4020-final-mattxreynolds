@@ -16,6 +16,7 @@ import { Lamp } from "../parts.tsx";
 import { kicks } from "./Effects.tsx";
 import { At, B, C, ev, G, M, MR, Pipe, Plate, useEVs } from "./kit.tsx";
 import { AUX, AUX_AT, AUX_CX, AUX_CZ, AUX_D, AUX_W, FACE } from "./layout.ts";
+import { AuxDressing } from "./Dressing.tsx";
 import { PlantPanel } from "./PlantPanel.tsx";
 import { roundRect } from "./Shell.tsx";
 
@@ -295,6 +296,7 @@ export function AuxRoom() {
       <AuxGenerator />
       <PlantPanel />
       <ShipPlates />
+      <AuxDressing />
       <AuxLight />
     </group>
   );
