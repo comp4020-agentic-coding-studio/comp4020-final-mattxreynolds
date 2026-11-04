@@ -24,7 +24,7 @@ function GlyphPlate({ glyph, position }: { glyph: Glyph | null; position: [numbe
       h={0.24}
       px={256}
       position={position}
-      glow={0.6}
+      glow={0.2}
       deps={[glyph]}
       draw={(ctx, W, H) => {
         ctx.fillStyle = PALETTE.dialFace;
@@ -75,7 +75,7 @@ function Breaker({ i, x }: { i: number; x: number }) {
       <Plate text={String(i + 1)} w={0.14} h={0.11} position={[0, 2.07, 0.1]} glow={0.6} />
       <GlyphPlate glyph={glyph} position={[0, 1.88, 0.1]} />
       {/* load pips: raised black studs (●) for each unit of load, empty rings (○) for the rest */}
-      <Plate text="" w={0.26} h={0.17} position={[0, 1.655, 0.095]} bg={PALETTE.dialFace} glow={0.55} />
+      <Plate text="" w={0.26} h={0.17} position={[0, 1.655, 0.095]} bg={PALETTE.dialFace} glow={0.2} />
       {[0, 1, 2].map((k) => (
         <group key={k} position={[(k - 1) * 0.075, 1.685, 0.1]}>
           {k < load ? (
@@ -90,7 +90,7 @@ function Breaker({ i, x }: { i: number; x: number }) {
         h={0.055}
         px={256}
         position={[0, 1.61, 0.1]}
-        glow={0.55}
+        glow={0.2}
         deps={[load]}
         draw={(ctx, W, H) => drawPlate(ctx, W, H, `LOAD ${load}`, { bg: PALETTE.dialFace, fg: PALETTE.dialInk })}
       />
@@ -109,7 +109,7 @@ function Breaker({ i, x }: { i: number; x: number }) {
         h={0.09}
         position={[0, 1.13, 0.1]}
         bg={closed ? "#1d5a33" : "#4a1712"}
-        glow={0.8}
+        glow={0.5}
       />
     </At>
   );
