@@ -39,8 +39,11 @@ function ReadyProbe() {
     if (done.current) return;
     // every staged part mounted and compiled (scene/loading.ts), then a
     // frame under 0.5 s means the last compile stall has passed
-    smooth.current = dt < 0.5 && loadingOpen() === 0 ? smooth.current + 1 : 0;
-    if (smooth.current >= 8) ready();
+    // (a slow frame halves the streak rather than zeroing it: a CPU
+    // rasteriser draws a full room in ~0.3-0.6 s and must still get there)
+    if (loadingOpen() > 0) smooth.current = 0;
+    else smooth.current = dt < 0.5 ? smooth.current + 1 : Math.floor(smooth.current / 2);
+    if (smooth.current >= 4) ready();
   });
   return null;
 }
