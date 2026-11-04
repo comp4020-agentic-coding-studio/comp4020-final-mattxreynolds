@@ -93,7 +93,7 @@ function Valve({ c }: { c: Compartment }) {
         </mesh>
       </Interactable>
       {/* flag: text + colour + position (flag drops down when open) */}
-      <Plate text={open ? "OPEN" : "SHUT"} w={0.3} h={0.11} position={[0, 0.72, 0.36]} bg={open ? "#1d5a33" : "#4a1712"} glow={0.9} />
+      <Plate text={open ? "OPEN" : "SHUT"} w={0.3} h={0.11} position={[0, 0.72, 0.36]} bg={open ? "#1d5a33" : "#4a1712"} glow={0.6} />
       <Plate text="↺ OPEN  ↻ SHUT" w={0.42} h={0.07} position={[0, 0.58, 0.36]} glow={0.45} />
     </At>
   );
