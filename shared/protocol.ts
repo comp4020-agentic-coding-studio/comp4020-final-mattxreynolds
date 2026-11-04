@@ -105,6 +105,7 @@ export type RejectReason =
   | "not-coupled"
   | "door-not-open"
   | "too-fast"
+  | "panel-locked"
   | "paused"
   | "pump-seized"
   | "grid-down"

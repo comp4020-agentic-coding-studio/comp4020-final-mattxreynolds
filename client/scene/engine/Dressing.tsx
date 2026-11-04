@@ -376,7 +376,7 @@ function Signage() {
       <Plate text={"LIFEJACKETS"} w={0.5} h={0.09} position={[-4.15, 2.06, 3.97]} rotation={[0, PI, 0]} border={PALETTE.hazardYellow} glow={0.55} />
       <Plate text={"FIRE\nEXTINGUISHER"} w={0.3} h={0.15} position={[1.75, 1.3, 3.975]} rotation={[0, PI, 0]} bg="#7a1a14" fg="#f4eee0" glow={0.5} />
       <Plate text={"LUBE OIL\nTANK · 400 L"} w={0.4} h={0.16} position={[4.97, 1.55, 2.6]} rotation={[0, -PI / 2, 0]} border={PALETTE.brass} glow={0.55} />
-      <Plate text={"ESCAPE TRUNK\nUP"} w={0.56} h={0.16} position={[-4.97, 2.4, -3.55]} rotation={[0, PI / 2, 0]} bg="#1d5a33" fg="#f4eee0" glow={0.6} />
+      <Plate text={"ESCAPE TRUNK\nUP"} w={0.56} h={0.16} position={[-4.97, 2.4, -2.95]} rotation={[0, PI / 2, 0]} bg="#1d5a33" fg="#f4eee0" glow={0.6} />
       <Plate text={"NO SMOKING"} w={0.4} h={0.07} position={[-3.25, 2.2, 3.975]} rotation={[0, PI, 0]} bg="#7a1a14" fg="#f4eee0" glow={0.45} />
       <B p={[-2.7, 1.65, 3.975]} s={[0.55, 0.7, 0.02]} m={D().cork} />
       <Plate text={"WATCH BILL\n\n00-04 OKONJO\n04-08 BRANDT\n08-12 OKONJO\n\nLOG THE BILGES"} w={0.34} h={0.5} position={[-2.7, 1.66, 3.96]} rotation={[0, PI, 0]} bg="#e9e2cc" fg="#1b1b1b" glow={0.35} />

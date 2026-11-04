@@ -276,11 +276,11 @@ function tickFire(v: Voyage, dt: number, fx: Fx[]): void {
 }
 
 /** The Engineer throws (on) or re-arms (off) the fire panel's isolators. */
-export function setIsolator(v: Voyage, index: number, on: boolean, fx: Fx[]): "wrong-phase" | "grid-down" | "too-fast" | null {
+export function setIsolator(v: Voyage, index: number, on: boolean, fx: Fx[]): "wrong-phase" | "grid-down" | "panel-locked" | null {
   const f = v.ship.fire;
   if (!fireBurning(v)) return "wrong-phase";
   if (!gridUp(v)) return "grid-down";
-  if (v.elapsedMs < f.lockedUntilMs) return "too-fast";
+  if (v.elapsedMs < f.lockedUntilMs) return "panel-locked";
   if (!on) {
     // re-arm: idempotent, free, and says nothing about which throws were right
     f.thrown = [];

@@ -44,3 +44,21 @@ describe("comms room door", () => {
     expect(BRIDGE_LAYOUT.spawn[0]).toBeLessThan(5);
   });
 });
+
+describe("exterior sea containment", async () => {
+  const { SHIP_FOOTPRINT } = await import("../client/scene/bridge/Exterior.tsx");
+  const { ROOM } = await import("../client/scene/bridge/Room.tsx");
+  const { COMMS } = await import("../client/scene/bridge/Comms.tsx");
+  const inside = (x: number, z: number) => SHIP_FOOTPRINT.some(([cx, cz, hx, hz]) => Math.abs(x - cx) <= hx && Math.abs(z - cz) <= hz);
+  it("the sea mask covers the whole Bridge, Comms Room and foredeck so crests never rise through a floor", () => {
+    // regression: the sea plane ran under the Bridge's forward half and storm
+    // crests rose ~1.3 m through the floor
+    const rects = [
+      [-ROOM.w / 2, ROOM.w / 2, -ROOM.d / 2, ROOM.d / 2],
+      [COMMS.x0, COMMS.x1, COMMS.z0, COMMS.z1],
+      [-4.7, 4.7, -22.3, -4.3], // foredeck hull (Exterior.tsx: DECK_Z0 - 18, 9.4 wide)
+    ];
+    for (const [x0, x1, z0, z1] of rects)
+      for (let x = x0; x <= x1 + 1e-9; x += (x1 - x0) / 10) for (let z = z0; z <= z1 + 1e-9; z += (z1 - z0) / 10) expect(inside(x, z), `${x},${z}`).toBe(true);
+  });
+});
