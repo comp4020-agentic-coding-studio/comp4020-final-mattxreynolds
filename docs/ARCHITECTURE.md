@@ -44,6 +44,9 @@ client/
   store.ts         Zustand store holding the latest RoleView + feedback.
   ui/              HTML overlay: Home, Lobby, HUD, Endings, panels.
   scene/           React Three Fiber: Engine Room, Bridge, interactables.
+    look/          Shared render look: relief maps, env map, bloom + grade, quality tiers (ADR 007).
+    fx/            Pooled particles, per-act atmosphere, Bridge distress.
+    loading.ts     First-mount gate: take-controls waits for staged compiles.
   audio.ts         WebAudio procedural sound.
 spec/              Vitest: unit (pure, no server) + app (against running app).
 ```
@@ -113,6 +116,16 @@ store via `useStore.getState()` inside `useFrame` for animated values (no
 per-frame React re-render) and subscribes with selectors for discrete state.
 Interactables are declared with an `<Interactable id prompt onUse>` wrapper
 that the first-person controller raycasts against.
+
+Every room mounts `<Look/>` (scene/look/PostFX.tsx): on the `high` tier an
+environment map and an EffectComposer (bloom → grade → output) that takes
+over rendering via a priority-1 `useFrame`; on `low`, plain rendering.
+Disaster effects (water, spray, steam, sparks, smoke, camera roll) read the
+view in `useFrame` and never affect state. The Bridge mounts heavy parts in
+stages (`Staged` → `Warm`, which compiles shaders with `compileAsync`); each
+stage holds a ticket in `scene/loading.ts`, and the briefing card's
+take-controls button appears only when no tickets remain and frames are
+smooth.
 
 ## Testing
 
