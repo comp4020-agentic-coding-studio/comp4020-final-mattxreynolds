@@ -1,9 +1,11 @@
 # TODO
 
 ## CURRENT
-- Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md):
-  shared look layer done; five parallel workstreams running (engine env,
-  bridge env, disaster fx, gameplay incident, presentation/audio).
+- Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md).
+  Round 1 integrated and green (199/199): shared look, Engine/Aux and
+  Bridge/Comms rebuilds, disaster FX, compartment fire (ADR 006), UI/audio.
+  Round 2 running: engine lighting pass, debrief/log/cinematic polish, fire
+  world feedback + Bridge distress mount.
 
 ## NEXT
 - Human playtests of the five-act voyage: is Act IV readable, is the
