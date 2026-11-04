@@ -32,7 +32,7 @@ export const valveWorld = (c: Compartment): V3 => [AT.manifold[0] - VALVE_X[c], 
 
 /** Local x on the escape wall (= world z). */
 export const ESC = { pumpX: -1.85, pumpZ: 0.55, doorW: 1.3, doorH: 2.1, abandonX: 1.55 } as const;
-export const pumpWorld: V3 = [AT.escapeWall[0] - ESC.pumpZ, 1.0, ESC.pumpX];
+export const pumpWorld: V3 = [AT.escapeWall[0] - ESC.pumpZ, 1.0, ESC.pumpX + 0.55];
 export const switchboardWorld: V3 = [AT.switchboard[0], 1.5, AT.switchboard[2] + 0.5];
 export const transmitterWorld: V3 = [AT.transmitter[0], 1.3, AT.transmitter[2] + 0.75];
 
