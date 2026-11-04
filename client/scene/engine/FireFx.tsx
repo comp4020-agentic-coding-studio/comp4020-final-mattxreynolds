@@ -7,7 +7,7 @@
 //                           fire.smoke); a red/amber rotating FIRE beacon
 //                           by the panel with a FIRE ALARM plate (triangle)
 //   fx "flare"           -> a brief burst of flame and a gout of smoke at the
-//                           panel, an orange flash
+//                           panel, an orange flash (halo + kicks.flash)
 //   fx "out"             -> extinguishant puffs from the deckhead nozzle;
 //                           state "out": the smoke clears
 //   fx "burnout"         -> a fireball flash; state "burnt": a scorched
@@ -18,19 +18,21 @@
 // Mount (world coordinates) in AuxRoom: <FireFx />.
 
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
+  AdditiveBlending,
   CanvasTexture,
   Color,
   DoubleSide,
   Group,
   MeshBasicMaterial,
   MeshStandardMaterial,
-  PointLight,
   RepeatWrapping,
+  type Mesh,
   SRGBColorSpace,
 } from "three";
 import { onFx, useStore } from "../../store.ts";
+import { kicks } from "./Effects.tsx";
 import { Pool } from "../fx/pool.ts";
 import { PALETTE } from "../palette.ts";
 import { At, B, CanvasPlane, ev, G, M, STENCIL } from "./kit.tsx";
@@ -182,6 +184,20 @@ function sootTexture(kind: "wall" | "ceiling"): CanvasTexture {
   return t;
 }
 
+/** A soft radial glow, for the beacon's light on the bulkhead. */
+function haloTexture(): CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(255,255,255,0.9)");
+  g.addColorStop(0.35, "rgba(255,255,255,0.35)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new CanvasTexture(c);
+}
+
 /** A soft cloud texture for the smoke layer banked under the deckhead. */
 function cloudTexture(): CanvasTexture {
   const c = document.createElement("canvas");
@@ -209,7 +225,7 @@ function cloudTexture(): CanvasTexture {
 }
 
 /** The rotating red/amber FIRE beacon on a bracket beside the panel's top corner. */
-function Beacon({ dome, light }: { dome: MeshStandardMaterial; light: RefObject<PointLight | null> }) {
+function Beacon({ dome }: { dome: MeshStandardMaterial }) {
   const m = M();
   return (
     <group position={BEACON}>
@@ -217,7 +233,6 @@ function Beacon({ dome, light }: { dome: MeshStandardMaterial; light: RefObject<
       <B p={[0.07, -0.08, 0]} s={[0.14, 0.03, 0.12]} m={m.steel} />
       <mesh geometry={G().cyl} material={m.steel} position={[0, -0.05, 0]} scale={[0.09, 0.05, 0.09]} />
       <mesh geometry={G().sphere} material={dome} position={[0, 0.06, 0]} scale={[0.08, 0.11, 0.08]} />
-      <pointLight ref={light} position={[-0.25, 0, 0]} intensity={0} distance={6} decay={1.5} color={PALETTE.lampRed} />
     </group>
   );
 }
@@ -225,9 +240,9 @@ function Beacon({ dome, light }: { dome: MeshStandardMaterial; light: RefObject<
 export function FireFx() {
   const m = M();
   const spin = useRef<Group>(null);
-  const light = useRef<PointLight>(null);
   const layer = useRef<Group>(null);
-  const acc = useRef({ smoke: 0, flash: 0, flashCol: FIREBALL.clone(), seen: false });
+  const haloRef = useRef<Mesh>(null);
+  const acc = useRef({ smoke: 0, flash: 0, seen: false });
   const mats = useMemo(() => {
     const dome = new MeshStandardMaterial({ color: "#4a1410", emissive: PALETTE.lampRed, emissiveIntensity: 0.05, roughness: 0.3, transparent: true, opacity: 0.85 });
     const reflector = new MeshStandardMaterial({ color: "#c9ccd0", emissive: PALETTE.lampAmber, emissiveIntensity: 0, roughness: 0.2, metalness: 0.8 });
@@ -236,7 +251,10 @@ export function FireFx() {
     const wall = soot("wall");
     const ceiling = soot("ceiling");
     const cloud = new MeshBasicMaterial({ map: cloudTexture(), color: "#6a6660", transparent: true, depthWrite: false, opacity: 0, side: DoubleSide });
-    return { dome, reflector, wall, ceiling, cloud };
+    // the beacon's sweep and the fire's flashes light the bulkhead: an additive
+    // halo, not a real light (a light per effect costs every lit pixel)
+    const halo = new MeshBasicMaterial({ map: haloTexture(), color: PALETTE.lampRed, transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0, toneMapped: false });
+    return { dome, reflector, wall, ceiling, cloud, halo };
   }, []);
   useEffect(
     () => () => {
@@ -258,12 +276,12 @@ export function FireFx() {
           burstFlame(Math.ceil((rm ? 10 : 22) * q), false);
           for (let i = 0; i < 10 * q; i++) puffSmoke(1);
           a.flash = Math.max(a.flash, rm ? 0.4 : 0.8);
-          a.flashCol.copy(FIREBALL);
+          kicks.flash = Math.max(kicks.flash, rm ? 0.2 : 0.4);
         } else if (fx.ev === "burnout") {
           burstFlame(Math.ceil((rm ? 24 : 60) * q), true);
           for (let i = 0; i < 16 * q; i++) puffSmoke(1);
-          a.flash = Math.max(a.flash, rm ? 0.8 : 2);
-          a.flashCol.copy(FIREBALL);
+          a.flash = Math.max(a.flash, rm ? 0.8 : 1.6);
+          kicks.flash = Math.max(kicks.flash, rm ? 0.5 : 1);
         } else if (fx.ev === "out") {
           puffSteam(Math.ceil((rm ? 14 : 30) * q));
         } else if (fx.ev === "step") {
@@ -328,16 +346,17 @@ export function FireFx() {
     mats.ceiling.opacity = mats.wall.opacity;
     a.seen = !!v;
 
-    // one light: the beacon's sweep, plus flare / fireball flashes
+    // the halo: the beacon's sweep, plus flare / fireball flashes
     a.flash = Math.max(0, a.flash - dt * (rm ? 1.2 : 2.2));
-    const L = light.current;
-    if (L) {
-      const beaconI = burning ? 1.6 * sweep * (rm ? 0.6 : 1) : 0;
-      const flick = rm ? 1 : 0.8 + 0.2 * Math.sin(t * 47) * Math.sin(t * 13);
-      const flashI = a.flash * 14 * flick;
-      L.intensity = beaconI + flashI;
-      if (flashI > beaconI) L.color.copy(a.flashCol);
-      else L.color.copy(amberHalf ? AMBER : RED);
+    const beaconI = burning ? 0.35 * sweep * (rm ? 0.6 : 1) : 0;
+    const flick = rm ? 1 : 0.8 + 0.2 * Math.sin(t * 47) * Math.sin(t * 13);
+    const flashI = a.flash * 0.6 * flick;
+    mats.halo.opacity = Math.min(1, beaconI + flashI);
+    mats.halo.color.copy(flashI > beaconI ? FIREBALL : amberHalf ? AMBER : RED);
+    if (haloRef.current) {
+      const k = 1 + a.flash * 0.8;
+      haloRef.current.scale.set(2.2 * k, 1.8 * k, 1);
+      haloRef.current.visible = mats.halo.opacity > 0.003;
     }
 
     smoke.update(dt);
@@ -351,7 +370,10 @@ export function FireFx() {
       <primitive object={steam.mesh} />
       <primitive object={flame.mesh} />
       <group>
-        <Beacon dome={mats.dome} light={light} />
+        <Beacon dome={mats.dome} />
+        <mesh ref={haloRef} material={mats.halo} position={[AUX.wallW - 0.02, BEACON[1] - 0.2, (BEACON[2] + PANEL.z) / 2]} rotation={[0, FACE.east, 0]}>
+          <planeGeometry args={[1, 1]} />
+        </mesh>
         <group ref={spin} position={[BEACON[0], BEACON[1] + 0.06, BEACON[2]]}>
           <mesh geometry={G().box} material={mats.reflector} position={[0, 0, 0.035]} scale={[0.06, 0.08, 0.012]} />
         </group>
