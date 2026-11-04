@@ -157,6 +157,34 @@ export const FINALE = {
   armCharge: 50,
 } as const;
 
+/** The compartment fire (Acts III-V): docs/SYSTEMS.md, docs/adr/006. */
+export const INCIDENT = {
+  /** isolator switches on the Engineer's fire panel, and how many a procedure throws */
+  isolators: 5,
+  steps: 4,
+  /** fire classes: each has its own symptom glyph and its own procedure */
+  kinds: 3,
+  /** ignition: seconds after the act begins (seeded in this range) */
+  atMinS: 30,
+  atMaxS: 60,
+  startIntensity: 15,
+  /** intensity %/s while burning; flashover at 100 */
+  growPerS: 1.2,
+  /** a wrong move flares the fire, resets the panel and locks it */
+  flare: 40,
+  lockMs: 8000,
+  /** the burning compartment takes on this much extra water, %/s, while it burns (a fire main bursts) */
+  leak: 0.12,
+  /** danger %/s at full intensity while it burns */
+  dangerPerS: 0.08,
+  dangerFlare: 2,
+  dangerBurnout: 6,
+  dangerRelief: 4,
+  /** from this intensity the burning plant derates the generator */
+  derateAt: 50,
+  derate: 1,
+} as const;
+
 /** How often the debrief timeline samples the ship (simulated ms). */
 export const SAMPLE_EVERY_MS = 5000;
 export const MAX_SAMPLES = 480;
