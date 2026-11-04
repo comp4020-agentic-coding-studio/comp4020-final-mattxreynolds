@@ -1,7 +1,8 @@
 // Pooled, instanced soft-sprite particles (billboarded quads, one draw call
 // per pool). Fixed budget, no allocation after construction. Used by
 // engine/Effects.tsx (steam, spray, drips, smoke), fx/Atmosphere.tsx (dust)
-// and fx/BridgeDistress.tsx (deckhead drips).
+// fx/BridgeDistress.tsx (deckhead drips) and the compartment-fire effects
+// (engine/FireFx.tsx, bridge/FireFx.tsx).
 
 import {
   AdditiveBlending,
@@ -33,6 +34,8 @@ export type Particle = {
   floor: number;
   /** when it falls below `floor`, onLand fires (splash) */
   land: boolean;
+  /** rises no higher than this (a deckhead): it stops and spreads (Infinity = none) */
+  ceil: number;
 };
 
 const VERT = /* glsl */ `
@@ -71,7 +74,7 @@ export class Pool {
     this.n = n;
     this.parts = Array.from({ length: n }, () => ({
       alive: false, t: 0, life: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, s: 0.1, grow: 1,
-      drag: 0, grav: 0, r: 1, g: 1, b: 1, a: 1, floor: -Infinity, land: false,
+      drag: 0, grav: 0, r: 1, g: 1, b: 1, a: 1, floor: -Infinity, land: false, ceil: Infinity,
     }));
     const geo = new InstancedBufferGeometry();
     const quad = new PlaneGeometry(1, 1);
@@ -113,7 +116,13 @@ export class Pool {
     p.a = 1;
     p.floor = -Infinity;
     p.land = false;
+    p.ceil = Infinity;
     return p;
+  }
+
+  /** Scale every live particle's alpha by `k` (e.g. smoke clearing). */
+  fade(k: number): void {
+    for (const p of this.parts) if (p.alive) p.a *= k;
   }
 
   get aliveCount(): number {
@@ -136,6 +145,10 @@ export class Pool {
           p.vx *= k; p.vz *= k;
           p.vy = p.vy * k - p.grav * dt;
           p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+          if (p.y > p.ceil) {
+            p.y = p.ceil;
+            p.vy = 0;
+          }
           if (p.y < p.floor) {
             p.alive = false;
             if (p.land) this.onLand?.(p);
