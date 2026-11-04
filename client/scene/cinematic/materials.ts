@@ -141,11 +141,14 @@ export const sea = new ShaderMaterial({
       float wsh = wash * smoothstep(2.6, 0.2, abs(edge)) * smoothstep(0.3, 0.6, fbm(q * 2.6 + vec2(t * 1.3, -t * 0.9)));
       c = mix(c, vec3(0.42, 0.48, 0.5) * (0.6 + flash + dawn * 0.3), clamp(foam, 0.0, 1.0) * 0.55);
       // the wash is churned, aerated and lit by the ship's own lights
-      c = mix(c, vec3(0.55, 0.6, 0.62) * (0.7 + flash) + vec3(0.9, 0.12, 0.06) * shipRed * 0.6, clamp(wsh, 0.0, 1.0) * 0.8);
+      // aerated water is white: it takes only a faint tint from the red emergency light
+      float ww = clamp(wsh, 0.0, 1.0);
+      c = mix(c, vec3(0.68, 0.73, 0.76) * (0.75 + flash) + vec3(0.12, 0.03, 0.02) * shipRed, ww * 0.85);
       vec3 L = normalize(shipPos + vec3(0.0, 5.0, 0.0) - vW);
       float d = length(q - shipPos.xz);
-      float glint = pow(max(dot(n, normalize(L + v)), 0.0), 60.0) * 2.5 / (1.0 + d * d * 0.012);
-      c += (vec3(1.0, 0.72, 0.38) * shipLight + vec3(1.0, 0.08, 0.04) * shipRed) * glint;
+      // foam scatters rather than mirrors: no lamp glints on the wash
+      float glint = pow(max(dot(n, normalize(L + v)), 0.0), 60.0) * 2.5 / (1.0 + d * d * 0.012) * (1.0 - ww * 0.9);
+      c += (vec3(1.0, 0.72, 0.38) * shipLight + vec3(1.0, 0.08, 0.04) * shipRed * 0.6) * glint;
       c += vec3(0.8, 0.86, 1.0) * pow(max(dot(n, normalize(flashDir + v)), 0.0), 30.0) * flash * 1.6 + flash * 0.05;
       float f = smoothstep(25.0, 190.0, length(vW - cameraPosition));
       gl_FragColor = vec4(mix(c, fogC + flash * 0.12, f), 1.0);
