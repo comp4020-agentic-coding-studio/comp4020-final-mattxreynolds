@@ -8,6 +8,7 @@ import { Bridge, BRIDGE_LAYOUT } from "./Bridge.tsx";
 import { CinematicScene } from "./Cinematic.tsx";
 import { EngineRoom, ENGINE_LAYOUT } from "./EngineRoom.tsx";
 import { Player } from "./Player.tsx";
+import { Look } from "./look/PostFX.tsx";
 
 /** Marks the scene ready once frames are flowing smoothly again after the
  * first-mount shader compile (which can stall the main thread for a second
@@ -42,6 +43,7 @@ function ReadyProbe() {
 export const Scene = memo(function Scene() {
   const role = useStore((s) => s.view?.you);
   const cinematic = useStore((s) => s.cinematic);
+  const quality = useStore((s) => s.quality);
   if (!role) return null;
   const engineer = role === "ENGINEER";
   if (cinematic) {
@@ -56,9 +58,10 @@ export const Scene = memo(function Scene() {
     <Canvas
       id="scene"
       camera={{ fov: 70, near: 0.05, far: 80 }}
-      dpr={[1, 1.75]}
+      dpr={quality === "high" ? [1, 1.75] : [0.75, 1]}
       gl={{ antialias: true, powerPreference: "high-performance" }}
     >
+      <Look />
       {engineer ? <EngineRoom /> : <Bridge />}
       <Player layout={engineer ? ENGINE_LAYOUT : BRIDGE_LAYOUT} />
       <ReadyProbe />

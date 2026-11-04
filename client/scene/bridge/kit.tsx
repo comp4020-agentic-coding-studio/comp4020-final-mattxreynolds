@@ -24,6 +24,7 @@ import { PALETTE } from "../palette.ts";
 import type { Glyph } from "../../../shared/glyphs.ts";
 import { MONO, roundel } from "./draw.ts";
 import { fxClock, navView, nowS } from "./state.ts";
+import { dressStd } from "../look/surfaces.ts";
 
 // ------------------------------------------------------------ shared assets
 
@@ -38,13 +39,13 @@ export const GEO = {
 const std = (color: string, roughness = 0.7, metalness = 0.1) => new MeshStandardMaterial({ color, roughness, metalness });
 
 export const MAT = {
-  bulkhead: std(PALETTE.bulkhead, 0.75, 0.25),
+  bulkhead: dressStd(std(PALETTE.bulkhead, 0.75, 0.25), "paint", [3, 2], 0.8),
   bulkheadDark: std(PALETTE.bulkheadDark, 0.8, 0.25),
   bulkheadLow: std(PALETTE.bulkheadLow, 0.85, 0.2),
-  deck: std(PALETTE.deck, 0.9, 0.1),
+  deck: dressStd(std(PALETTE.deck, 0.9, 0.35), "tread", [6, 6], 1.2),
   deckPlate: std(PALETTE.deckPlate, 0.6, 0.4),
   ceiling: std(PALETTE.ceiling, 0.9, 0.1),
-  console: std("#2c3639", 0.55, 0.35),
+  console: dressStd(std("#2c3639", 0.55, 0.35), "paint", [2, 2], 0.5),
   consoleDark: std("#1d2427", 0.5, 0.4),
   bezel: std("#15191b", 0.45, 0.5),
   brass: std(PALETTE.brass, 0.35, 0.8),

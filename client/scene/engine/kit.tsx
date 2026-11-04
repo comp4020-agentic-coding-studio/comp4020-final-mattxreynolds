@@ -19,6 +19,7 @@ import { SHIP_PHASES, type EngineerView, type Phase } from "../../../shared/prot
 import { useStore } from "../../store.ts";
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { PALETTE } from "../palette.ts";
+import { dressStd } from "../look/surfaces.ts";
 
 type V3 = [number, number, number];
 
@@ -161,20 +162,20 @@ function makeMats() {
     Object.assign(new MeshStandardMaterial({ color, roughness, metalness }), extra);
   const bulkTex = (rx: number) => canvasTex(256, 384, drawBulkhead, [rx, 1]);
   return {
-    wall10: std("#ffffff", 0.85, 0.1, { map: bulkTex(5) }),
-    wall8: std("#ffffff", 0.85, 0.1, { map: bulkTex(4) }),
-    wall4: std("#ffffff", 0.85, 0.1, { map: bulkTex(2) }),
-    deck: std("#ffffff", 0.7, 0.3, { map: canvasTex(256, 256, drawDeck, [10, 8]) }),
+    wall10: dressStd(std("#ffffff", 0.85, 0.1, { map: bulkTex(5) }), "paint", [8, 2.4], 0.8),
+    wall8: dressStd(std("#ffffff", 0.85, 0.1, { map: bulkTex(4) }), "paint", [6.4, 2.4], 0.8),
+    wall4: dressStd(std("#ffffff", 0.85, 0.1, { map: bulkTex(2) }), "paint", [3.2, 2.4], 0.8),
+    deck: dressStd(std("#ffffff", 0.7, 0.45, { map: canvasTex(256, 256, drawDeck, [10, 8]) }), "tread", [10, 8], 1.2),
     ceiling: std(PALETTE.ceiling, 0.9, 0.1),
     beam: std(PALETTE.bulkheadDark, 0.8, 0.2),
-    steel: std("#59666a", 0.6, 0.4),
+    steel: dressStd(std("#59666a", 0.6, 0.4), "paint", [2, 2], 0.5),
     pipe: std(PALETTE.pipe, 0.55, 0.5),
     pipeDark: std(PALETTE.pipeDark, 0.6, 0.5),
     brass: std(PALETTE.brass, 0.35, 0.8),
     brassDark: std(PALETTE.brassDark, 0.45, 0.7),
     enamel: std(PALETTE.enamel, 0.5, 0.2),
     panel: std("#30393b", 0.7, 0.25),
-    cabinet: std("#4b5d58", 0.7, 0.25),
+    cabinet: dressStd(std("#4b5d58", 0.7, 0.25), "paint", [2, 2], 0.6),
     valveRed: std(PALETTE.valveRed, 0.5, 0.2),
     lampOff: std(PALETTE.lampOff, 0.4, 0.1),
     rubber: std("#151617", 0.9, 0),
