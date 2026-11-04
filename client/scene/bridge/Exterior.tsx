@@ -8,7 +8,7 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { BackSide, DoubleSide, type Group, MeshStandardMaterial, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, ShaderMaterial, AdditiveBlending } from "three";
+import { BackSide, DoubleSide, type Group, MeshStandardMaterial, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, ShaderMaterial, AdditiveBlending, NormalBlending } from "three";
 import { useStore } from "../../store.ts";
 import { grade } from "../look/PostFX.tsx";
 import { GEO } from "./kit.tsx";
@@ -139,7 +139,7 @@ function rainMaterial(glass: boolean) {
     depthWrite: false,
     side: DoubleSide,
     fog: false,
-    blending: glass ? undefined : AdditiveBlending,
+    blending: glass ? NormalBlending : AdditiveBlending,
     uniforms: U,
     vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
