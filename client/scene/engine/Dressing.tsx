@@ -221,12 +221,7 @@ function engineBuild(k: Kit) {
   k.cyl(x.rust, [3.95, 0.96, 3.5], 0.1, 0.13, "y", 8); // oil can
   k.cyl(m.brass, [3.95, 1.04, 3.5], 0.025, 0.05, "y", 5);
   k.box(x.tool, [3.65, 0.9, 3.4], [0.22, 0.02, 0.05], [0, 0.5, 0]);
-
-  // ---- bulkhead lamps (unlit fittings, the lit ones are in Lighting.tsx)
-  for (const lx of [-4.0, 4.0]) {
-    k.box(m.steel, [lx, 2.2, -3.96], [0.2, 0.26, 0.08]);
-    k.cyl(x.white, [lx, 2.2, -3.9], 0.14, 0.06, "z", 10);
-  }
+  // (bulkhead lamps and light fittings: Fixtures.tsx, lit by Lighting.tsx)
 }
 
 // ---------------------------------------------------------------- station detail
