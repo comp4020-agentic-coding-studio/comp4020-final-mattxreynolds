@@ -39,14 +39,18 @@ const ENGINEER_MUST_NOT_HAVE = [
   "channel", "stations", "bearing", "target", "signal", "lastReply",
   "band", "status", "held",
   "draw", "breached", "call", "dry",
+  // compartment fire (ADR 006): where it burns and the procedure book
+  "compartment", "book", "sequence",
 ];
 const NAVIGATOR_MUST_NOT_HAVE = [
   "breakers", "load",
   "valves", "pressure", "engineLevel",
   "resonance", "lock", "pulse", "antenna",
   "heat", "output", "wear", "resetReady", "grid",
+  // compartment fire (ADR 006): which class is burning, the isolator panel
+  "symptom", "isolators", "smoke",
 ];
-const NOBODY_GETS = ["config", "seed", "token", "token_hash", "solution", "inflow", "abandonAt", "lastTickAt", "id", "breaches", "calls", "cascadeAtMs", "seizedUntil"];
+const NOBODY_GETS = ["config", "seed", "token", "token_hash", "solution", "inflow", "abandonAt", "lastTickAt", "id", "breaches", "calls", "cascadeAtMs", "seizedUntil", "incident", "procedures", "igniteAtMs"];
 
 // Every live phase, plus the lobby and both endings.
 const CHECKED: Phase[] = [...PHASES];
