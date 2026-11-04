@@ -20,14 +20,14 @@ scripted browsers, screenshot inspection). No human playtesting.
 | JOURNEY-1 | Medium | client/ui/styles.css .overlay | briefing card clipped top+bottom at 1024×640 (flex centring overflowed upward, out of scroll reach) | fixed + render verified (card y16–650 at 1024×640, volume row visible) |
 | JOURNEY-2 | Medium | Game.tsx take-controls | "Lighting the lamps…" wait under SwiftShader | by design (ReadyProbe, CLAUDE.md lesson); not changed |
 | JOURNEY-3 | — | ending cinematic | result hidden during cinematic | not a bug: CinematicOverlay clears after SHOT_SECONDS (QA waited 4 s of 14) |
-| JOURNEY-4 | Low | console | three.js deprecation warnings, one unexplained 404 | open |
+| JOURNEY-4 | Low | console | three.js deprecation warnings, one unexplained 404 | blending warning fixed (2d35967); THREE.Clock deprecation is inside @react-three/fiber; 404 not reproducible (full lobby→game run, zero ≥400 responses) |
 | JOURNEY-5 | Low | Home | empty-callsign error far from input | open |
 | JOURNEY-6 | Low | Home join | join-by-code asks callsign again | open |
 | CINE-0 | Medium | Cinematic.tsx | survived shot: ship sidelights read green-left/red-right from astern view — verify port red / starboard green | passed to cinematic agent |
 | ENG-1 | Medium | Switchboard.tsx | lit glyph/LOAD plates bloomed to white | fixed (merged ed6836d, lead-verified render) |
 | ENG-2 | Medium | Incident.tsx smoke plate | text overran plate | fixed (merged) |
 | ENG-3 | Low | Dressing.tsx | ESCAPE TRUNK sign clipped by ladder | fixed (merged) |
-| ENG-4 | Medium | engine room | DOOR RAM PRESSURE plate cut by post; ceiling lamp blowout; manifold gauge white-out | assigned engine-audit round 2 |
+| ENG-4 | Medium | engine room | DOOR RAM PRESSURE plate cut by post; ceiling lamp blowout; manifold gauge white-out | **fixed** (engine round 2 + lead: plate moved above gauge, lead-verified /tmp/btw-shots/lead/pump) |
 | BRIDGE-4 | Medium | Dressing.tsx telegraph | crushed labels | fixed 1169447 (lead-verified) |
 | BRIDGE-5 | Medium | barometer | floating + square halo, looked like a control (inv. 9) | fixed: wall-mounted dial, alphaTest |
 | BRIDGE-6 | Low | Decor.tsx | abandon-ship sign far from panel | fixed: above panel (lead-verified) |
