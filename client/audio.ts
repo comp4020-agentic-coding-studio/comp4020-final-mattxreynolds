@@ -513,6 +513,14 @@ const FX_SOUND: Partial<Record<Fx["k"], (fx: Fx) => void>> = {
   call: () => sfx.ring(),
   callResult: (fx) => (fx.k === "callResult" && fx.answered ? (sfx.static(), sfx.success()) : sfx.wrong()),
   evacCharged: () => sfx.chime(),
+  // compartment fire (ADR 006): heard on both seats, always with a visual twin
+  fire: (fx) => {
+    if (fx.k !== "fire") return;
+    if (fx.ev === "ignite" || fx.ev === "burnout") sfx.breach();
+    else if (fx.ev === "step") sfx.relay();
+    else if (fx.ev === "flare") (sfx.click(), noise(0.6, 900, 0.8, 0.5, "lowpass"));
+    else if (fx.ev === "out") sfx.chime();
+  },
   davitsArmed: (fx) => (fx.k === "davitsArmed" && fx.armed ? sfx.clunk() : sfx.powerDown()),
   doorOpen: () => sfx.door(),
   abandonPulled: () => sfx.clunk(),

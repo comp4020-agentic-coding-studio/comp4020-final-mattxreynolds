@@ -33,6 +33,9 @@ import { Water } from "./engine/Water.tsx";
 
 /** Engine Room + doorway + Aux Machinery Room; the bulkhead door is solid
  * until the room opens (engine/collision.ts). */
+/** the Aux room fire panel (AuxRoom.tsx mount) */
+const auxFireWorld: [number, number, number] = [-5.6, 1.6, 0.3];
+
 export const ENGINE_LAYOUT: RoomLayout = engineLayout(auxOpenNow);
 
 function useFxRouting(): void {
@@ -86,6 +89,11 @@ function useFxRouting(): void {
           case "compartmentLost":
             kicks.dip = 1;
             kicks.shudder = 1.4;
+            break;
+          case "fire":
+            // the fire panel is in the Aux room; flare and flashover throw sparks there
+            if (fx.ev === "flare" || fx.ev === "burnout") spawnSparks(auxFireWorld, 30);
+            if (fx.ev === "ignite" || fx.ev === "burnout") kicks.shudder = Math.max(kicks.shudder, 0.6);
             break;
           case "evacCharged":
             kicks.flash = Math.max(kicks.flash, 0.5);

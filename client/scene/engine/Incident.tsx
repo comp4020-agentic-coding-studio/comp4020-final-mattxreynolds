@@ -62,7 +62,7 @@ function SmokePlate() {
       ctx.font = `700 26px ${STENCIL}`;
       if (burning) {
         ctx.fillText(`SMOKE ${smoke}%`, w * 0.62, 180);
-        ctx.fillText("READ THE CLASS MARK TO THE BRIDGE", w * 0.62, 220);
+        ctx.fillText("TELL THE BRIDGE THE MARK", w * 0.62, 220);
       }
       ctx.strokeStyle = PALETTE.hazardYellow;
       ctx.strokeRect(10, 10, 150, 236);
@@ -94,7 +94,7 @@ function Isolator({ index, x }: { index: number; x: number }) {
         <B p={[0, 0, 0.03]} s={[0.16, 0.34, 0.06]} m={m.enamel} />
         <B p={[0, thrown ? -0.08 : 0.08, 0.08]} s={[0.1, 0.14, 0.06]} m={thrown ? m.lampOff : m.valveRed} />
       </Interactable>
-      <At p={[0, 0.3, 0.01]}>
+      <At p={[0, 0.26, 0.01]}>
         <Roundel glyph={(glyph || null) as Glyph | null} size={0.17} lit={thrown} />
       </At>
       <Plate text={thrown ? "ON" : "OFF"} w={0.16} h={0.06} position={[0, -0.26, 0.01]} glow={0.6} />
@@ -109,8 +109,8 @@ export function FirePanel() {
   const xs = Array.from({ length: INCIDENT.isolators }, (_, i) => -0.5 + i * 0.25);
   return (
     <group>
-      <B p={[0, 0.1, -0.02]} s={[1.5, 1.45, 0.06]} m={m.cabinet} />
-      <At p={[0, 0.62, 0.02]}>
+      <B p={[0, 0.125, -0.02]} s={[1.5, 1.7, 0.06]} m={m.cabinet} />
+      <At p={[0, 0.71, 0.02]}>
         <SmokePlate />
       </At>
       <At p={[0, 0.1, 0.02]}>
