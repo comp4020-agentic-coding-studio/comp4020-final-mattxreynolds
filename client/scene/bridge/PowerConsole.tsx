@@ -44,9 +44,9 @@ export function PowerConsole({ position, rotationY = 0 }: { position: [number, n
       <ConsoleBody w={W} riserH={RISER}>
         <Screen map={map} width={1.52} height={0.95} position={[0, 0.9 + RISER / 2 + 0.03, RISER_Z]} delay={0.15} flashOn={["powerOnline"]} />
         <Slope position={SLOPE_AT} angle={0.38}>
-          <Plate text="SYSTEM FEED" width={0.5} height={0.07} position={[-0.62, 0.13, 0.03]} border={PALETTE.brassDark} />
+          <Plate text="SYSTEM FEED" width={0.5} height={0.07} position={[-0.55, 0.13, 0.03]} border={PALETTE.brassDark} />
           {SYSTEMS.map((s, i) => {
-            const x = -0.45 + i * 0.45;
+            const x = -0.64 + i * 0.36;
             const on = fed(s);
             return (
               <group key={s} position={[x, 0, 0]}>
@@ -62,13 +62,13 @@ export function PowerConsole({ position, rotationY = 0 }: { position: [number, n
               </group>
             );
           })}
-          <Plate text={"VIEW ONLY · NO CONTROLS\nDIRECT THE ENGINE ROOM"} width={0.62} height={0.1} position={[0.55, 0.14, 0.03]} fg="#9a9586" />
+          <Plate text={"VIEW ONLY · NO CONTROLS\nDIRECT THE ENGINE ROOM"} width={0.56} height={0.1} position={[0.6, 0.14, 0.03]} fg="#9a9586" />
           {live && d.capacity > 0 && (
             <Plate
               text={`GENERATOR RATED ${d.capacity}\nTOTAL LOAD MUST NOT EXCEED ${d.capacity}`}
-              width={0.62}
+              width={0.56}
               height={0.11}
-              position={[0.55, 0.02, 0.03]}
+              position={[0.6, 0.0, 0.03]}
               border={PALETTE.hazardYellow}
             />
           )}

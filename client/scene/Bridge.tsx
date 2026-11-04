@@ -46,7 +46,7 @@ const AT = {
   flood: { x: 3.0, z: -3.48, w: 2.0 },
   radio: { x: -4.48, z: 0.7, w: 2.8 },
   chart: { x: -1.7, z: 1.0 },
-  codebook: { x: -4.87, z: 2.95 },
+  codebook: { x: -4.87, z: 2.7 },
   escape: { x: 2.4, z: 3.87 },
 } as const;
 const DEPTH = 0.8;
