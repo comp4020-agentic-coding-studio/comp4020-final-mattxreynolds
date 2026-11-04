@@ -16,6 +16,7 @@ import { Lamp } from "../parts.tsx";
 import { kicks } from "./Effects.tsx";
 import { At, B, C, ev, G, M, MR, Pipe, Plate, useEVs } from "./kit.tsx";
 import { AUX, AUX_AT, AUX_CX, AUX_CZ, AUX_D, AUX_W, FACE } from "./layout.ts";
+import { AuxDressing, AuxGeneratorDetail } from "./Dressing.tsx";
 import { PlantPanel } from "./PlantPanel.tsx";
 import { roundRect } from "./Shell.tsx";
 
@@ -192,6 +193,7 @@ function AuxGenerator() {
   return (
     <At p={AUX_AT.machine}>
       <B p={[0, 0.1, 0]} s={[3.0, 0.2, 1.1]} m={m.pipeDark} />
+      <AuxGeneratorDetail />
       {/* diesel block */}
       <B p={[-0.55, 0.68, 0]} s={[1.5, 0.95, 0.85]} m={m.green} />
       <B p={[-0.55, 1.24, 0]} s={[1.3, 0.16, 0.6]} m={m.steel} />
@@ -295,6 +297,7 @@ export function AuxRoom() {
       <AuxGenerator />
       <PlantPanel />
       <ShipPlates />
+      <AuxDressing />
       <AuxLight />
     </group>
   );
