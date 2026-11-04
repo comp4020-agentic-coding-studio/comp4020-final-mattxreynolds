@@ -152,7 +152,8 @@ export function Look() {
   const quality = useStore((s) => s.quality);
   return (
     <>
-      <Environment />
+      {/* the PMREM env path is the slowest shader to link on CPU rasterisers */}
+      {quality === "high" && <Environment />}
       {quality === "high" && <Composer />}
     </>
   );

@@ -24,9 +24,8 @@ import { PALETTE } from "../palette.ts";
 import type { Glyph } from "../../../shared/glyphs.ts";
 import { MONO, roundel } from "./draw.ts";
 import { fxClock, navView, nowS } from "./state.ts";
-import { dressStd as dress } from "../look/surfaces.ts";
-// unit tests import this module without a DOM: skip the canvas-built relief there
-const dressStd: typeof dress = (m, ...a) => (typeof document === "undefined" ? m : dress(m, ...a));
+import { dressStd } from "../look/surfaces.ts";
+import { holdLoading } from "../loading.ts";
 
 // ------------------------------------------------------------ shared assets
 
@@ -275,6 +274,13 @@ export function Lamp(props: {
  * would hold up socket messages — e.g. the prologue's busOn — on slow GPUs. */
 export function Staged({ after, children }: { after: number; children: ReactNode }) {
   const [ready, setReady] = useState(after <= 0);
+  // the loading card stays up until this stage has mounted (scene/loading.ts);
+  // once mounted, its Warm holds a ticket until the shaders are compiled
+  const [release] = useState(holdLoading);
+  useEffect(() => {
+    if (ready) release();
+    return release;
+  }, [ready, release]);
   useEffect(() => {
     if (ready) return;
     const t = setTimeout(() => setReady(true), after);
@@ -293,14 +299,19 @@ export function Warm({ children }: { children: ReactNode }) {
     const g = ref.current;
     if (!g) return;
     let live = true;
+    const release = holdLoading();
     // compileAsync needs the objects visible to traverse them; it does not draw
     gl.compileAsync(g, camera, scene)
       .catch(() => undefined)
       .then(() => {
         if (live && ref.current) ref.current.visible = true;
+        release();
       });
     g.visible = false;
-    return () => void (live = false);
+    return () => {
+      live = false;
+      release();
+    };
   }, [gl, camera, scene]);
   return <group ref={ref}>{children}</group>;
 }

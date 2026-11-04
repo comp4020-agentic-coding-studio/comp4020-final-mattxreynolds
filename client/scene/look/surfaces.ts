@@ -5,6 +5,7 @@
 // applied with `dressStd(material, kind)` so existing kit materials pick up
 // relief without new geometry.
 
+import { useStore } from "../../store.ts";
 import { CanvasTexture, NoColorSpace, RepeatWrapping, SRGBColorSpace, Vector2, type MeshStandardMaterial, type Texture } from "three";
 
 type Draw = (ctx: CanvasRenderingContext2D, S: number) => void;
@@ -225,6 +226,12 @@ export function grimeMap(): Texture {
 
 // ------------------------------------------------------------ apply
 
+let tier: boolean | null = null;
+/** Decided once, when the first material is dressed (before any room mounts). */
+function lowTier(): boolean {
+  return (tier ??= useStore.getState().quality === "low");
+}
+
 export type SurfaceKind = "paint" | "tread" | "metal";
 
 /**
@@ -233,8 +240,10 @@ export type SurfaceKind = "paint" | "tread" | "metal";
  * Mutates and returns the material; call once per material at creation.
  */
 export function dressStd(mat: MeshStandardMaterial, kind: SurfaceKind, repeat: [number, number] = [1, 1], strength = 1): MeshStandardMaterial {
-  // kits are imported by node unit tests (no DOM): leave the material plain
-  if (typeof document === "undefined") return mat;
+  // kits are imported by node unit tests (no DOM): leave the material plain.
+  // On the low tier (software GL) relief maps cost long shader links for
+  // detail nobody sees at that resolution: leave plain too.
+  if (typeof document === "undefined" || lowTier()) return mat;
   const src = kind === "tread" ? treadPlate() : paintedSteel();
   const normal = src.normal.clone();
   const rough = src.rough.clone();
