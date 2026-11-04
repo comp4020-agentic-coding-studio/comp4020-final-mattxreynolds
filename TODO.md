@@ -1,8 +1,9 @@
 # TODO
 
 ## CURRENT
-- Nothing in progress. Second production cycle complete; full spec passes
-  (158 tests: unit, app, browser).
+- Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md):
+  shared look layer done; five parallel workstreams running (engine env,
+  bridge env, disaster fx, gameplay incident, presentation/audio).
 
 ## NEXT
 - Human playtests of the five-act voyage: is Act IV readable, is the
