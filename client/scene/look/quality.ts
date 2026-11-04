@@ -16,8 +16,22 @@ export function storedQuality(): Quality {
   } catch {
     /* storage blocked */
   }
-  // headless/software renderers (tests, screenshots) still get the full look
-  return "high";
+  return softwareGL() ? "low" : "high";
+}
+
+/** True on CPU rasterisers (SwiftShader, llvmpipe): no GPU, so the bloom
+ * pass and full dpr cost more than they add. Probed once on a scratch canvas. */
+export function softwareGL(): boolean {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2") ?? document.createElement("canvas").getContext("webgl");
+    if (!gl) return false;
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return /swiftshader|llvmpipe|software|basic render/i.test(r);
+  } catch {
+    return false;
+  }
 }
 
 export function setQuality(q: Quality, remember = true): void {
