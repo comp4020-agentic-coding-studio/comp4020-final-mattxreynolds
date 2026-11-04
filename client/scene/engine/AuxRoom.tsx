@@ -16,6 +16,7 @@ import { Lamp } from "../parts.tsx";
 import { kicks } from "./Effects.tsx";
 import { At, B, C, ev, G, M, MR, Pipe, Plate, useEVs } from "./kit.tsx";
 import { FirePanel } from "./Incident.tsx";
+import { FireFx } from "./FireFx.tsx";
 import { AUX, AUX_AT, AUX_CX, AUX_CZ, AUX_D, AUX_W, FACE } from "./layout.ts";
 import { AuxDressing, AuxGeneratorDetail } from "./Dressing.tsx";
 import { PlantPanel } from "./PlantPanel.tsx";
@@ -303,6 +304,7 @@ export function AuxRoom() {
       <At p={[AUX.wallW - 0.01, 1.45, 0.3]} r={[0, FACE.east, 0]}>
         <FirePanel />
       </At>
+      <FireFx />
       <AuxLight />
     </group>
   );

@@ -33,6 +33,9 @@ import { COMMS_DOOR, RoomLights, RoomShell } from "./bridge/Room.tsx";
 import { COMMS, CommsDoor, commsOpen, CommsRoom } from "./bridge/Comms.tsx";
 import { Staged, Warm } from "./bridge/kit.tsx";
 import { IncidentPanel } from "./bridge/IncidentPanel.tsx";
+import { FireFx } from "./bridge/FireFx.tsx";
+import { Atmosphere } from "./fx/Atmosphere.tsx";
+import { BridgeDistress } from "./fx/BridgeDistress.tsx";
 import { fxClock, nowS } from "./bridge/state.ts";
 import { box, type RoomLayout } from "./colliders.ts";
 
@@ -114,12 +117,16 @@ export function Bridge() {
       <Staged after={STAGE * 6}>
         <Decor />
         <Dressing />
+        {/* dust, the alarm/dark grade, deckhead drips and haze (fx/) */}
+        <Atmosphere w={10} d={8} h={3.2} />
+        <BridgeDistress w={10} d={8} h={3.2} />
       </Staged>
       <Staged after={STAGE * 7}>
         <CommsRoom />
         <CommsDressing />
         {/* compartment fire card (ADR 006): Comms west bulkhead, beside the door */}
         <IncidentPanel position={[COMMS.x0 + 0.1, 1.55, -0.78]} rotationY={Math.PI / 2} />
+        <FireFx position={[COMMS.x0 + 0.1, 1.55, -0.78]} rotationY={Math.PI / 2} />
       </Staged>
     </group>
   );
