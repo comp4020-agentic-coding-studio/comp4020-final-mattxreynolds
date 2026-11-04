@@ -15,15 +15,15 @@ scripted browsers, screenshot inspection). No human playtesting.
 | BRIDGE-1 | High | Bridge codebook | locker at codebook edge | fixed bf6f213 (lead-verified render) |
 | BRIDGE-2 | High | routing diagram | SHORTED stamp over icons | fixed bf6f213 (lead-verified) |
 | BRIDGE-3 | Medium | PowerConsole plates | rated plate overlapped HELM plate | fixed bf6f213 |
-| BRIDGE-4 | Medium | engine telegraph dial | crushed labels, clipped plate | assigned bridge-audit round 2 |
+| BRIDGE-4 | Medium | engine telegraph dial | crushed labels, clipped plate | **fixed** 1169447 (5-label face, lead-verified) |
 | COOP-7 | Low | server/manager.ts unlocksFor | same-ship rerun wins count toward unlocks | won't fix overnight: design choice for student |
 | JOURNEY-1 | Medium | client/ui/styles.css .overlay | briefing card clipped top+bottom at 1024×640 (flex centring overflowed upward, out of scroll reach) | fixed + render verified (card y16–650 at 1024×640, volume row visible) |
 | JOURNEY-2 | Medium | Game.tsx take-controls | "Lighting the lamps…" wait under SwiftShader | by design (ReadyProbe, CLAUDE.md lesson); not changed |
 | JOURNEY-3 | — | ending cinematic | result hidden during cinematic | not a bug: CinematicOverlay clears after SHOT_SECONDS (QA waited 4 s of 14) |
 | JOURNEY-4 | Low | console | three.js deprecation warnings, one unexplained 404 | blending warning fixed (2d35967); THREE.Clock deprecation is inside @react-three/fiber; 404 not reproducible (full lobby→game run, zero ≥400 responses) |
-| JOURNEY-5 | Low | Home | empty-callsign error far from input | open |
-| JOURNEY-6 | Low | Home join | join-by-code asks callsign again | open |
-| CINE-0 | Medium | Cinematic.tsx | survived shot: ship sidelights read green-left/red-right from astern view — verify port red / starboard green | passed to cinematic agent |
+| JOURNEY-5 | Low | Home | empty-callsign error far from input | **fixed**: errors render inside the form that raised them (lead-verified /tmp/btw-shots/lead/home-err-create.png) |
+| JOURNEY-6 | Low | Home join | join-by-code asks callsign again | by design: Join page shows who is aboard before asking; same page a shared link opens. Left for student |
+| CINE-0 | Medium | Cinematic.tsx | survived shot: ship sidelights read green-left/red-right from astern view — verify port red / starboard green | **fixed** d1effcf (arc-limited sidelights; lead-verified ending-lost-1.5s/5.5s) |
 | ENG-1 | Medium | Switchboard.tsx | lit glyph/LOAD plates bloomed to white | fixed (merged ed6836d, lead-verified render) |
 | ENG-2 | Medium | Incident.tsx smoke plate | text overran plate | fixed (merged) |
 | ENG-3 | Low | Dressing.tsx | ESCAPE TRUNK sign clipped by ladder | fixed (merged) |

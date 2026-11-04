@@ -10,7 +10,9 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
   const [callsign, setCallsign] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setErr] = useState<{ at: "create" | "join" | "dev"; msg: string } | null>(null);
+  // errors render inside the form that raised them, next to its input
+  const setError = (msg: string, at: "create" | "join" | "dev" = "create") => setErr({ at, msg });
   // /?ship=123: replay a specific ship (from a debrief's "replay this ship")
   const [ship] = useState<number | undefined>(() => {
     const n = Number(new URLSearchParams(location.search).get("ship"));
@@ -26,7 +28,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
     setBusy(true);
     const r = await devCreate(ship);
     setBusy(false);
-    if ("error" in r) setError("Dev voyage failed.");
+    if ("error" in r) setError("Dev voyage failed.", "dev");
     else onVoyage(r.code);
   };
 
@@ -44,7 +46,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
   const join = (e: FormEvent) => {
     e.preventDefault();
     const c = joinCode.trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}$/.test(c)) return setError("Voyage codes are 4 characters, like K7M2.");
+    if (!/^[A-Z0-9]{4}$/.test(c)) return setError("Voyage codes are 4 characters, like K7M2.", "join");
     onVoyage(c);
   };
 
@@ -86,6 +88,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
           <button className="primary" disabled={busy}>
             {busy ? "Launching…" : "Create voyage"}
           </button>
+          {error?.at === "create" && <p className="error" role="alert">{error.msg}</p>}
           <p className="hint">You'll be the Engineer and get a code to send your partner.</p>
           {ship && <p className="hint" data-testid="replay-ship">Replaying ship No. {ship}: same faults, same configuration.</p>}
         </form>
@@ -105,10 +108,10 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
             />
           </label>
           <button className="primary">Join</button>
+          {error?.at === "join" && <p className="error" role="alert">{error.msg}</p>}
           <p className="hint">Or just open the link your partner sent you.</p>
         </form>
       </div>
-      {error && <p className="error" role="alert">{error}</p>}
       {dev && (
         <div className="card dev-card" data-testid="dev-card">
           <h2>Dev mode</h2>
@@ -116,6 +119,7 @@ export function Home({ onVoyage }: { onVoyage: (code: string) => void }) {
           <button className="primary" data-testid="dev-start" disabled={busy} onClick={devStart}>
             Start dev voyage
           </button>
+          {error?.at === "dev" && <p className="error" role="alert">{error.msg}</p>}
         </div>
       )}
 

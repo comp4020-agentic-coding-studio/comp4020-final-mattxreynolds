@@ -35,3 +35,4 @@ See ISSUES.md.
   QA-render (read-only, browser). Ports: cinematic 9110-9119, bridge 9120-9129, engine 9130-9139, QA 9140-9169.
 - 23:15 merged bridge-audit round 1 (bf6f213); sent round 2 (telegraph dial, full workstation audit). COOP fixes f3da2ff.
 - 23:52 cinematic overhaul merged (d1effcf) after lead review of sheet-intro/sheet-endings; round 2 dispatched (CINE-1). Budget $81.28 (sprint ≈ $20).
+- 00:05 engine round 2 merged + DOOR RAM plate lead fix; JOURNEY-4/5 closed; check:local 21 files / 208 tests PASS on 2d35967+.
