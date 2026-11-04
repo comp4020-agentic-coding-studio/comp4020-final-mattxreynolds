@@ -38,3 +38,4 @@ See ISSUES.md.
 - 00:05 engine round 2 merged + DOOR RAM plate lead fix; JOURNEY-4/5 closed; check:local 21 files / 208 tests PASS on 2d35967+.
 - 00:55 cinematic round 2 merged after lead review; all agent worktrees removed; final check:local running.
 - 01:02 final check:local PASS (21/208); PR #2 opened (not merged). P4 cinematic polish round 3 dispatched (crane-post crop, lifeboat legibility, push-in end frame, wash colour).
+- 01:28 cinematic round 3 merged after lead review of /tmp/btw-shots/cine/final3; check:local 21 files / 208 tests PASS; worktrees removed; no sprint processes running. Budget $91.97 (sprint ≈ $30.8 of $240). Note: round-3 agent saw one load-sensitive failure in browser-fire.test.ts (2 s view wait, load avg ~8.8), passed on rerun and in the lead's final run.
