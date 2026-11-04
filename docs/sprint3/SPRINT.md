@@ -34,3 +34,4 @@ See ISSUES.md.
   engine-audit (worktree, client/scene/engine + EngineRoom.tsx), QA-coop (read-only), QA-journey (read-only, browser),
   QA-render (read-only, browser). Ports: cinematic 9110-9119, bridge 9120-9129, engine 9130-9139, QA 9140-9169.
 - 23:15 merged bridge-audit round 1 (bf6f213); sent round 2 (telegraph dial, full workstation audit). COOP fixes f3da2ff.
+- 23:52 cinematic overhaul merged (d1effcf) after lead review of sheet-intro/sheet-endings; round 2 dispatched (CINE-1). Budget $81.28 (sprint ≈ $20).

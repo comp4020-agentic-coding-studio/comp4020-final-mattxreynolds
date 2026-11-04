@@ -32,4 +32,5 @@ scripted browsers, screenshot inspection). No human playtesting.
 | BRIDGE-5 | Medium | barometer | floating + square halo, looked like a control (inv. 9) | fixed: wall-mounted dial, alphaTest |
 | BRIDGE-6 | Low | Decor.tsx | abandon-ship sign far from panel | fixed: above panel (lead-verified) |
 | BRIDGE-7 | Medium | EscapePanel | lever knob over label | fixed (lead-verified) |
-| BRIDGE-8 | — | Bridge CASCADE/emergency/fire/comms close-ups | not yet audited | lead rendering pass |
+| BRIDGE-8 | — | Bridge CASCADE/emergency/fire/comms close-ups | audited by lead: davits guard grey square → fixed d4a275c (render /tmp/btw-shots/lead/davits); fire book, evac panel, CASCADE overview OK; EMERGENCY BUS plate 'occlusion' was the act-card overlay (clean in engine/final) | **fixed** |
+| CINE-1 | Medium | cinematic | survived 5.8s flat wall framing; dawn glint blotchy; lost-ending 4.7s mount gap; boxy superstructure close-ups | cinematic round 2 |
