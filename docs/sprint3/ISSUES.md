@@ -28,3 +28,8 @@ scripted browsers, screenshot inspection). No human playtesting.
 | ENG-2 | Medium | Incident.tsx smoke plate | text overran plate | fixed (merged) |
 | ENG-3 | Low | Dressing.tsx | ESCAPE TRUNK sign clipped by ladder | fixed (merged) |
 | ENG-4 | Medium | engine room | DOOR RAM PRESSURE plate cut by post; ceiling lamp blowout; manifold gauge white-out | assigned engine-audit round 2 |
+| BRIDGE-4 | Medium | Dressing.tsx telegraph | crushed labels | fixed 1169447 (lead-verified) |
+| BRIDGE-5 | Medium | barometer | floating + square halo, looked like a control (inv. 9) | fixed: wall-mounted dial, alphaTest |
+| BRIDGE-6 | Low | Decor.tsx | abandon-ship sign far from panel | fixed: above panel (lead-verified) |
+| BRIDGE-7 | Medium | EscapePanel | lever knob over label | fixed (lead-verified) |
+| BRIDGE-8 | — | Bridge CASCADE/emergency/fire/comms close-ups | not yet audited | lead rendering pass |
