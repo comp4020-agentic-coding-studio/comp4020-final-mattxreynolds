@@ -338,8 +338,13 @@ function EvacPanel({ position, rotationY }: { position: [number, number, number]
           {/* hinged clear guard over the button */}
           <group ref={cover} position={[0, 0.1, 0.04]}>
             <mesh geometry={GEO.box} position={[0, -0.1, 0.03]} scale={[0.2, 0.2, 0.005]}>
-              <meshStandardMaterial color="#c8d8e0" transparent opacity={0.3} roughness={0.2} depthWrite={false} />
+              <meshStandardMaterial color="#c8d8e0" transparent opacity={0.14} roughness={0.2} depthWrite={false} />
             </mesh>
+            {/* brass rim so the flap reads as a hinged guard, not a grey patch */}
+            <Block p={[0, 0, 0.03]} s={[0.2, 0.014, 0.012]} m={MAT.brassDark} />
+            <Block p={[0, -0.2, 0.03]} s={[0.2, 0.014, 0.012]} m={MAT.brassDark} />
+            <Block p={[-0.1, -0.1, 0.03]} s={[0.014, 0.2, 0.012]} m={MAT.brassDark} />
+            <Block p={[0.1, -0.1, 0.03]} s={[0.014, 0.2, 0.012]} m={MAT.brassDark} />
           </group>
         </group>
         <Plate text={`ARMS AT ≥ ${FINALE.armCharge}% CHARGE`} width={0.44} height={0.06} position={[0, -0.12, 0.02]} fg={PALETTE.plateText} />
