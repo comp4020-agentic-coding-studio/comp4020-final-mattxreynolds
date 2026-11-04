@@ -111,7 +111,7 @@ export function EscapePanel({ position, rotationY = 0 }: { position: [number, nu
           <meshStandardMaterial map={stripes} roughness={0.7} />
         </mesh>
         <Block p={[0, 0, 0.01]} s={[0.5, 1.1, 0.02]} m={MAT.enamel} />
-        <Plate text={"ABANDON\nSHIP"} width={0.42} height={0.17} position={[0, 0.43, 0.025]} fg={PALETTE.lampRed} border={PALETTE.lampRed} />
+        <Plate text={"ABANDON\nSHIP"} width={0.42} height={0.17} position={[0, 0.46, 0.025]} fg={PALETTE.lampRed} border={PALETTE.lampRed} />
         <Interactable id={IDS.abandonNavigator} prompt={leverPrompt} onUse={onAbandon}>
           <Lever pulled={d.youAbandon} pullAt={pull} armed={active && doorOpen} />
         </Interactable>
@@ -154,8 +154,8 @@ function Lever({ pulled, pullAt, armed }: { pulled: boolean; pullAt: { current: 
     <group position={[0, 0.06, 0.04]}>
       <Block p={[0, 0, 0]} s={[0.16, 0.12, 0.06]} m={MAT.bezel} />
       <group ref={arm} rotation={[0.6, 0, 0]}>
-        <mesh geometry={GEO.cyl12} material={MAT.chrome} position={[0, 0.17, 0]} scale={[0.016, 0.34, 0.016]} />
-        <mesh geometry={GEO.sphere} position={[0, 0.35, 0]} scale={[0.045, 0.045, 0.045]}>
+        <mesh geometry={GEO.cyl12} material={MAT.chrome} position={[0, 0.14, 0]} scale={[0.016, 0.28, 0.016]} />
+        <mesh geometry={GEO.sphere} position={[0, 0.29, 0]} scale={[0.045, 0.045, 0.045]}>
           <meshStandardMaterial color={armed ? "#d8301f" : "#5a2a24"} emissive="#d8301f" emissiveIntensity={armed ? 0.5 : 0} />
         </mesh>
       </group>
