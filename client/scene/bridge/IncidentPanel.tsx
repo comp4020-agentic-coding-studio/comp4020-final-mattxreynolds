@@ -8,7 +8,7 @@ import { COMPARTMENT_LABEL, type Compartment, type Glyph } from "../../../shared
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { drawGlyph } from "../glyphDraw.ts";
 import { PALETTE } from "../palette.ts";
-import { Screen } from "./kit.tsx";
+import { Block, MAT, Plate, Screen } from "./kit.tsx";
 import { useNav, useNavSlice } from "./state.ts";
 
 type Fire = {
@@ -69,7 +69,11 @@ export function IncidentPanel({ position, rotationY = 0 }: { position: [number, 
   );
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
+      {/* slim wall cabinet behind the card */}
+      <Block p={[0, 0.06, -0.05]} s={[1.7, 1.36, 0.08]} m={MAT.consoleDark} />
+      <Block p={[0, 0.06, -0.012]} s={[1.64, 1.16, 0.01]} m={MAT.bezel} />
       <Screen map={map} width={1.6} height={1.0} flashOn={["fire"]} />
+      <Plate text="DAMAGE CONTROL · FIRE" width={0.9} height={0.1} position={[0, 0.65, 0.0]} border={PALETTE.hazardYellow} />
     </group>
   );
 }

@@ -32,6 +32,7 @@ import { CommsDressing, COMMS_SOLIDS } from "./bridge/CommsDressing.tsx";
 import { COMMS_DOOR, RoomLights, RoomShell } from "./bridge/Room.tsx";
 import { COMMS, CommsDoor, commsOpen, CommsRoom } from "./bridge/Comms.tsx";
 import { Staged, Warm } from "./bridge/kit.tsx";
+import { IncidentPanel } from "./bridge/IncidentPanel.tsx";
 import { fxClock, nowS } from "./bridge/state.ts";
 import { box, type RoomLayout } from "./colliders.ts";
 
@@ -117,6 +118,8 @@ export function Bridge() {
       <Staged after={STAGE * 7}>
         <CommsRoom />
         <CommsDressing />
+        {/* compartment fire card (ADR 006): Comms west bulkhead, beside the door */}
+        <IncidentPanel position={[COMMS.x0 + 0.1, 1.55, -0.78]} rotationY={Math.PI / 2} />
       </Staged>
     </group>
   );
