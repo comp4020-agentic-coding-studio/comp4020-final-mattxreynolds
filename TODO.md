@@ -8,6 +8,10 @@
   check, PR.
 
 ## NEXT
+- Touch play (ADR 008) on a real phone and tablet: frame rate on the `low`
+  tier, thumb reach of the stick and USE button, audio unlock on iOS Safari,
+  whether the HUD crowds a small landscape screen. Only tested in headless
+  Chromium with emulated touch so far.
 - Balance decisions from sprint 3 QA (ISSUES.md COOP-1/2/3/7): Escape
   solvable blind by a reactive Engineer; Act IV reachable with an idle
   Engineer; NIGHTMARE survivable by a scripted crew; same-ship reruns count
@@ -31,6 +35,10 @@
 - reflections/crit-10.md: the student's own words.
 
 ## COMPLETED
+- Touch play on phones and tablets (ADR 008): floating move stick, drag to
+  look, tap a control, USE/HOLD button, pause/mute buttons, touch-specific
+  controls card, briefing and prompts, portrait field of view, audio unlock
+  on touch; spec/touch.unit.test.ts, spec/browser-touch.test.ts.
 - Dev mode (docs/DEV_MODE.md): one browser holds both seats, F2 switches,
   skip/danger/sink panel; off in production, spec/dev-mode.test.ts.
 - Second cycle: ship simulation (grid/water/hull), five acts with CASCADE,

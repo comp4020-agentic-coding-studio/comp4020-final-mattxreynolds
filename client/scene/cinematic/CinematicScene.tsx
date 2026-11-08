@@ -32,6 +32,7 @@ import {
 } from "three";
 import { cinematicCue } from "../../audio.ts";
 import { useStore } from "../../store.ts";
+import { fitFov } from "../touch.ts";
 import { boltMat, fadeMat, frameMat, halo, paneMat, rain, rainGeometry, SEA_Y, sea, sky, spray, sprayGeometry, SURF, waveHeight } from "./materials.ts";
 import { BRIDGE_N, bridgeFaceX, DAVIT, hullGeometry, lifeboatParts, paneGeometry, shipPanes, shipParts } from "./models.ts";
 import { kick, ramp, sampleShot, type Sequence, SEQUENCES, type ShotSample, shakeAt, T_HIT, transitions } from "./timeline.ts";
@@ -341,7 +342,7 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
     [],
   );
 
-  useFrame(() => {
+  useFrame(({ size }) => {
     const t = Math.max(0, cinematicTime(start));
     const reduced = useStore.getState().reducedMotion;
     const def = SEQUENCES[seq];
@@ -451,8 +452,10 @@ export function CinematicScene({ shot: seq, start }: { shot: Sequence; start: nu
       cam.rotateZ(Math.sin(t * 29) * shake * 0.05);
       cam.rotateX(Math.sin(t * 37 + 2) * shake * 0.03);
     }
-    if (Math.abs(cam.fov - smp.fov) > 0.01 || cam.far < 500) {
-      cam.fov = smp.fov;
+    // a portrait phone widens the shot so the ship isn't cropped to a keyhole
+    const fov = fitFov(smp.fov, size.width / Math.max(1, size.height), 90);
+    if (Math.abs(cam.fov - fov) > 0.01 || cam.far < 500) {
+      cam.fov = fov;
       cam.far = 700;
       cam.updateProjectionMatrix();
     }

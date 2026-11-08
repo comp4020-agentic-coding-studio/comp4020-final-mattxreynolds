@@ -15,8 +15,11 @@ type State = {
   code: string | null;
   conn: Conn;
   view: View | null;
-  /** Pointer lock / "on the controls" vs the briefing/pause card. */
+  /** "On the controls" (pointer lock, or touch play) vs the briefing/pause card. */
   locked: boolean;
+  /** Touch play (ADR 008): on-screen stick, drag-to-look and USE button
+   * instead of pointer lock. Follows the last pointer used (scene/touch.ts). */
+  touch: boolean;
   prompt: string | null;
   toasts: Toast[];
   muted: boolean;
@@ -41,6 +44,7 @@ export const useStore = create<State>(() => ({
   conn: "idle",
   view: null,
   locked: false,
+  touch: typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches,
   prompt: null,
   toasts: [],
   muted: false,

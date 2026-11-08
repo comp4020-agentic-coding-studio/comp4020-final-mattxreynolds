@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { setQuality } from "../scene/look/quality.ts";
+import { resetTouch, release } from "../scene/input.ts";
+import { touchPrompt } from "../scene/touch.ts";
 import { MODE_RULES } from "../../shared/config.ts";
 import { PHASE_OBJECTIVE, ROLE_ROOM, ROLE_TITLE, type Phase } from "../../shared/protocol.ts";
 import { Scene } from "../scene/Scene.tsx";
@@ -9,12 +11,13 @@ import { useStore } from "../store.ts";
 import { CinematicOverlay } from "./CinematicOverlay.tsx";
 import { Controls } from "./Controls.tsx";
 import { PHASE_GUIDE } from "./guide.ts";
+import { TouchControls } from "./TouchControls.tsx";
 
 /** How long the "where to look" banner stays up after a phase starts. */
 const PHASE_BANNER_MS = 5500;
 
 /** Shows the phase guide for a few seconds the first time the player is in
- * the room (pointer locked) during each phase, so a phase that changes while
+ * the room (on the controls) during each phase, so a phase that changes while
  * they're on the briefing card still gets its banner when they return. */
 function usePhaseBanner(phase: Phase, locked: boolean): Phase | null {
   const [shown, setShown] = useState<Phase | null>(null);
@@ -88,6 +91,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const reducedMotion = useStore((s) => s.reducedMotion);
   const sceneReady = useStore((s) => s.sceneReady);
   const cinematic = useStore((s) => s.cinematic);
+  const touch = useStore((s) => s.touch);
   const [gl] = useState(webglAvailable);
   const bannerPhase = usePhaseBanner(view.phase, locked);
   const takeRef = useRef<HTMLButtonElement>(null);
@@ -106,8 +110,17 @@ export function Game({ ended = false }: { ended?: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (ended && document.pointerLockElement) document.exitPointerLock();
+    if (!ended) return;
+    if (document.pointerLockElement) document.exitPointerLock();
+    // touch play has no lock to lose: leave the controls explicitly, so the
+    // next voyage starts on the briefing card like a mouse player's does
+    resetTouch();
+    useStore.setState({ locked: false });
   }, [ended]);
+  // leaving the controls (pause, Esc) drops any touch stick, look or hold
+  useEffect(() => {
+    if (!locked) resetTouch();
+  }, [locked]);
 
   if (!gl) {
     return (
@@ -124,6 +137,12 @@ export function Game({ ended = false }: { ended?: boolean }) {
   const banner = bannerPhase ? PHASE_GUIDE[bannerPhase]?.[view.you] : undefined;
   const lockCanvas = () => {
     if (!useStore.getState().sceneReady) return;
+    if (useStore.getState().touch) {
+      // touch play: no pointer lock; the on-screen controls take over
+      release();
+      useStore.setState({ locked: true });
+      return;
+    }
     const canvas = document.querySelector<HTMLCanvasElement>("#scene canvas");
     try {
       // some browsers return a promise that rejects (e.g. right after Esc)
@@ -135,7 +154,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
 
   if (cinematic) {
     return (
-      <div className="game">
+      <div className={touch ? "game touch" : "game"}>
         <Scene />
         <CinematicOverlay />
       </div>
@@ -143,7 +162,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
   }
 
   return (
-    <div className="game">
+    <div className={touch ? "game touch" : "game"}>
       <Scene />
       {!ended && (
         <>
@@ -167,7 +186,8 @@ export function Game({ ended = false }: { ended?: boolean }) {
             </div>
           </div>
           <div className="reticle" aria-hidden>{prompt ? "◎" : "·"}</div>
-          {prompt && locked && <div className="prompt">{prompt}</div>}
+          {prompt && locked && <div className={touch ? "prompt touch" : "prompt"}>{touch ? touchPrompt(prompt) : prompt}</div>}
+          {touch && locked && <TouchControls />}
           {(conn !== "online" || view.paused || (partner && !partner.connected)) && (
             <div className="banner warn" role="status">
               {conn !== "online"
@@ -183,7 +203,7 @@ export function Game({ ended = false }: { ended?: boolean }) {
             </div>
           )}
           <ActCard phase={view.phase} />
-          {muted && <div className="muted-tag">MUTED (M)</div>}
+          {muted && !(touch && locked) && <div className="muted-tag">{touch ? "MUTED" : "MUTED (M)"}</div>}
           {!locked && (
             <div className="overlay" onClick={(e) => e.target === e.currentTarget && lockCanvas()}>
               <div className="card briefing">
@@ -203,15 +223,31 @@ export function Game({ ended = false }: { ended?: boolean }) {
                 <Controls />
                 {sceneReady ? (
                   <button ref={takeRef} className="primary big" data-testid="take-controls" onClick={lockCanvas}>
-                    Click to take the controls
+                    {touch ? "Tap to take the controls" : "Click to take the controls"}
                   </button>
                 ) : (
                   <button className="primary big" disabled aria-busy="true">
                     Lighting the lamps…
                   </button>
                 )}
-                <p className="hint">Or click anywhere outside this card. Esc frees the mouse and brings this card back. Stuck? Press R here to return to your starting point.</p>
+                {touch ? (
+                  <>
+                    <p className="hint">
+                      The <b>❚❚ Pause</b> button brings this card back.
+                      <span className="portrait-hint"> Turn your device sideways for a wider view.</span>
+                    </p>
+                    <p className="hint">
+                      Stuck?{" "}
+                      <button className="link" data-testid="touch-respawn" onClick={() => useStore.setState((s) => ({ respawn: s.respawn + 1 }))}>
+                        Return to your starting point
+                      </button>
+                    </p>
+                  </>
+                ) : (
+                  <p className="hint">Or click anywhere outside this card. Esc frees the mouse and brings this card back. Stuck? Press R here to return to your starting point.</p>
+                )}
                 <div className="toggles">
+                  {touch && <FullscreenToggle />}
                   <button className="link" data-testid="gfx-toggle" onClick={() => setQuality(quality === "high" ? "low" : "high")}>
                     Graphics: {quality === "high" ? "High" : "Low"}
                   </button>
@@ -262,5 +298,27 @@ function ShipStrip() {
       {ship.calling && <span className="bad blink">☎ COAST STATION CALLING</span>}
       {lost.length > 0 && <span className="bad">LOST: {lost.join(", ")}</span>}
     </div>
+  );
+}
+
+/** Full screen for touch play: on a phone the browser's own bars take a
+ * large share of the view. Hidden where the page can't go full screen
+ * (iPhone Safari). */
+function FullscreenToggle() {
+  const [full, setFull] = useState(() => Boolean(document.fullscreenElement));
+  useEffect(() => {
+    const on = () => setFull(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  if (!document.fullscreenEnabled) return null;
+  const flip = () => {
+    const done = full ? document.exitFullscreen() : document.documentElement.requestFullscreen({ navigationUI: "hide" });
+    void done?.catch?.(() => {});
+  };
+  return (
+    <button className="link" data-testid="fullscreen-toggle" onClick={flip}>
+      Full screen: {full ? "On" : "Off"}
+    </button>
   );
 }

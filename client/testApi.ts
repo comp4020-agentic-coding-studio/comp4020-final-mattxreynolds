@@ -13,6 +13,8 @@ declare global {
       view(): unknown;
     };
     __btwPose?: (p: { x?: number; z?: number; yaw?: number; pitch?: number }) => void;
+    /** dev/test: the usable control at a screen point (NDC), as a tap would find it; read-only */
+    __btwPick?: (x: number, y: number) => string | null;
   }
 }
 

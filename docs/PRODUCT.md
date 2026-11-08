@@ -49,8 +49,9 @@ reached act. See docs/SYSTEMS.md.
 ## Non-goals
 
 Combat, NPCs, procedural worlds, inventories, crafting, accounts, built-in
-voice or text chat, avatars of the other player, matchmaking, mobile/touch
-play, more than two players, large downloaded assets.
+voice or text chat, avatars of the other player, matchmaking, more than two
+players, large downloaded assets. (Touch play on phones and tablets was a
+non-goal until ADR 008; it now drives the same rooms with on-screen controls.)
 
 ## Success criteria
 

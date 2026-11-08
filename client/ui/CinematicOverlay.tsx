@@ -8,6 +8,7 @@ import { useStore } from "../store.ts";
 
 export function CinematicOverlay() {
   const cin = useStore((s) => s.cinematic);
+  const touch = useStore((s) => s.touch);
   const [now, setNow] = useState(0);
   useEffect(() => {
     if (!cin) return;
@@ -41,7 +42,7 @@ export function CinematicOverlay() {
         ))}
       </div>
       <button className="skip" data-testid="skip-cinematic" autoFocus onClick={() => useStore.setState({ cinematic: null })}>
-        Skip ▸▸ <kbd>Space</kbd>
+        Skip ▸▸ {!touch && <kbd>Space</kbd>}
       </button>
     </div>
   );

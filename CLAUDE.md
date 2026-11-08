@@ -130,6 +130,12 @@ own judgement are marked `[STUDENT REVIEW]`.
   rose 1.3 m through the Bridge deck. The sea shader masks the ship
   footprint (`SHIP_FOOTPRINT` in bridge/Exterior.tsx), and a unit test
   asserts every walkable room is inside it. Extend both when a room grows.
+- Touch and mouse share one press path (`scene/input.ts`). Never call an
+  interactable's onUse/onHold from a new input directly, or debounce and
+  hold-release diverge. New prompts may say "E to …": touch rewrites it
+  (`touchPrompt`), and a unit test scans every station prompt for that.
+  Shared browser helpers click with the mouse, which switches a touch page
+  to mouse play. Touch specs must tap.
 - Ad-hoc Playwright scripts must live inside the repo (e.g. a temporary
   `scripts/.name.ts`), or `playwright` won't resolve. A mode patched onto a
   running voyage doesn't re-run its start-of-voyage effects (BLACKOUT's
