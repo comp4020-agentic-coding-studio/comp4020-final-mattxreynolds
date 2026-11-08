@@ -30,6 +30,8 @@ jobs:
         with:
           cache: true
       - run: pnpm install --frozen-lockfile
+      - name: Install browser for independent-session checks
+        run: pnpm exec playwright install --with-deps chromium
       - name: Build and start the app
         # the same image Fly deploys, with a throwaway /data in place of the
         # volume; the spec runs against it
