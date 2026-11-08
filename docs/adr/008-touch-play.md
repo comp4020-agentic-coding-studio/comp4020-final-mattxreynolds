@@ -42,6 +42,17 @@ ship's roll moves the view by about a degree and a fingertip is wider than a
 pixel. A browser spec caught this: a tap aimed at the alarm button missed it
 one run in three.
 
+## Fitting the visible screen (follow-up)
+On iPhone Safari the thumb controls sat half under the toolbar, and the
+briefing card didn't fit. `inset: 0` fills the *large* viewport, and
+Safari's toolbar covers its bottom. On touch, the game is now `100dvh` tall,
+and every thumb control is offset by the safe-area insets (home indicator,
+notch). The briefing card puts "Tap to take the controls" right after the
+objective, and the controls list folds away once it has been seen. The
+desktop short-screen rules no longer squeeze it into four columns.
+`spec/browser-touch.test.ts` checks that both fit at Safari's visible sizes
+(393×659 portrait, 750×340 landscape) with the insets forced on.
+
 ## Consequences
 - The server, protocol and puzzles are untouched. Touch players send the
   same intents, so secrecy and authority are unaffected.
