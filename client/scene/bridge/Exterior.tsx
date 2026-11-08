@@ -73,7 +73,7 @@ export const SHIP_FOOTPRINT: readonly (readonly [number, number, number, number]
 ];
 const f = (b: readonly number[]) => `${b[0].toFixed(3)}, ${b[1].toFixed(3)}), vec2(${b[2].toFixed(3)}, ${b[3].toFixed(3)}`;
 
-const seaMat = new ShaderMaterial({
+export const seaMat = new ShaderMaterial({
   fog: false,
   uniforms: U,
   vertexShader: /* glsl */ `
@@ -86,7 +86,7 @@ const seaMat = new ShaderMaterial({
     // rose through the floor and sank again.
     float sdBox(vec2 p, vec2 c, vec2 h){ vec2 d = abs(p - c) - h; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
     float shipDist(vec2 p){
-      return min(sdBox(p, vec2(${f(SHIP_FOOTPRINT[0])}), sdBox(p, vec2(${f(SHIP_FOOTPRINT[1])}));
+      return min(sdBox(p, vec2(${f(SHIP_FOOTPRINT[0])})), sdBox(p, vec2(${f(SHIP_FOOTPRINT[1])})));
     }
     void main(){
       vec4 w = modelMatrix * vec4(position, 1.0);

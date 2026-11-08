@@ -62,3 +62,18 @@ describe("exterior sea containment", async () => {
       for (let x = x0; x <= x1 + 1e-9; x += (x1 - x0) / 10) for (let z = z0; z <= z1 + 1e-9; z += (z1 - z0) / 10) expect(inside(x, z), `${x},${z}`).toBe(true);
   });
 });
+
+describe("exterior sea shader", () => {
+  it("the generated GLSL balances its brackets on every line", async () => {
+    // regression: the footprint mask was spliced in with a missing ')', so the
+    // sea never compiled; production disables three's shader checks, so the
+    // only symptom was a missing sea
+    const { seaMat } = await import("../client/scene/bridge/Exterior.tsx");
+    for (const src of [seaMat.vertexShader, seaMat.fragmentShader])
+      for (const line of src.split("\n")) {
+        const code = line.replace(/\/\/.*$/, "");
+        const count = (c: string) => code.split(c).length - 1;
+        expect(count("("), line.trim()).toBe(count(")"));
+      }
+  });
+});
