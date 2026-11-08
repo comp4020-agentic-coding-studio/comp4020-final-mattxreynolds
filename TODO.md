@@ -1,6 +1,8 @@
 # TODO
 
 ## CURRENT
+- README finalisation: 567-word draft written with the student's design
+  argument, playtesting observations and three sources; ready for review.
 - Sprint 3 (branch production/cinematic-polish-qa, docs/sprint3/SPRINT.md,
   issue register docs/sprint3/ISSUES.md): cinematic overhaul (shot-list
   director, lofted ship, collision, lifeboat launch), four-room visual audit,
@@ -31,7 +33,6 @@
 - Choose the submission repo/remote; update PROCESS.md commit-link prefix.
 - Fly deploy: `flyctl deploy --remote-only --ha=false -a <repo-name>` (token
   in mise.local.toml). Not run: needs explicit go-ahead.
-- README "What good means": the student's own argument and sources ([STUDENT REVIEW]).
 - reflections/crit-10.md: the student's own words.
 
 ## COMPLETED
