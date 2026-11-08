@@ -144,7 +144,7 @@ export function Lighting() {
     badTube.level = bad;
     d.tubeBad.color.copy(d.tube.color).multiplyScalar(bad);
     d.lampGlass.emissive.copy(tmp).lerp(WARM, 0.5);
-    d.lampGlass.emissiveIntensity = 0.05 + F * 2.2;
+    d.lampGlass.emissiveIntensity = 0.05 + F * 1.3;
     fixtureState.work = F;
     fixtureState.emerg = emerg.current;
     fixtureState.flicker = flicker * dip;
@@ -156,7 +156,7 @@ export function Lighting() {
     const A = auxPowered ? Math.max(0, (1 - kicks.dip * 0.6) * flicker + kicks.flash * 0.4) : 0;
     fixtureState.aux = A;
     d.auxLampGlass.emissive.copy(AUX_WARM);
-    d.auxLampGlass.emissiveIntensity = 0.05 + A * 2.2;
+    d.auxLampGlass.emissiveIntensity = 0.05 + A * 1.3;
     d.auxEmergGlass.emissiveIntensity = auxOpen && !auxPowered ? (reduced ? 2.6 : 2.3 + Math.sin(t * 2.2 + 1) * 0.5) * (0.6 + 0.4 * flicker) : 0;
 
     // rotating beacon (alarm) — stops when the bridge acknowledges

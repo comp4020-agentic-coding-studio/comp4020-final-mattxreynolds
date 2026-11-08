@@ -79,7 +79,7 @@ function Valve({ c }: { c: Compartment }) {
   return (
     <At p={[VALVE_X[c], 0, 0]}>
       <Plate text={COMPARTMENT_LABEL[c]} w={0.62} h={0.14} position={[0, 2.12, 0.1]} border={PALETTE.brass} glow={0.75} />
-      <Dial position={[0, 1.74, 0.1]} diameter={0.5} spec={PRESSURE_SPEC} specKey="p" value={pressure} />
+      <Dial position={[0, 1.74, 0.1]} diameter={0.5} spec={PRESSURE_SPEC} specKey="p" value={pressure} faceGlow={0.1} />
       <Plate text="BACKFLOW ← 0 → DEADHEAD" w={0.7} h={0.075} position={[0, 1.42, 0.09]} glow={0.6} />
       {/* riser from the header into the valve body */}
       <Pipe a={[0, 0.3, 0.25]} b={[0, 1.3, 0.25]} d={0.12} />
@@ -93,7 +93,7 @@ function Valve({ c }: { c: Compartment }) {
         </mesh>
       </Interactable>
       {/* flag: text + colour + position (flag drops down when open) */}
-      <Plate text={open ? "OPEN" : "SHUT"} w={0.3} h={0.11} position={[0, 0.72, 0.36]} bg={open ? "#1d5a33" : "#4a1712"} glow={0.9} />
+      <Plate text={open ? "OPEN" : "SHUT"} w={0.3} h={0.11} position={[0, 0.72, 0.36]} bg={open ? "#1d5a33" : "#4a1712"} glow={0.6} />
       <Plate text="↺ OPEN  ↻ SHUT" w={0.42} h={0.07} position={[0, 0.58, 0.36]} glow={0.45} />
     </At>
   );

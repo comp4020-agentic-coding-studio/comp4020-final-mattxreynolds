@@ -62,7 +62,8 @@ function SmokePlate() {
       ctx.font = `700 26px ${STENCIL}`;
       if (burning) {
         ctx.fillText(`SMOKE ${smoke}%`, w * 0.62, 180);
-        ctx.fillText("TELL THE BRIDGE THE MARK", w * 0.62, 220);
+        ctx.font = `700 21px ${STENCIL}`;
+        ctx.fillText("TELL BRIDGE THE MARK", w * 0.63, 220);
       }
       ctx.strokeStyle = PALETTE.hazardYellow;
       ctx.strokeRect(10, 10, 150, 236);

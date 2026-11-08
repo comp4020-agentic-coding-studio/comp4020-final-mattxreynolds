@@ -8,7 +8,7 @@
 
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
-import { BackSide, DoubleSide, type Group, MeshStandardMaterial, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, ShaderMaterial, AdditiveBlending } from "three";
+import { BackSide, DoubleSide, type Group, MeshStandardMaterial, MeshBasicMaterial, PlaneGeometry, Shape, ShapeGeometry, ShaderMaterial, AdditiveBlending, NormalBlending } from "three";
 import { useStore } from "../../store.ts";
 import { grade } from "../look/PostFX.tsx";
 import { GEO } from "./kit.tsx";
@@ -64,22 +64,46 @@ const skyMat = new ShaderMaterial({
 
 // ------------------------------------------------------------ sea
 
+/** The ship's solid footprint in world xz as [cx, cz, halfX, halfZ] boxes the sea
+ * is clamped beneath (Bridge + Comms; foredeck hull). Kept in sync with the room
+ * bounds by spec/bridge-room.unit.test.ts. */
+export const SHIP_FOOTPRINT: readonly (readonly [number, number, number, number])[] = [
+  [2.45, -0.1, 7.65, 4.3],
+  [0.0, -13.35, 4.8, 9.05],
+];
+const f = (b: readonly number[]) => `${b[0].toFixed(3)}, ${b[1].toFixed(3)}), vec2(${b[2].toFixed(3)}, ${b[3].toFixed(3)}`;
+
 const seaMat = new ShaderMaterial({
   fog: false,
   uniforms: U,
   vertexShader: /* glsl */ `
     uniform float uTime, uLevel;
     varying float vH; varying vec3 vW; varying vec2 vP;
+    // The ship's solid footprint in world xz: Bridge + Comms Room (x -5.2..10.1,
+    // z -4.4..4.2) and the foredeck hull (x ±4.8, z -22.4..-4.3). The sea must
+    // never rise through the room floor (y 0) or the foredeck (y 0.55): before
+    // this mask the plane ran under the Bridge and storm crests (up to +1.3 m)
+    // rose through the floor and sank again.
+    float sdBox(vec2 p, vec2 c, vec2 h){ vec2 d = abs(p - c) - h; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+    float shipDist(vec2 p){
+      return min(sdBox(p, vec2(${f(SHIP_FOOTPRINT[0])}), sdBox(p, vec2(${f(SHIP_FOOTPRINT[1])}));
+    }
     void main(){
-      vec3 p = position;
+      vec4 w = modelMatrix * vec4(position, 1.0);
       float amp = 0.5 + uLevel * 1.1;
       float t = uTime;
-      float h = sin(p.x*0.16 + t*0.9)*0.6 + sin(p.z*0.21 - t*1.2 + p.x*0.05)*0.8
-              + sin((p.x+p.z)*0.45 + t*1.9)*0.22 + sin(p.x*0.9 - p.z*0.7 + t*2.7)*0.07;
+      float x = w.x, z = w.z;
+      float h = sin(x*0.16 + t*0.9)*0.6 + sin(z*0.21 - t*1.2 + x*0.05)*0.8
+              + sin((x+z)*0.45 + t*1.9)*0.22 + sin(x*0.9 - z*0.7 + t*2.7)*0.07;
       // swells are longer and taller toward the horizon
-      p.y += h * amp * (0.6 + smoothstep(8.0, 60.0, 38.0 - p.z) * 0.9);
-      vH = h; vP = p.xz;
-      vec4 w = modelMatrix * vec4(p, 1.0);
+      float far = 0.6 + smoothstep(8.0, 60.0, -z) * 0.9;
+      // calm in the lee of the hull: tapers to 15% at the ship's side
+      float sd = shipDist(w.xz);
+      float lee = mix(0.15, 1.0, smoothstep(0.0, 3.5, sd));
+      w.y += h * amp * far * lee;
+      // inside the footprint: always below the floor / deck, hidden by them
+      if (sd < 0.0) w.y = min(w.y, -0.15);
+      vH = h * lee; vP = w.xz;
       vW = w.xyz;
       gl_Position = projectionMatrix * viewMatrix * w;
     }`,
@@ -115,7 +139,7 @@ function rainMaterial(glass: boolean) {
     depthWrite: false,
     side: DoubleSide,
     fog: false,
-    blending: glass ? undefined : AdditiveBlending,
+    blending: glass ? NormalBlending : AdditiveBlending,
     uniforms: U,
     vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
@@ -310,7 +334,7 @@ export function StormDriver() {
 }
 
 export function Exterior() {
-  const sea = useMemo(() => new PlaneGeometry(170, 76, 110, 56).rotateX(-Math.PI / 2), []);
+  const sea = useMemo(() => new PlaneGeometry(170, 96, 120, 72).rotateX(-Math.PI / 2), []);
   useEffect(() => () => sea.dispose(), [sea]);
   return (
     <group>
@@ -318,7 +342,7 @@ export function Exterior() {
       <mesh material={skyMat} raycast={() => null} frustumCulled={false}>
         <sphereGeometry args={[74, 32, 16]} />
       </mesh>
-      <mesh geometry={sea} material={seaMat} position={[0, -0.3, -38]} raycast={() => null} frustumCulled={false} />
+      <mesh geometry={sea} material={seaMat} position={[0, -0.3, -28]} raycast={() => null} frustumCulled={false} />
       <Foredeck />
       {/* rain: in the air beyond the glass, and on the glass itself */}
       <mesh geometry={GEO.plane} material={airRain} position={[0, 2, -9]} scale={[26, 9, 1]} raycast={() => null} />

@@ -136,19 +136,27 @@ export function drawPower(ctx: Ctx, w: number, h: number, d: PowerData): void {
         ctx.stroke();
         ctx.setLineDash([]);
         hazardMark(ctx, rx + R * 0.82 + 4, fy - R * 0.62, 46);
-        const sx = rx + R + 30;
+        // stamp sits right of the whole roundel column (never over a neighbour's icon),
+        // tied to its feeder by a dashed leader
+        const sx = feedX[1] + R + 52;
+        const sw = w - sx - 12;
+        ctx.setLineDash([8, 7]);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(rx + R * 0.82 + 14, fy);
+        ctx.lineTo(sx, fy);
+        ctx.stroke();
+        ctx.setLineDash([]);
         ctx.save();
         ctx.translate(sx, fy);
-        ctx.rotate(-0.06);
-        const sw = w - sx - 14;
-        roundRect(ctx, 0, -40, sw, 80, 6);
-        ctx.fillStyle = "rgba(60,0,0,0.6)";
+        roundRect(ctx, 0, -38, sw, 76, 6);
+        ctx.fillStyle = "rgba(60,0,0,0.75)";
         ctx.fill();
         ctx.lineWidth = 4;
         ctx.strokeStyle = INK.red;
         ctx.stroke();
-        fitText(ctx, "⚡ SHORTED", sw / 2, -14, 34, sw - 16, "#ffd2cc");
-        fitText(ctx, "DO NOT ENERGISE", sw / 2, 20, 30, sw - 16, "#ffd2cc");
+        fitText(ctx, "⚡ SHORTED", sw / 2, -13, 32, sw - 16, "#ffd2cc");
+        fitText(ctx, "DO NOT ENERGISE", sw / 2, 20, 28, sw - 16, "#ffd2cc");
         ctx.restore();
       }
     });

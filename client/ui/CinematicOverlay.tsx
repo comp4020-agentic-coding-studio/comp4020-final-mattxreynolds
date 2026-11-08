@@ -3,18 +3,18 @@
 // are already decided. Space / Enter / Esc or the button skips.
 
 import { useEffect, useState } from "react";
-import { CAPTIONS, SHOT_SECONDS } from "../scene/Cinematic.tsx";
+import { CAPTIONS, cinematicTime, SHOT_SECONDS } from "../scene/Cinematic.tsx";
 import { useStore } from "../store.ts";
 
 export function CinematicOverlay() {
   const cin = useStore((s) => s.cinematic);
-  const [now, setNow] = useState(() => performance.now() / 1000);
+  const [now, setNow] = useState(0);
   useEffect(() => {
     if (!cin) return;
     const id = setInterval(() => {
-      const t = performance.now() / 1000;
+      const t = cinematicTime(cin.start);
       setNow(t);
-      if (t - cin.start > SHOT_SECONDS[cin.shot]) useStore.setState({ cinematic: null });
+      if (t > SHOT_SECONDS[cin.shot]) useStore.setState({ cinematic: null });
     }, 200);
     const skip = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "Enter" || e.code === "Escape") {
@@ -29,7 +29,7 @@ export function CinematicOverlay() {
     };
   }, [cin]);
   if (!cin) return null;
-  const t = now - cin.start;
+  const t = now;
   const caps = CAPTIONS[cin.shot].filter((c) => t >= c.at && t < c.until);
   return (
     <div className="cinematic" data-testid="cinematic" role="dialog" aria-label="Cinematic">

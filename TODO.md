@@ -1,14 +1,17 @@
 # TODO
 
 ## CURRENT
-- Production sprint (branch production/ambitious-overhaul, docs/production/PLAN.md).
-  Rounds 1–2 integrated: shared look + quality tiers (ADR 007), Engine/Aux and
-  Bridge/Comms rebuilds, lighting, disaster FX, compartment fire (ADR 006),
-  UI/audio, debrief/log page, Gerstner-sea cinematics. One persistent canvas
-  across cinematics (ending freeze fix). Voyage-strip layout shared in
-  shared/timeline.ts. Now: final hardening, push, PR, handoff report.
+- Sprint 3 (branch production/cinematic-polish-qa, docs/sprint3/SPRINT.md,
+  issue register docs/sprint3/ISSUES.md): cinematic overhaul (shot-list
+  director, lofted ship, collision, lifeboat launch), four-room visual audit,
+  QA fix loop, Bridge sea-through-floor fix. Now: cinematic round 2, final
+  check, PR.
 
 ## NEXT
+- Balance decisions from sprint 3 QA (ISSUES.md COOP-1/2/3/7): Escape
+  solvable blind by a reactive Engineer; Act IV reachable with an idle
+  Engineer; NIGHTMARE survivable by a scripted crew; same-ship reruns count
+  toward unlocks. All need human playtests before a rule change.
 - Human playtests of the five-act voyage: is Act IV readable, is the
   difficulty curve (escape after a few attempts) right, are the cinematics
   the right length. All balance figures are from scripted crews.

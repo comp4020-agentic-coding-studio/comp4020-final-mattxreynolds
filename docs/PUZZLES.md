@@ -277,6 +277,19 @@ Genuine synchronisation under rising water.
 
 Danger rises fast here; the phase is paced to be exciting, not punishing.
 
+**Honest limit (found in sprint 3 QA).** The slip rule stops *steady* blind
+pumping, but a *reactive* Engineer can read the door's own motion as a
+LOW / OK / HIGH lamp (opening = in band, closing = too high, stalled = too
+low) while the Bridge simply holds RELEASE. Simulated
+(`/tmp/qa-coop/escape_blind.ts`): 76/100 seeds open the door in ~13 s, as fast
+as a talking pair. Hiding door progress from the Engineer does not fix it: a
+slow blind pressure sweep (e.g. 40→80 over 45 s) still opens the door 60/60 in
+20–28 s, because progress is kept while out of band. A real fix needs a rule
+change (e.g. progress lost when out of band, or a band that moves over time
+and only the Bridge sees), which changes the feel of the finale and should be
+decided after human playtests. Talking remains the fastest route, not the
+only one.
+
 ---
 
 ## Endings

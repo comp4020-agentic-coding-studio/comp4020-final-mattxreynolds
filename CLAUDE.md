@@ -126,3 +126,11 @@ own judgement are marked `[STUDENT REVIEW]`.
   ended). Tearing down a WebGL context costs seconds on a software
   rasteriser; swap the canvas *contents* and keep `<Game>` at a stable tree
   position in `App.tsx`.
+- The exterior sea must never extend under an interior floor. Storm crests
+  rose 1.3 m through the Bridge deck. The sea shader masks the ship
+  footprint (`SHIP_FOOTPRINT` in bridge/Exterior.tsx), and a unit test
+  asserts every walkable room is inside it. Extend both when a room grows.
+- Ad-hoc Playwright scripts must live inside the repo (e.g. a temporary
+  `scripts/.name.ts`), or `playwright` won't resolve. A mode patched onto a
+  running voyage doesn't re-run its start-of-voyage effects (BLACKOUT's
+  lights circuit), so patch the effect too when rendering it.

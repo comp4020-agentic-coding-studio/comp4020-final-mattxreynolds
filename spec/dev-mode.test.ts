@@ -57,4 +57,11 @@ describe("dev mode when enabled", () => {
     expect((await post(server.url, `/api/dev/voyages/${code}/action`, { token: "forged", action: { k: "skip" } })).status).toBe(403);
     expect((await post(server.url, `/api/dev/voyages/${code}/action`, { token: r.json.seats[0].token, action: { k: "toString" } })).status).toBe(400);
   });
+
+  it("refuses dev actions on a real (non-dev) voyage even with dev tools on", async () => {
+    const a = await post(server.url, "/api/voyages", { callsign: "ADA" });
+    const code = a.json.code as string;
+    const r = await post(server.url, `/api/dev/voyages/${code}/action`, { token: a.json.token, action: { k: "skip" } });
+    expect(r.status).toBe(409);
+  });
 });

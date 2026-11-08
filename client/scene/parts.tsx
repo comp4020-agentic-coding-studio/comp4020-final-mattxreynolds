@@ -194,6 +194,7 @@ export function Dial({
   value,
   needleColor = "#b8322a",
   px = 512,
+  faceGlow = 0.35,
 }: {
   position: V3;
   rotation?: V3;
@@ -204,6 +205,8 @@ export function Dial({
   value: () => number;
   needleColor?: string;
   px?: number;
+  /** emissive strength of the face (lower it where lamps wash the dial out) */
+  faceGlow?: number;
 }) {
   const tex = useCanvasTexture(px, px, (ctx, W) => drawDialFace(ctx, W, spec), [specKey]);
   const needle = useRef<Group>(null);
@@ -221,7 +224,7 @@ export function Dial({
       <mesh geometry={S().ring} material={S().brass} scale={[r * 2.06, r * 2.06, r * 2]} position={[0, 0, 0.005]} />
       <mesh position={[0, 0, 0.003]}>
         <circleGeometry args={[r, 40]} />
-        <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={0.35} roughness={0.7} />
+        <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={faceGlow} roughness={0.7} />
       </mesh>
       <group ref={needle} position={[0, 0, 0.02]}>
         <mesh geometry={S().box} material={needleMat} position={[0, r * 0.38, 0]} scale={[r * 0.06, r * 0.9, 0.01]} />

@@ -429,6 +429,9 @@ export class Manager {
     const l = this.get(normaliseCode(rawCode));
     if (!l) return "not-found";
     if (typeof token !== "string" || !this.db.roleForToken(l.v.id, token)) return "bad-token";
+    // dev actions (skip/sink/danger) only act on voyages created in dev mode:
+    // a real voyage must never be skippable, even with dev tools enabled
+    if (!l.v.dev) return "wrong-phase";
     const now = this.clock();
     const fx = tick(l.v, now);
     if (!applyDevAction(l.v, action, now, fx)) return "wrong-phase";

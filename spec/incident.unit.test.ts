@@ -130,7 +130,7 @@ describe("the compartment fire: rules", () => {
     expect(s.v.ship.fire.intensity).toBeGreaterThan(before + INCIDENT.flare - 1);
     expect(s.v.danger).toBeGreaterThan(dg);
     // locked: even the right first throw is refused for a while
-    expect(throwOn(s, p[0])).toEqual({ ok: false, reason: "too-fast" });
+    expect(throwOn(s, p[0])).toEqual({ ok: false, reason: "panel-locked" });
     s.run(INCIDENT.lockMs / 1000 + 1);
     expect(throwOn(s, p[0]).ok).toBe(true);
   });

@@ -188,11 +188,11 @@ export function EscapeWall() {
       <Door />
       {/* hydraulic station left of the door */}
       <group position={[ESC.pumpX, 0, 0]}>
-        <B p={[0, 1.55, 0.04]} s={[0.75, 0.9, 0.08]} m={m.panel} />
-        <Dial position={[0, 1.62, 0.1]} diameter={0.56} spec={HYD_SPEC} specKey="h" value={() => ev()?.escape.pressure ?? 0} />
-        <Plate text="DOOR RAM PRESSURE" w={0.66} h={0.09} position={[0, 1.2, 0.09]} glow={0.6} />
+        <B p={[0, 1.66, 0.04]} s={[0.75, 1.12, 0.08]} m={m.panel} />
+        <Dial position={[0, 1.62, 0.1]} diameter={0.56} spec={HYD_SPEC} specKey="h" value={() => ev()?.escape.pressure ?? 0} faceGlow={0.12} />
+        <Plate text="DOOR RAM PRESSURE" w={0.66} h={0.09} position={[0, 2.1, 0.09]} glow={0.6} />
         <Plate text="HAND PUMP ▼ STROKE" w={0.6} h={0.08} position={[0, 0.72, 0.09]} border={PALETTE.hazardYellow} glow={0.6} />
-        <group position={[0, 0, ESC.pumpZ]}>
+        <group position={[0.55, 0, ESC.pumpZ]}>
           <HandPump />
         </group>
         <Pipe a={[0.3, 0.9, 0.06]} b={[0.85, 0.9, 0.06]} d={0.05} m={m.brassDark} />
