@@ -1,8 +1,9 @@
 # TODO
 
 ## CURRENT
-- README finalisation: 567-word draft written with the student's design
-  argument, playtesting observations and three sources; ready for review.
+- PROCESS finalisation: five-moment draft with linked evidence and the
+  student's observations from two pairs playing the final version; ready
+  for review. README finalised and committed in a9f824f.
 - Sprint 3 (branch production/cinematic-polish-qa, docs/sprint3/SPRINT.md,
   issue register docs/sprint3/ISSUES.md): cinematic overhaul (shot-list
   director, lofted ship, collision, lifeboat launch), four-room visual audit,
@@ -18,19 +19,15 @@
   solvable blind by a reactive Engineer; Act IV reachable with an idle
   Engineer; NIGHTMARE survivable by a scripted crew; same-ship reruns count
   toward unlocks. All need human playtests before a rule change.
-- Human playtests of the five-act voyage: is Act IV readable, is the
-  difficulty curve (escape after a few attempts) right, are the cinematics
-  the right length. All balance figures are from scripted crews.
+- Further human playtests of the five-act voyage: Act IV readability,
+  difficulty and cinematic length. Two pairs played the final version and
+  improved with repetition; numerical balance estimates remain simulations.
 - Flood is still solvable alone at a cost (PUZZLES.md "Honest limit").
-- Human playtest with two people: difficulty, banner wording, audio levels,
-  pulse beep, 10–15 min length (balance figures are estimates; see
-  docs/GAME_DESIGN.md).
 - Build and run the Docker image. Docker isn't available in the dev WSL env;
   the prod-only runtime was simulated without Docker and worked.
 - Optional perf: bake a fixed light set in the Engine Room (9 lights).
 
 ## BLOCKED (needs the student)
-- Choose the submission repo/remote; update PROCESS.md commit-link prefix.
 - Fly deploy: `flyctl deploy --remote-only --ha=false -a <repo-name>` (token
   in mise.local.toml). Not run: needs explicit go-ahead.
 - reflections/crit-10.md: the student's own words.

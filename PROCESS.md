@@ -1,380 +1,137 @@
 # Process
 
-> **How to read this file.** It was written *during* development by the lead
-> coding agent (Claude Code, Opus 5.5) as a factual log. Entries marked
-> **Verified** describe things that happened in this repository and link to
-> the commits. Entries marked **Rationale** explain why. Sections marked
-> **[STUDENT REVIEW]** need your own account and judgement. Nothing here
-> describes user testing, because none has been recorded yet.
->
-> Commit links point at `github.com/mattxreynolds/below-the-waterline`, which
-> doesn't exist yet. The hashes are real and resolve in this repository
-> (`pnpm check:evidence` verifies that). **[STUDENT REVIEW]** Update the URL
-> prefix once you choose the remote.
-
-## Starting point
-
-**Verified.** The working directory `final-prototype/` was empty. The course
-had already provisioned a separate repo (`comp4020-final-mattxreynolds`) with
-an earlier, different ship-themed escape room (Svelte + Hono, about 74 merged
-PRs). That repo was left untouched. The course starter template was taken
-from that repo's initial commit (by the convenor) and committed here
-unchanged as the first commit,
-[`e13044b`](https://github.com/mattxreynolds/below-the-waterline/commit/e13044b).
-That way the supplied harness survives intact: `spec/invariants.test.ts`,
-`scripts/check-evidence.ts`, the Dockerfile/`fly.toml` shape, CI and the
-pre-commit hook.
-
-**Rationale.** The brief said to preserve starter constraints and not
-blindly replace starter files. Rebuilding the existing provisioned repo would
-have overwritten a large body of earlier work without being asked to.
-
-[STUDENT REVIEW: say which repo you intend to submit from. If it is the
-provisioned course repo, this history needs to be brought across, by pushing
-this repo there as a branch or by changing the remote.]
-
-## Brief → documents → interfaces
-
-**Verified.** Before any game code, the design was written down in
-[`f73b184`](https://github.com/mattxreynolds/below-the-waterline/commit/f73b184):
-`docs/PRODUCT.md`, `GAME_DESIGN.md`, `PUZZLES.md` (each phase's split of
-information and controls between the two roles, plus validation rules),
-`ARCHITECTURE.md`, `MULTIPLAYER.md`, `VISUAL_DIRECTION.md`, `DEPLOYMENT.md`,
-four ADRs, and `CLAUDE.md` as the engineering constitution.
-
-**Rationale.** A long agentic session loses context. The documents are the
-recovery point, and they let parallel subagents work against fixed
-interfaces.
-
-## Vertical slice before delegation
-
-**Verified.** The lead agent built the foundation alone in
-[`cb41ac9`](https://github.com/mattxreynolds/below-the-waterline/commit/cb41ac9):
-
-- shared protocol types
-- the pure voyage reducer, with guarded once-only transitions
-- the per-role view projection
-- SQLite persistence
-- create/join/reconnect
-- the lobby
-- the first-person controller and `Interactable` system
-- greybox rooms with the one prologue cross-room action
-
-It was tested with socket-level specs and a Playwright walkthrough in two
-independent browser contexts (16 tests passing at that commit).
-
-Problems found while building it:
-
-- **Redirect loop on `/readme/`.** Express 5's loose trailing-slash matching
-  made `app.get("/readme")` also match `/readme/`, so the page redirected
-  to itself. Caught by a curl smoke test. Fixed by redirecting only when
-  `req.path` is exactly `/readme`.
-- **Balance.** A worked estimate showed the first danger rates would end a
-  careful 12-minute voyage at about 98/100, which is near-certain loss. The
-  rates were lowered and the estimate written into `docs/GAME_DESIGN.md`
-  ([`72c4e02`](https://github.com/mattxreynolds/below-the-waterline/commit/72c4e02)).
-  The STABLE/RISING threshold was lowered at the same time, so that a slowly
-  rising ship never displays "STABLE".
-- **A unit test that plays a whole voyage** through the reducer for several
-  seeds was written *before* the 3D work was delegated. It proved that every
-  phase in `PUZZLES.md` is solvable as specified.
-
-## Delegation
-
-**Verified.** Once the interfaces were fixed, three workstreams ran in
-parallel in separate git worktrees, each with disjoint file ownership:
-
-| Workstream | Model / effort | Owned | Forbidden |
-|---|---|---|---|
-| Engine Room 3D | Opus 5.5 / medium | `client/scene/EngineRoom.tsx`, `client/scene/engine/` | shared/, server/, spec/, protocol |
-| Bridge 3D | Opus 5.5 / medium | `client/scene/Bridge.tsx`, `client/scene/bridge/` | same |
-| Reliability tests | Opus 5.5 / medium | `spec/` (except the course's files) | protocol, schema |
-
-Before delegating, the lead added an interactable id contract
-(`client/scene/ids.ts`), a shared palette, a shared glyph renderer (so both
-rooms draw identical shapes), and `scripts/screenshot.ts`. The screenshot
-script lets an agent jump to any phase and look at both rooms.
-
-(Integration results are recorded below as they happen.)
-
-### Reliability workstream (merged in [`75740cc`](https://github.com/mattxreynolds/below-the-waterline/commit/75740cc))
-
-**Verified.** The agent added 8 spec files. They cover persistence across
-SIGTERM and SIGKILL restarts, view secrecy for every phase, server
-authority and races, presence and pause, replay, server-rendered pages, and
-slow or dropped links in two browser contexts. 84 tests passed, run three
-times in a row. I reviewed both of its server changes before merging:
-
-- **A real crash bug**, [`ebbebb3`](https://github.com/mattxreynolds/below-the-waterline/commit/ebbebb3).
-  `applyIntent` looked up `INTENT_RULES[intent.t]` without checking it was an
-  own key. A seated client sending `{t: "toString"}` made the reducer throw
-  inside the socket handler, which killed the process and every live
-  voyage. The adversarial authority spec found it. It is now fixed with
-  `Object.hasOwn`, and a unit regression test covers it.
-- [`42c964d`](https://github.com/mattxreynolds/below-the-waterline/commit/42c964d):
-  `res.sendFile` refused paths containing a dot-directory, so `/` returned 404
-  when the repo was checked out under `.claude/worktrees/`. Production was
-  never affected.
-- **A testing lesson.** Chrome's CDP latency emulation does not delay frames
-  on an open WebSocket. A "slow connection" test built on it alone would
-  have passed while testing nothing. The agent measured this and proxied
-  socket frames with an added delay instead.
-
-### Room workstreams (Engine Room [`69dcb7f`](https://github.com/mattxreynolds/below-the-waterline/commit/69dcb7f), Bridge [`cef6869`](https://github.com/mattxreynolds/below-the-waterline/commit/cef6869))
-
-**Verified.** Both agents kept strictly to their own folders; I checked
-this with `git diff --name-only` before each merge. Neither needed a
-protocol change. I re-screenshotted every phase from the merged `main`
-myself, rather than trusting the agents' screenshots. Both agents reported
-the same two script bugs: the screenshot `--views` separator clashed with
-commas inside poses, and worktree paths broke static serving (already fixed
-by the testing merge). I fixed the separator after merging.
-
-### Integration failures and what they revealed ([`f1574b4`](https://github.com/mattxreynolds/below-the-waterline/commit/f1574b4))
-
-With both rooms merged, the whole-voyage browser spec ran for the first time
-and failed in two places. Both failures were real findings, not test noise:
-
-1. **The flood pump hand-off was too punishing.** The spec handed a pump to
-   the third compartment the moment the first two read under 20%, and the
-   first crept back over the line while the third drained. The arithmetic
-   (drain ≈ 15 s, creep ≈ 6.6 points) showed a crew must drain well below
-   the target first, so the spec now does what a crew must do. Inflow was
-   also lowered (0.25–0.45 → 0.15–0.30 per second) so the hand-off is
-   learnable.
-2. **A 1.5–3 s main-thread stall on first entry.** The strict 1.5 s
-   cross-room browser check failed intermittently. In-page timing showed the
-   network delivered the view in under 100 ms, but each room's first mount
-   froze the page for about 1.5 s while shaders compiled (SwiftShader). A
-   lever pulled in that window reached the other screen 2.3–3 s later. I
-   did not loosen the timeout. The briefing card now shows "Lighting the
-   lamps…" until frames flow, with a 6 s cap. A first version, which needed
-   20 frames under 250 ms, never became ready under software rendering. That
-   would have stranded slow laptops, so it was relaxed to 8 frames under
-   0.5 s.
-
-After this, all 85 tests passed three runs in a row. That includes the full
-voyage played through the real controls in two independent browser contexts
-(Prologue → Power, including a deliberate short circuit → Flood → Radio →
-Escape → Survived → Ship's Log → Sail again).
-
-### Polish and review workstream ([`a2f136a`](https://github.com/mattxreynolds/below-the-waterline/commit/a2f136a)…[`0a30042`](https://github.com/mattxreynolds/below-the-waterline/commit/0a30042))
-
-**Verified.** The fourth delegated agent (Opus 5.5, medium) found and fixed
-five client bugs:
-
-- **Fast double-presses were silently dropped.** A toggle computed its next
-  value from the last 200 ms view, so the second press did nothing.
-- **Controls could be used while hidden.** Raycasting ignores visibility,
-  so stations still compiling their shaders could be aimed at and used.
-- **"Sail again" connected twice**, rebuilding the 3D canvas twice.
-- **The whole scene re-rendered on every view**, five times a second.
-- **Pointer-lock rejections were unhandled.**
-
-It also added a per-phase "where to look" banner and pulse-lamp beeps
-synced to the lamp's own timing, plus sounds for remote pump changes. I
-checked its wording for spoilers and glyph names before accepting it.
-
-### Marker simulation
-
-**Verified.** I scripted a walkthrough as a stranger, in two independent
-profiles: `/readme/` → Play → a hostile callsign (rejected) → create → join
-by typed code → a bad code → a third player → ready → prologue → a breaker
-(it was the shorted one: trip, one mistake recorded) → **SIGTERM the
-server mid-voyage, restart it** → both clients restored with identical
-state → refresh → `/history/` lists the live voyage. One fix came out of it:
-a mistyped code logged a 404 in the console.
-
-Running `pnpm check` the way CI does (production app, no test hooks)
-exposed a real latency problem, fixed in [`8ef9d01`](https://github.com/mattxreynolds/below-the-waterline/commit/8ef9d01). A silent network drop went
-unnoticed for up to 25 s because of the Socket.IO heartbeat defaults. During
-that time the ship kept flooding instead of "holding". It is now about 13 s.
-
-### Can one seat solve it alone? (the most important finding)
-
-**Verified.** A flaky authority test kept failing for one seed. Tracing it
-showed that ~5% of generated power puzzles had the answer "breakers 1, 2, 3",
-so sweeping left to right solved Power with no talking ([`fa26f8f`](https://github.com/mattxreynolds/below-the-waterline/commit/fa26f8f)). That
-prompted a systematic audit. Every puzzle was simulated against a
-**no-communication strategy** before changing anything. **Every one of the
-four was solvable blind:**
-
-| Puzzle | Blind strategy | Before | Fix | After |
-|---|---|---|---|---|
-| Power | Engineer sweeps combinations using the load meter | ~1.6 trips per solve | rating moved to the Bridge; wrong pairings trip ([`591de31`](https://github.com/mattxreynolds/below-the-waterline/commit/591de31)) | ~3 trips, ~9–12 danger (costly, **not** impossible: documented as an honest limit) |
-| Flood | open every valve, rotate pumps | 40/40 solved | backflow 1.2 → 3 %/s ([`0102dba`](https://github.com/mattxreynolds/below-the-waterline/commit/0102dba)) | 0/40 blind, 40/40 informed |
-| Radio | sweep channels coupling each time, sweep bearings transmitting each time | ~14 danger | arc cost +1 → +2 | ~22 danger |
-| Escape | hold release, pump steadily | 60/60 opened | over-pressure slips the rams ([`fbc93ca`](https://github.com/mattxreynolds/below-the-waterline/commit/fbc93ca)) | 0/60 blind, 60/60 talking (13–22 s) |
-
-**Rationale.** The project's definition of good is "moments in which two
-people genuinely need one another". The original puzzles *displayed*
-asymmetric information but didn't *require* it. Unit tests now lock in that
-blind play fails for Flood and Escape. Raising mistake costs then made a
-slow-but-steady 14-minute pair lose (≈ 95 danger), so the base rates were
-lowered again (now ≈ 76).
-
-[STUDENT REVIEW: this is the clearest example of the agent's tests changing
-the design. Consider whether it belongs in your README argument.]
-
-## Second production cycle (one unattended overnight session)
-
-The student gave one long brief asking for fifteen ranked features. Below
-is what happened, in order.
-
-### Lead first: server and protocol before delegation
-
-The lead wrote the server side alone before any delegation
-([`4dc5c37`](https://github.com/mattxreynolds/below-the-waterline/commit/4dc5c37)). That covered the continuous ship systems (`ship.ts`:
-grid, water, hull, Act IV breaches and calls, the accumulator), the new
-CASCADE phase, the davits gate on the escape, modes, practice starts from a
-seeded scenario, an ordered event log and the debrief builder. The
-protocol, secrecy projections and IDs were fixed first so the room work
-could proceed in parallel. ADR 005 records why the phase machine was kept
-rather than rewritten.
-
-### A blind-play hole the first cycle missed
-
-The first cycle's simulation of blind Flood play used a *fixed* sweep. A new
-simulation used a *reactive* blind Engineer: open on deadhead, shut on
-backflow. It won 40/40 seeds at no cost, because the gauge reveals which
-pumps run. Running-dry seizure and a 6 s hold ([`4dc5c37`](https://github.com/mattxreynolds/below-the-waterline/commit/4dc5c37)) made blind
-play cost about 10 more danger than a talking crew, but **did not** make it
-fail. PUZZLES.md now records this as an honest limit rather than claiming
-otherwise.
-
-### Delegation
-
-Two Opus subagents (medium effort) worked in parallel, each owning one
-side's client directory with no shared files. One built the Engineer's Aux
-Machinery Room, the other the Bridge's Comms Room. Meanwhile the lead built
-the lobby settings, debrief UI, cinematics, audio, docs and the chaos spec
-([`b6cdbab`](https://github.com/mattxreynolds/below-the-waterline/commit/b6cdbab), [`6778749`](https://github.com/mattxreynolds/below-the-waterline/commit/6778749), [`867eafc`](https://github.com/mattxreynolds/below-the-waterline/commit/867eafc)). The lead reviewed both
-diffs and screenshots and integrated them in [`d6dbae9`](https://github.com/mattxreynolds/below-the-waterline/commit/d6dbae9). The first
-full five-act browser run then exposed two debrief bugs (a "clean voyage"
-lesson printed despite a trip, and a meaningless escape margin), both fixed
-there.
-
-### Balance by simulation, not by people
-
-A scripted crew that plays correctly but waits a human-like thinking time
-in each act produced the difficulty table in GAME_DESIGN.md. Danger rates
-for Acts III–V were raised a little so a slow first attempt usually dies in
-Act V ([`bb0cca1`](https://github.com/mattxreynolds/below-the-waterline/commit/bb0cca1)). **No human playtesting has happened.**
-
-### Hostile-marker audit found a restart bug
-
-An audit script started a fresh server and opened two browser contexts. It
-jumped to Act IV, SIGKILLed and restarted the server, then forced a loss.
-The open pages never saw the loss: the client drops views with a lower
-`rev`, and the server's rev restarted at 0. Fixed by seeding rev from the
-clock, with a regression assertion ([`feeb0c4`](https://github.com/mattxreynolds/below-the-waterline/commit/feeb0c4)). The same audit found
-unreadable lobby and debrief cards (dark-on-dark).
-
-[STUDENT REVIEW: the overnight session ran without supervision. Decide
-whether this section should stay as written, and what you would have
-prioritised differently.]
-
-## Production sprint (agent-led, branch `production/ambitious-overhaul`)
-
-A long autonomous session: one lead agent with up to five parallel subagents,
-each working in its own git worktree with exclusive file ownership. The
-brief's priorities were the visual transformation, the disaster simulation,
-a gameplay incident, and presentation. Budget figures come from the course
-proxy (`docs/production/BUDGET.md`).
-
-### Baseline, then a shared look before delegation
-
-The baseline `pnpm check:local` passed 158/158. Before splitting the work,
-the lead built the shared render layer so every room agent would share one
-look: procedural painted-steel and tread-plate relief maps, an environment
-map, bloom, grade and a quality tier ([`4588879`](https://github.com/mattxreynolds/below-the-waterline/commit/4588879)). The first proof of
-concept failed visibly. three's studio `RoomEnvironment` reflected bright
-light boxes off the wet deck and the dial glass and made the gauges
-unreadable. It was replaced with a dim compartment environment before any
-agent started. The plan and the art-direction decision are in
-`docs/production/PLAN.md` and ADR 007.
-
-### Round 1: five parallel workstreams
-
-- Engine and Aux rooms: merged machinery dressing ([`351e1b7`](https://github.com/mattxreynolds/below-the-waterline/commit/351e1b7), [`6253e53`](https://github.com/mattxreynolds/below-the-waterline/commit/6253e53)).
-- Bridge and Comms: a storm exterior and dressing ([`1411927`](https://github.com/mattxreynolds/below-the-waterline/commit/1411927), [`626b7c9`](https://github.com/mattxreynolds/below-the-waterline/commit/626b7c9), [`93a871a`](https://github.com/mattxreynolds/below-the-waterline/commit/93a871a)).
-- Disaster FX: shader water, particles, ship motion, atmosphere ([`a5a7f4c`](https://github.com/mattxreynolds/below-the-waterline/commit/a5a7f4c)).
-- Gameplay: the compartment fire, an audit and ADR 006 ([`e378f7a`](https://github.com/mattxreynolds/below-the-waterline/commit/e378f7a)).
-- UI and audio: stencil identity, act cards, gauge, soundscape ([`0ce0a57`](https://github.com/mattxreynolds/below-the-waterline/commit/0ce0a57)).
-
-The lead reviewed every diff before merging. Two corrections came from
-review rather than tests:
-- The UI agent labelled the HUD gauge "WATER LEVEL" although it shows overall
-  danger. It was relabelled "SHIP DANGER" ([`91765b3`](https://github.com/mattxreynolds/below-the-waterline/commit/91765b3)).
-- The lead's own relief-map change broke a unit test (canvases built at
-  import under Node) ([`23b3a75`](https://github.com/mattxreynolds/below-the-waterline/commit/23b3a75)).
-
-### The regression that mattered: shaders vs. the 2-second rule
-
-After round 1 the browser specs that enforce real-time propagation began
-timing out (195/198). Every agent attributed this to machine load, and none
-proved it. On an idle machine the lead measured:
-- Long main-thread tasks of 4.2 s (Engine Room) and 6.5 s (Bridge) just
-  after mount.
-- A CPU profile with 7 s inside `getShaderInfoLog` and `getProgramInfoLog`.
-- Program links of 100–800 ms each, against none over 30 ms on the baseline
-  commit.
-
-Software rasterisers link the env-map and relief-map variants about 100×
-slower, and the freeze delayed socket views past the 2 s budget (invariant
-3). The fix ([`5835042`](https://github.com/mattxreynolds/below-the-waterline/commit/5835042), [`59f067e`](https://github.com/mattxreynolds/below-the-waterline/commit/59f067e)):
-- Software GL defaults to a `low` tier without those variants.
-- Take-controls waits for every staged mount to finish compiling.
-- The readiness probe tolerates one slow software frame.
-
-Freezes fell to 0.7 s and 1.6 s, and the full spec returned to green. This
-became a CLAUDE.md lesson.
-
-### Round 2 and integration
-
-- The fire's Bridge half (the procedure book) had been built but never
-  mounted, so the mechanic was unplayable. The lead mounted it and added a
-  two-profile browser spec that plays it through the real controls
-  ([`de2f607`](https://github.com/mattxreynolds/below-the-waterline/commit/de2f607), [`3d079d3`](https://github.com/mattxreynolds/below-the-waterline/commit/3d079d3)).
-- The wire-level secrecy spec was extended to the fire ([`c8b197a`](https://github.com/mattxreynolds/below-the-waterline/commit/c8b197a)).
-- Fire effects on both seats ([`4add6f9`](https://github.com/mattxreynolds/below-the-waterline/commit/4add6f9), [`135ab07`](https://github.com/mattxreynolds/below-the-waterline/commit/135ab07)).
-- End-of-voyage report, `/log/` page and cinematics ([`b62f2c4`](https://github.com/mattxreynolds/below-the-waterline/commit/b62f2c4),
-  [`03672c4`](https://github.com/mattxreynolds/below-the-waterline/commit/03672c4), [`6b4d71a`](https://github.com/mattxreynolds/below-the-waterline/commit/6b4d71a)).
-- The engine lighting pass ([`0d3e7f1`](https://github.com/mattxreynolds/below-the-waterline/commit/0d3e7f1)) and a `--repatch` screenshot option ([`3c5be8c`](https://github.com/mattxreynolds/below-the-waterline/commit/3c5be8c)).
-- After the merge, `browser-full-voyage` timed out at the ending cinematic.
-  A CPU profile showed the canvas being torn down and rebuilt
-  (`forceContextLoss` 3.4 s plus `getContext` 1 s on SwiftShader). The fix keeps one
-  canvas for the whole voyage and swaps its contents ([`9998843`](https://github.com/mattxreynolds/below-the-waterline/commit/9998843)).
-  The full local check was then 199/199.
-- The voyage-strip layout had been copied between the client debrief and the
-  server log page; it now lives in `shared/timeline.ts`, with unit tests
-  ([`aeddeff`](https://github.com/mattxreynolds/below-the-waterline/commit/aeddeff)).
-
-### Problems with running agents in parallel
-
-- Three agents rendering headless SwiftShader Chromium at once pushed the
-  load average to about 26, and the user reported the machine was slow.
-  Browser work was then serialised.
-- The first serialisation rule (`pgrep -fc chrome-headless-shell`) matched
-  the polling shells' own command lines, so all three agents deadlocked
-  waiting for zero. It was fixed to an exact process-name match.
-- The harness flagged one subagent with a security warning. The lead audited
-  its worktree, its settings and its diff (no process, file or network
-  calls; user strings escaped in server HTML) before merging.
-
-### What is and isn't evidence
-
-All balance and cooperation claims for the fire come from scripted
-simulations: 1 % of 300 blind sweeps resolved it, 1 of 60 reactive blind
-runs resolved it, and a talking crew resolved it 60/60. **No human has
-played the sprint build.** Visual quality was judged by the agent from
-screenshots.
-
-[STUDENT REVIEW: is the new look and the fire worth the added complexity
-for your definition of good? Does anything here need your own playtest
-before you claim it?]
-
-## [STUDENT REVIEW] Your reflection
-
-What you decided, what surprised you, and what you would do differently.
-The agent cannot write this for you.
+## Starting small, then starting again
+
+I started with Dead Air, a simple cooperative game inspired by *Keep Talking
+and Nobody Explodes*. It gave me a manageable way to build around two people
+holding different information. The first version had randomised modules,
+separate seats and a persistent run history
+([`2c02f96`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/2c02f96)).
+I wanted to take that communication mechanic into a space players could
+explore, with more atmosphere and more interesting things to do together.
+
+For the first 3D attempt, I used a workflow built around Matt Pocock's skills.
+There were prototypes comparing interactions and ways of presenting the
+world ([`defd1e0`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/defd1e0)),
+followed by a Svelte/Hono implementation. I wasn't happy with its appearance
+or gameplay, and the workflow felt like a lot of unnecessary effort for what
+it produced. I started again in a separate project without using that skills
+workflow. The result became Below the Waterline.
+
+That doesn't establish that the skills caused the problems. It was my
+experience of that attempt, and enough reason to try another approach. The
+[earlier harness](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/blob/3116870/CLAUDE.md)
+and [later import](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/8a1be4a)
+preserve the record of both versions.
+
+## Giving the agents a foundation
+
+The new build used Claude Code with Opus 5.5. Before implementation, the agent
+recorded the product, puzzles, architecture and constraints
+([`f73b184`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/f73b184)).
+[CLAUDE.md](CLAUDE.md) made those commitments instructions for later work:
+the server owns the game, each role receives only its own information, and
+reconnecting restores the voyage.
+
+React Three Fiber let room controls be components alongside React overlays.
+That meant a larger bundle and care around rendering performance; [ADR
+001](docs/adr/001-browser-3d-r3f.md) records the alternatives. Express and
+Socket.IO kept the application in one Node process. Role-specific snapshots
+made reconnects straightforward and kept the partner's clues out of network
+traffic ([ADR 002](docs/adr/002-server-authoritative-state.md)). SQLite fitted
+the course's single machine and persistent volume without another service
+([ADR 003](docs/adr/003-sqlite-persistence.md)). This suited a small game,
+with the constraint that live sessions and writes share one process.
+
+The lead agent built a working slice before delegating: create, join,
+persistence and an action affecting the other room
+([`cb41ac9`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/cb41ac9)).
+Shared control IDs, symbols and a screenshot tool followed. Agents could then
+build separate rooms and reliability checks against those interfaces. The
+[architecture](docs/ARCHITECTURE.md) and later [workstream
+plan](docs/production/PLAN.md) explain ownership. This still needed integration
+and review, but gave each agent a defined area to work in.
+
+## Checking whether cooperation was necessary
+
+One of the most useful findings was that different information didn't
+necessarily make players depend on each other. An audit found ways through
+all four original puzzles without communication. A solo Engineer could try
+breaker combinations using the load meter; holding the escape release while
+pumping steadily also worked.
+
+The agent tested those strategies before changing the rules. The generator
+rating moved to the Bridge, incorrect breaker combinations became costly,
+and excess pressure made the escape rams slip. The changes and measurements
+are recorded in
+[`591de31`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/591de31)
+and [`fbc93ca`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/fbc93ca).
+Increasing penalties also made a careful crew's voyage too punishing, so the
+background danger rates were reduced
+([`0102dba`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/0102dba)).
+
+The audit became a rule in CLAUDE.md: simulate play without communication
+when changing puzzles. Regression tests protected the changes. Later, a
+strategy that reacted to live gauges found another route through Flood.
+The [puzzle specification](docs/PUZZLES.md) records that limitation, and the
+agent instructions now require reactive strategies too.
+
+This matters to my definition of good. A test proving that a pair can finish
+only establishes one route through the game. Testing what happens when they
+don't talk gets closer to checking whether cooperation actually matters.
+The remaining shortcuts mean I can't claim that every puzzle forces it.
+
+## Making earlier decisions matter
+
+The first build treated the ship mostly as a setting for separate puzzles.
+Once a puzzle was complete, its machinery stopped being a concern. The next
+cycle added a continuous simulation: generator heat, water and hull damage
+keep developing as players move through the voyage
+([`4dc5c37`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/4dc5c37)).
+
+That gave cooperation consequences over time. A mistake with the generator
+could leave less capacity later; damaged pumps could make flooding harder
+to manage. [ADR 005](docs/adr/005-five-acts-ship-simulation.md) explains why
+the existing phase structure was kept, with continuous systems underneath,
+instead of rewriting everything as a general simulation. [SYSTEMS.md](docs/SYSTEMS.md)
+records the resulting behaviour. The cost was more balancing and more ways
+for an early mistake to affect the rest of an attempt.
+
+Initial balance estimates came from scripted crews. Only the final version
+was playtested by people: two separate pairs. They learned what not to do,
+came up with approaches to try differently and completed tasks faster with
+repetition. That supports the learning through failure I wanted. It doesn't
+settle every question about difficulty or prove that each system helped.
+The debrief gives players a way to look back at the consequences before
+trying again.
+
+While finalising the README, I looked at developer accounts from both games
+that inspired me. [Kane's talk](https://media.gdcvault.com/gdc2016/Presentations/Kane_Ben_Designing_Asymmetric_Gameplay.pdf)
+helped me articulate why failure needs clear rules. The [We Were Here
+interview](https://www.gamedeveloper.com/game-platforms/road-to-the-igf-total-mayhem-games-i-we-were-here-i-)
+also raised the difficulty of keeping both roles involved. These readings
+helped me assess the result; they weren't sources I'd used during the build.
+
+## When the visuals slowed the game down
+
+A later production pass added detailed machinery, reflections and effects.
+After these additions, browser checks started missing their update
+budget. The development log records initial explanations about machine load;
+profiling then found shader compilation freezing software-rendered browsers
+for roughly four to six seconds.
+
+The fix introduced a lighter rendering path and made the loading screen wait
+for staged room compilation
+([`5835042`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/5835042)).
+[ADR 007](docs/adr/007-render-look-and-quality-tiers.md) records the measurements
+and trade-offs. Software-rendered sessions get simpler materials, while
+hardware capable of the full effects keeps them. Later, keeping one canvas
+through the voyage removed another freeze during the ending.
+
+The correction also reached [CLAUDE.md](CLAUDE.md): graphics changes need
+profiling in two browser contexts, and new materials must respect quality
+settings ([`57b0712`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-mattxreynolds/commit/57b0712)).
+Appearance was one reason I'd restarted, so improving it mattered. This
+regression showed how easily that work could interfere with players seeing
+and responding to each other's actions. Keeping the responsiveness checks
+made that cost visible.
