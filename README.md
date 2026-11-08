@@ -54,11 +54,13 @@ together.
 
 ## What the tests can tell us
 
-The tests in `spec/` check that players have distinct roles, receive only
-their own private information and see each other's actions update without
-reloading. They also check that reconnecting restores your seat and that
-voyages survive a server restart. Finished voyages stay in the
-[Ship's Log](/history/).
+Each player has a separate browser identity and occupies one of two roles
+in a shared voyage. Socket.IO sends role-specific updates, so actions appear
+in the other browser within about a second without reloading. SQLite on
+Fly's persistent volume saves voyage state and outcomes across sessions,
+restarts and redeploys. Finished voyages stay in the [Ship's Log](/history/).
+Tests in `spec/` check identity, private information, updates, reconnects and
+persistence.
 
 Judging the experience takes people playing it. Do both roles feel needed? Does the pressure keep them
 engaged? Does losing give them an idea for the next attempt? The playtesting observations help answer those
