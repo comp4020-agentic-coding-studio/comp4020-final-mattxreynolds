@@ -24,6 +24,7 @@ import { kicks } from "./Effects.tsx";
 import { badTube, EmergencyCages, Fixtures, FITTING_Y, FITTINGS, fixtureState } from "./Fixtures.tsx";
 import { AT } from "./layout.ts";
 import { ev, G, M, stageOf, STAGE } from "./kit.tsx";
+import { TUBE_PEAK } from "../look/glow.ts";
 
 const WARM = new Color(PALETTE.workLight);
 const COOL = new Color("#9fb4c4");
@@ -134,7 +135,7 @@ export function Lighting() {
     const d = D();
     // (the tube is the source: only a little of the room's red tint)
     tubeCol.copy(online ? WARM : COOL).lerp(RED, Math.min(0.3, (danger / 100) * 0.25));
-    d.tube.color.copy(TUBE_OFF).lerp(tubeCol, Math.min(1, F * 1.6)).multiplyScalar(0.25 + F * F * F * 2.7);
+    d.tube.color.copy(TUBE_OFF).lerp(tubeCol, Math.min(1, F * 1.6)).multiplyScalar(0.25 + F * F * F * (TUBE_PEAK - 0.25));
     // the tired tube stutters on its own as the ship gets worse
     let bad = 1;
     if (!reduced && danger > 35) {

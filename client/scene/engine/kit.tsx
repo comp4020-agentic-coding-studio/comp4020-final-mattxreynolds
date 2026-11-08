@@ -20,6 +20,7 @@ import { useStore } from "../../store.ts";
 import { useCanvasTexture } from "../canvasTexture.ts";
 import { PALETTE } from "../palette.ts";
 import { dressStd } from "../look/surfaces.ts";
+import { labelGlow } from "../look/glow.ts";
 
 type V3 = [number, number, number];
 
@@ -300,7 +301,7 @@ export function Plate({ text, w, h, position, rotation, bg, fg, border, glow = 0
   return (
     <mesh position={position} rotation={rotation}>
       <planeGeometry args={[w, h]} />
-      <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={glow} roughness={0.85} />
+      <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={labelGlow(glow)} roughness={0.85} />
     </mesh>
   );
 }
@@ -336,7 +337,7 @@ export function CanvasPlane({
         map={tex}
         emissiveMap={tex}
         emissive="#ffffff"
-        emissiveIntensity={glow}
+        emissiveIntensity={labelGlow(glow)}
         roughness={0.85}
         transparent={transparent}
       />
