@@ -18,7 +18,8 @@ Discord, or sitting next to each other. There is no in-game chat, by design.
    in **their own browser**. On a single computer, use a second Chrome
    profile or an incognito window: two tabs of the same profile are the same
    player.
-3. Both press **Ready**. Click into the 3D view to take the controls.
+3. Both press **Ready**. Click into the 3D view to take the controls (on a
+   phone or tablet, tap **Tap to take the controls**).
 4. Describe what you see. Your partner's room is different from yours, and
    your controls change things in their room.
 
@@ -40,6 +41,22 @@ can also replay the same ship on purpose.
 | Esc | Free the mouse and show the briefing card |
 | R (briefing card) | Return to your starting point |
 | M | Mute |
+
+**On a phone or tablet** the game switches to touch controls by itself.
+Landscape works best. You still need a voice call: a phone in landscape with
+earbuds on a call works, or use a second device for the call.
+
+| Touch | Action |
+|---|---|
+| Left thumb, drag | Walk. The stick appears where your thumb lands |
+| Right thumb, drag | Look around |
+| Tap a control in the view | Use it. Keep your finger still on a hold-control to hold it |
+| **USE** button | Use the control under the reticle ◎. Keep it pressed for hold-controls |
+| **❚❚** button | Pause: the briefing card, settings, full screen, return to start |
+| Sound button | Mute |
+
+The game follows whatever you last touched: on a touchscreen laptop, using
+the mouse switches back to keyboard-and-mouse controls.
 
 ### What happens aboard
 
@@ -163,9 +180,8 @@ as genre references. This game borrows no assets, puzzles, text or
 presentation from either. Add only sources you have actually read.]
 
 **Deliberate omissions.** No built-in voice or text chat (ADR 004). No
-accounts. No avatar of the other player. No mobile or touch play. No more
-than two players. Each omission keeps the focus on the conversation between
-two people.
+accounts. No avatar of the other player. No more than two players. Each
+omission keeps the focus on the conversation between two people.
 
 **Testable vs qualitative claims.** These claims are checked mechanically in
 `spec/`: two seats only, with distinct roles; neither role's network traffic

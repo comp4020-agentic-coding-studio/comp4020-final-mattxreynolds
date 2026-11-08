@@ -42,8 +42,11 @@ client/
   main.tsx         React root.
   net.ts           Socket client, identity token, reconnect.
   store.ts         Zustand store holding the latest RoleView + feedback.
-  ui/              HTML overlay: Home, Lobby, HUD, Endings, panels.
+  ui/              HTML overlay: Home, Lobby, HUD, Endings, panels,
+                   TouchControls (stick, look, USE; ADR 008).
   scene/           React Three Fiber: Engine Room, Bridge, interactables.
+    input.ts       One press/hold path for E, click, USE and tap; touch input state.
+    touch.ts       Touch maths: stick, taps, fingertip ring, prompt wording, portrait lens.
     look/          Shared render look: relief maps, env map, bloom + grade, quality tiers (ADR 007).
     fx/            Pooled particles, per-act atmosphere, Bridge distress.
     loading.ts     First-mount gate: take-controls waits for staged compiles.

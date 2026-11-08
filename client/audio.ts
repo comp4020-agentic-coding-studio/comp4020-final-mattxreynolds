@@ -571,18 +571,26 @@ export function cinematicCue(cue: "horn" | "impact" | "thunder" | "splash" | "gr
 export function initAudio(): void {
   if (started) return;
   started = true;
+  // A touch pointerdown is not a user activation (only its pointerup is), so
+  // phones would stay silent if the first touch removed these listeners.
+  // Keep trying on every gesture until the context is actually running.
+  const gestures = ["pointerdown", "pointerup", "touchend", "keydown"] as const;
+  let ticking = false;
   const unlock = () => {
     const c = ensure();
-    if (c?.state === "suspended") void c.resume();
-    if (c) {
-      removeEventListener("pointerdown", unlock);
-      removeEventListener("keydown", unlock);
+    if (!c) return;
+    if (!ticking) {
+      ticking = true;
       setInterval(loop, 450);
       setInterval(pulseTick, 25);
     }
+    const done = () => {
+      if (c.state === "running") for (const g of gestures) removeEventListener(g, unlock);
+    };
+    if (c.state === "suspended") void c.resume().then(done, () => {});
+    else done();
   };
-  addEventListener("pointerdown", unlock);
-  addEventListener("keydown", unlock);
+  for (const g of gestures) addEventListener(g, unlock);
   useStore.subscribe((s, prev) => {
     if (s.muted !== prev.muted || s.volume !== prev.volume) applyVolume();
     if (s.view !== prev.view) onViewChange(s.view, prev.view);

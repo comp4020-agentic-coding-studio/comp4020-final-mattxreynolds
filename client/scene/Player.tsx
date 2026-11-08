@@ -1,5 +1,7 @@
 // First-person controller: pointer-lock look, WASD with collision, centre
-// raycast against interactables, E / click to use (hold supported).
+// raycast against interactables, E / click to use (hold supported). Touch
+// play feeds the same controller through scene/input.ts (stick, look drag,
+// USE button, tap on a control): see ui/TouchControls.tsx.
 
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
@@ -8,7 +10,8 @@ import { ACT_OF } from "../../shared/protocol.ts";
 import { useStore } from "../store.ts";
 import { motion } from "./fx/pool.ts";
 import { moveWithCollision, type RoomLayout } from "./colliders.ts";
-import { findInteractable, interactables } from "./interact.tsx";
+import { aimChanged, input, press, release } from "./input.ts";
+import { findInteractable } from "./interact.tsx";
 
 const EYE = 1.6;
 const SPEED = 2.4;
@@ -18,9 +21,8 @@ const REACH = 2.4;
 const MAX_ROLL = 0.052;
 const MAX_PITCH = 0.018;
 const SENSITIVITY = 0.0022;
-/** A second press on the same control inside this window is the same intent
- * (E and a click together, a bouncing key), not a new one. */
-const PRESS_DEBOUNCE_MS = 120;
+const MAX_PITCH_LOOK = 1.4;
+const clampPitch = (x: number) => Math.max(-MAX_PITCH_LOOK, Math.min(MAX_PITCH_LOOK, x));
 
 /** Visible only if it and every ancestor is (rooms hide stations while their
  * shaders compile; three's raycaster ignores visibility). */
@@ -34,8 +36,6 @@ export function Player({ layout }: { layout: RoomLayout }) {
   const keys = useRef(new Set<string>());
   const pos = useRef(new Vector3(...layout.spawn));
   const euler = useRef(new Euler(0, layout.spawnYaw, 0, "YXZ"));
-  const aimed = useRef<string | null>(null);
-  const holding = useRef<string | null>(null);
   const ray = useRef(new Raycaster());
   const respawn = useStore((s) => s.respawn);
 
@@ -57,41 +57,31 @@ export function Player({ layout }: { layout: RoomLayout }) {
 
   useEffect(() => {
     const canvas = gl.domElement;
+    // touch play never takes the lock, so losing one only ends "on the
+    // controls" for a mouse player
     const onLockChange = () => {
       const locked = document.pointerLockElement === canvas;
-      useStore.setState({ locked });
-      if (!locked) {
-        keys.current.clear();
-        release();
-      }
+      if (locked) return useStore.setState({ locked: true });
+      keys.current.clear();
+      release();
+      if (!useStore.getState().touch) useStore.setState({ locked: false });
     };
     const onMouseMove = (e: MouseEvent) => {
       if (document.pointerLockElement !== canvas) return;
       euler.current.y -= e.movementX * SENSITIVITY;
-      euler.current.x = Math.max(-1.4, Math.min(1.4, euler.current.x - e.movementY * SENSITIVITY));
+      euler.current.x = clampPitch(euler.current.x - e.movementY * SENSITIVITY);
     };
-    let lastPress = { id: "", at: 0 };
-    const press = () => {
-      const id = aimed.current;
-      if (!id) return;
-      const now = performance.now();
-      if (lastPress.id === id && now - lastPress.at < PRESS_DEBOUNCE_MS) return;
-      lastPress = { id, at: now };
-      const entry = interactables.get(id);
-      if (!entry || entry.def.disabled) return;
-      if (entry.def.onHold) {
-        holding.current = id;
-        entry.def.onHold(true);
-      }
-      entry.def.onUse?.();
-    };
-    const release = () => {
-      const id = holding.current;
-      holding.current = null;
-      if (id) interactables.get(id)?.def.onHold?.(false);
-    };
+    // keys drive the player while the mouse is locked, and in touch play
+    // (a tablet with a keyboard), where Esc returns to the briefing card
+    const keysLive = () => document.pointerLockElement === canvas || (useStore.getState().touch && useStore.getState().locked);
     const onKeyDown = (e: KeyboardEvent) => {
-      if (document.pointerLockElement !== canvas) return;
+      if (!keysLive()) return;
+      if (e.code === "Escape" && !document.pointerLockElement) {
+        keys.current.clear();
+        release();
+        useStore.setState({ locked: false });
+        return;
+      }
       if (e.code === "KeyE" && !e.repeat) press();
       keys.current.add(e.code);
     };
@@ -103,7 +93,7 @@ export function Player({ layout }: { layout: RoomLayout }) {
       if (document.pointerLockElement === canvas && e.button === 0) press();
     };
     const onMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) release();
+      if (e.button === 0 && document.pointerLockElement === canvas) release();
     };
     document.addEventListener("pointerlockchange", onLockChange);
     document.addEventListener("mousemove", onMouseMove);
@@ -123,6 +113,26 @@ export function Player({ layout }: { layout: RoomLayout }) {
     };
   }, [gl]);
 
+  // touch: what a tap at a screen point would use (ui/TouchControls.tsx)
+  const pickRay = useRef(new Raycaster());
+  const pickAt = useRef(new Vector2());
+  useEffect(() => {
+    input.pick = (x, y) => {
+      pickAt.current.set(x, y);
+      pickRay.current.setFromCamera(pickAt.current, camera);
+      pickRay.current.far = REACH;
+      const hit = pickRay.current.intersectObjects(scene.children, true).find((h) => shown(h.object));
+      const entry = hit ? findInteractable(hit.object) : null;
+      return entry && !entry.def.disabled ? entry.def.id : null;
+    };
+    window.__btwPick = input.pick;
+    return () => {
+      input.pick = null;
+      input.aimed = null;
+      delete window.__btwPick;
+    };
+  }, [camera, scene]);
+
   const forward = useRef(new Vector3());
   const right = useRef(new Vector3());
   const centre = useRef(new Vector2(0, 0));
@@ -139,9 +149,24 @@ export function Player({ layout }: { layout: RoomLayout }) {
     if (k.has("KeyS") || k.has("ArrowDown")) { mx -= forward.current.x; mz -= forward.current.z; }
     if (k.has("KeyD") || k.has("ArrowRight")) { mx += right.current.x; mz += right.current.z; }
     if (k.has("KeyA") || k.has("ArrowLeft")) { mx -= right.current.x; mz -= right.current.z; }
-    const len = Math.hypot(mx, mz);
+    let len = Math.hypot(mx, mz);
+    let scale = k.has("ShiftLeft") || k.has("ShiftRight") ? FAST : 1;
+    const { stick, look } = input;
+    if (len === 0 && (stick.x !== 0 || stick.y !== 0)) {
+      // touch stick: analogue, so a half push walks at half speed
+      mx = forward.current.x * stick.y + right.current.x * stick.x;
+      mz = forward.current.z * stick.y + right.current.z * stick.x;
+      len = Math.hypot(mx, mz);
+      scale = Math.min(1, Math.hypot(stick.x, stick.y));
+    }
+    if (look.yaw !== 0 || look.pitch !== 0) {
+      euler.current.y += look.yaw;
+      euler.current.x = clampPitch(euler.current.x + look.pitch);
+      look.yaw = 0;
+      look.pitch = 0;
+    }
     if (len > 0) {
-      const sp = (SPEED * (k.has("ShiftLeft") || k.has("ShiftRight") ? FAST : 1) * dt) / len;
+      const sp = (SPEED * scale * dt) / len;
       const [nx, nz] = moveWithCollision(layout, pos.current.x, pos.current.z, mx * sp, mz * sp);
       pos.current.x = nx;
       pos.current.z = nz;
@@ -174,14 +199,10 @@ export function Player({ layout }: { layout: RoomLayout }) {
     const hit = ray.current.intersectObjects(scene.children, true).find((h) => shown(h.object));
     const entry = hit ? findInteractable(hit.object) : null;
     const id = entry && !entry.def.disabled ? entry.def.id : null;
-    aimed.current = id;
+    input.aimed = id;
     const prompt = id ? entry!.def.prompt : null;
     if (useStore.getState().prompt !== prompt) useStore.setState({ prompt });
-    if (holding.current && holding.current !== id) {
-      const held = holding.current;
-      holding.current = null;
-      interactables.get(held)?.def.onHold?.(false);
-    }
+    aimChanged(id);
   });
 
   return null;

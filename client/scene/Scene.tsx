@@ -11,6 +11,7 @@ import { EngineRoom, ENGINE_LAYOUT } from "./EngineRoom.tsx";
 import { Player } from "./Player.tsx";
 import { Look } from "./look/PostFX.tsx";
 import { loadingOpen } from "./loading.ts";
+import { fitFov } from "./touch.ts";
 
 /** Marks the scene ready once frames are flowing smoothly again after the
  * first-mount shader compile (which can stall the main thread for a second
@@ -99,11 +100,13 @@ export const Scene = memo(function Scene() {
 /** Sets the shared camera's lens for what is on screen (cinematic vs room). */
 function Lens({ fov, near, far }: { fov: number; near: number; far: number }) {
   const camera = useThree((st) => st.camera) as PerspectiveCamera;
+  // a portrait phone widens the vertical angle so the view isn't a keyhole
+  const aspect = useThree((st) => st.size.width / Math.max(1, st.size.height));
   useLayoutEffect(() => {
-    camera.fov = fov;
+    camera.fov = fitFov(fov, aspect);
     camera.near = near;
     camera.far = far;
     camera.updateProjectionMatrix();
-  }, [camera, fov, near, far]);
+  }, [camera, fov, near, far, aspect]);
   return null;
 }
