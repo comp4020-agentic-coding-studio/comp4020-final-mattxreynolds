@@ -6,7 +6,7 @@
 // Restricted to the lobby and prologue (the only rooms with live controls).
 
 import { afterAll, afterEach, describe, expect, inject, it } from "vitest";
-import { closeBrowser, createViaUi, joinViaLink, profile, slowLink, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
+import { closeBrowser, createViaUi, joinViaLink, profile, roomLoaded, slowLink, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
 import { skipIntro } from "./helpers/browser.ts";
 
 const baseUrl = inject("baseUrl");
@@ -39,8 +39,7 @@ async function toPrologue(a: Profile, b: Profile): Promise<string> {
   await Promise.all([skipIntro(a.page), skipIntro(b.page)]);
   // as a player would: act once the room has loaded (take-controls appears
   // after the first-mount shader compile; see ReadyProbe in client/scene/Scene.tsx)
-  await a.page.getByTestId("take-controls").waitFor({ timeout: 15000 });
-  await b.page.getByTestId("take-controls").waitFor({ timeout: 15000 });
+  await Promise.all([roomLoaded(a.page), roomLoaded(b.page)]);
   return code;
 }
 

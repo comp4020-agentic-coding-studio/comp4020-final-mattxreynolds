@@ -2,14 +2,19 @@
 // by link, distinct roles, ready, a cross-room effect without reload, and a
 // refresh that restores identity, role and state.
 
-import { afterAll, describe, expect, inject, it } from "vitest";
-import { closeBrowser, createViaUi, joinViaLink, profile, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
+import { afterAll, afterEach, describe, expect, inject, it } from "vitest";
+import { closeBrowser, createViaUi, joinViaLink, profile, roomLoaded, use, viewOf, waitView, type Profile } from "./helpers/browser.ts";
 import { skipIntro } from "./helpers/browser.ts";
 
 const baseUrl = inject("baseUrl");
-const profiles: Profile[] = [];
+let profiles: Profile[] = [];
+// close each test's profiles before the next starts: two software-rendered
+// rooms left open starve the next test of CPU on a 4-core runner
+afterEach(async () => {
+  for (const p of profiles) await p.context.close().catch(() => {});
+  profiles = [];
+});
 afterAll(async () => {
-  for (const p of profiles) await p.context.close();
   await closeBrowser();
 });
 
@@ -32,8 +37,7 @@ describe("two browser profiles", () => {
     await b.page.locator('[data-role="ENGINEER"] .ready.yes').waitFor();
     await b.page.getByTestId("ready").click();
     await Promise.all([skipIntro(a.page), skipIntro(b.page)]);
-    await a.page.getByTestId("take-controls").waitFor();
-    await b.page.getByTestId("take-controls").waitFor();
+    await Promise.all([roomLoaded(a.page), roomLoaded(b.page)]);
 
     // Engineer pulls the emergency bus lever; the Bridge sees power, no reload
     await use(a.page, "prologue-lever");
@@ -46,7 +50,7 @@ describe("two browser profiles", () => {
     // refresh the Navigator: same role, same phase, no join screen
     await b.page.reload();
     await waitView(b.page, "v.phase === 'POWER' && v.you === 'NAVIGATOR'");
-    await b.page.getByTestId("take-controls").waitFor();
+    await roomLoaded(b.page);
 
     expect(a.errors, a.errors.join("\n")).toEqual([]);
     expect(b.errors, b.errors.join("\n")).toEqual([]);

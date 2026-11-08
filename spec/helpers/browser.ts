@@ -55,6 +55,18 @@ export async function slowLink(p: Profile, rttMs: number): Promise<void> {
   });
 }
 
+/**
+ * Waits for the room to finish loading, as a player would: "take the controls"
+ * appears once every staged mount has compiled (ReadyProbe, client/scene/loading.ts).
+ * The first compile is CPU-bound under SwiftShader and took ~20 s for the
+ * second profile on a 4-core GitHub runner, so this waits generously. Timing
+ * assertions start after it, so the wait never hides a real-time regression.
+ */
+export const ROOM_LOAD_MS = 60_000;
+export async function roomLoaded(page: Page): Promise<void> {
+  await page.getByTestId("take-controls").waitFor({ timeout: ROOM_LOAD_MS });
+}
+
 /** Reads the current view through the page's test hook. */
 export const viewOf = (page: Page): Promise<any> => page.evaluate(() => window.__btw?.view());
 

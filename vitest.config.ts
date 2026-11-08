@@ -30,7 +30,8 @@ export default defineConfig({
           include: ["spec/**/browser-*.test.ts"],
           globalSetup: ["./spec/global-setup.ts"],
           fileParallelism: false,
-          testTimeout: 60000,
+          // two room loads (up to ROOM_LOAD_MS each on a 4-core runner) plus play
+          testTimeout: 180000,
           hookTimeout: 30000,
         },
       },
