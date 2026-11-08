@@ -220,18 +220,23 @@ export function Game({ ended = false }: { ended?: boolean }) {
                     <li><b>{partner?.callsign ?? "Your partner"}</b> in the {partnerRoom} {guide.partner}</li>
                   </ul>
                 )}
-                <Controls />
-                {sceneReady ? (
-                  <button ref={takeRef} className="primary big" data-testid="take-controls" onClick={lockCanvas}>
-                    {touch ? "Tap to take the controls" : "Click to take the controls"}
-                  </button>
-                ) : (
-                  <button className="primary big" disabled aria-busy="true">
-                    Lighting the lamps…
-                  </button>
-                )}
+                {/* touch: the button comes before the controls list, so it is on
+                    a phone's first screen; the list folds away once seen */}
+                {!touch && <Controls />}
+                <div className="take">
+                  {sceneReady ? (
+                    <button ref={takeRef} className="primary big" data-testid="take-controls" onClick={lockCanvas}>
+                      {touch ? "Tap to take the controls" : "Click to take the controls"}
+                    </button>
+                  ) : (
+                    <button className="primary big" disabled aria-busy="true">
+                      Lighting the lamps…
+                    </button>
+                  )}
+                </div>
                 {touch ? (
                   <>
+                    <TouchHelp />
                     <p className="hint">
                       The <b>❚❚ Pause</b> button brings this card back.
                       <span className="portrait-hint"> Turn your device sideways for a wider view.</span>
@@ -320,5 +325,25 @@ function FullscreenToggle() {
     <button className="link" data-testid="fullscreen-toggle" onClick={flip}>
       Full screen: {full ? "On" : "Off"}
     </button>
+  );
+}
+
+/** The touch controls list on the briefing card: open the first time this
+ * card is shown, folded after the player has taken the controls once (it
+ * pushes everything below it off a phone's screen). */
+let touchHelpSeen = false;
+function TouchHelp() {
+  const [open] = useState(() => !touchHelpSeen);
+  useEffect(
+    () => () => {
+      touchHelpSeen = true;
+    },
+    [],
+  );
+  return (
+    <details className="touch-help" open={open} data-testid="touch-help">
+      <summary>Touch controls</summary>
+      <Controls />
+    </details>
   );
 }

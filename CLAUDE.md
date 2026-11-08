@@ -136,6 +136,14 @@ own judgement are marked `[STUDENT REVIEW]`.
   (`touchPrompt`), and a unit test scans every station prompt for that.
   Shared browser helpers click with the mouse, which switches a touch page
   to mouse play. Touch specs must tap.
+- Full-screen layouts on phones use `100dvh` plus `env(safe-area-inset-*)`,
+  never `inset: 0` alone: iOS Safari's toolbar covers the bottom of a 100vh
+  box. Touch controls position from the `--pad-*` vars on `.game.touch`.
+- In browser specs, never scan the screen with raycasts (`__btwPick` over
+  every pixel): each one walks the whole room, and a 49,000-point scan
+  blocked a SwiftShader page for 17 s, so the ship's roll moved the view and
+  queued input was lost. Start from a point already on the control (the
+  reticle) and walk outward (`findOnScreen` in browser-touch.test.ts).
 - Ad-hoc Playwright scripts must live inside the repo (e.g. a temporary
   `scripts/.name.ts`), or `playwright` won't resolve. A mode patched onto a
   running voyage doesn't re-run its start-of-voyage effects (BLACKOUT's

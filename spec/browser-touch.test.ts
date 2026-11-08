@@ -51,6 +51,39 @@ async function tapSkip(page: Page): Promise<void> {
   await page.getByTestId("cinematic").waitFor({ state: "detached", timeout: 5000 });
 }
 
+/** The middle of `id` on screen, measured from a point already on it
+ * (`from`, e.g. the reticle, or within 40 px of it): walks outward along
+ * each axis to its edges.
+ * A few dozen raycasts, not a full-screen scan: a software-rendered page
+ * blocks for seconds on thousands, and the ship's roll moves the view
+ * meanwhile. The middle, not the edge, so that roll can't carry it off. */
+async function findOnScreen(page: Page, id: string, from: Pt): Promise<Pt | null> {
+  return page.evaluate(
+    ([target, x0, y0]) => {
+      let fx = x0;
+      let fy = y0;
+      const on = (x: number, y: number) => window.__btwPick?.((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1) === target;
+      // the ship's roll may have carried `from` just off it: look nearby
+      if (!on(fx, fy)) {
+        let near: [number, number] | null = null;
+        for (let r = 8; r <= 40 && !near; r += 8)
+          for (let dx = -r; dx <= r && !near; dx += 8)
+            for (const dy of [-r, r]) if (on(fx + dx, fy + dy)) (near = [fx + dx, fy + dy]);
+        for (let r = 8; r <= 40 && !near; r += 8) for (let dy = -r; dy <= r && !near; dy += 8) for (const dx of [-r, r]) if (on(fx + dx, fy + dy)) (near = [fx + dx, fy + dy]);
+        if (!near) return null;
+        [fx, fy] = near;
+      }
+      const reach = (dx: number, dy: number) => {
+        let d = 0;
+        while (d < 200 && on(fx + dx * (d + 3), fy + dy * (d + 3))) d += 3;
+        return d;
+      };
+      return { x: fx + (reach(1, 0) - reach(-1, 0)) / 2, y: fy + (reach(0, 1) - reach(0, -1)) / 2 };
+    },
+    [id, from.x, from.y] as const,
+  );
+}
+
 const promptText = (page: Page) => page.locator(".prompt").textContent({ timeout: 200 }).catch(() => null);
 
 /** Walks forward with the move stick (left thumb) in short pushes, and
@@ -117,8 +150,12 @@ it("a phone and a tablet play the opening with touch controls", async () => {
 
   // Navigator: walk to the alarm console and tap the button itself in the view
   await walkAndAim(N, nav.cdp, /Alarm acknowledge/);
+  // tap the middle of the button where it is on screen right now (the
+  // ship's roll moves the view under a still camera)
   const { width, height } = N.viewportSize()!;
-  await N.touchscreen.tap(width / 2, height / 2);
+  const at = await findOnScreen(N, "prologue-ack", { x: width / 2, y: height / 2 });
+  expect(at, "alarm button not on screen").not.toBeNull();
+  await N.touchscreen.tap(at!.x, at!.y);
   await Promise.all([waitView(E, "v.phase === 'POWER'", 1500), waitView(N, "v.phase === 'POWER'", 1500)]);
 
   // pause brings the briefing card back; tapping it resumes
@@ -161,17 +198,48 @@ it.skipIf(!testHooks())("a touch player holds the door release with a finger, or
   await roomLoaded(N);
   await N.getByTestId("take-controls").tap();
   await N.getByTestId("touch-use").waitFor();
+  // the escape station mounts and shows once its stage has compiled
 
-  // face the escape panel on the Bridge's back wall, turned so the reticle
-  // is on the door release
-  const aimAt = async (yaw: number) => {
-    await N.evaluate((y) => window.__btwPose?.({ x: 2.4, z: 2.75, yaw: Math.PI + y, pitch: -0.55 }), yaw);
-    await N.waitForTimeout(500);
-    return promptText(N);
-  };
-  let text: string | null = null;
-  for (const yaw of [0.3, 0.25, 0.35, 0.2, 0.4]) if ((text = await aimAt(yaw)) && /Door release/.test(text)) break;
-  expect(text).toMatch(/Door release — HOLD USE/);
+  // stand close to the escape panel on the Bridge's back wall and turn until
+  // the reticle is on the door release (the station shows once its stage has
+  // compiled, so keep trying), then re-aim at the button's middle, not its
+  // rim, where the ship's roll would carry the reticle off
+  const { width: W, height: H } = N.viewportSize()!;
+  const f = H / 2 / Math.tan((70 * Math.PI) / 360); // px per radian at the centre (70° fov)
+  const pose = (y: number, p: number) => N.evaluate(([yy, pp]) => window.__btwPose?.({ x: 2.4, z: 3.15, yaw: Math.PI + yy, pitch: pp }), [y, p]);
+  let yaw = 0;
+  let pitch = -0.6;
+  // the station shows once its stage has compiled: wait until a coarse scan
+  // (every 16 px, ~1,300 raycasts) finds the release, then turn so the
+  // reticle is on it
+  await pose(yaw, pitch);
+  let seen: Pt | null = null;
+  await expect
+    .poll(
+      async () =>
+        (seen = await N.evaluate(() => {
+          for (let y = 16; y < innerHeight; y += 16) for (let x = 16; x < innerWidth; x += 16) if (window.__btwPick?.((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1) === "door-release") return { x, y };
+          return null;
+        })),
+      { timeout: 30000, interval: 500 },
+    )
+    .not.toBeNull();
+  yaw -= Math.atan((seen!.x - W / 2) / f);
+  pitch -= Math.atan((seen!.y - H / 2) / f);
+  await pose(yaw, pitch);
+  await N.waitForTimeout(300);
+  for (let step = 0; step < 3; step++) {
+    const mid = await findOnScreen(N, "door-release", { x: W / 2, y: H / 2 });
+    if (!mid) break;
+    const dx = mid.x - W / 2;
+    const dy = mid.y - H / 2;
+    if (Math.hypot(dx, dy) < 3) break;
+    yaw -= Math.atan(dx / f);
+    pitch -= Math.atan(dy / f);
+    await pose(yaw, pitch);
+    await N.waitForTimeout(300);
+  }
+  await expect.poll(() => promptText(N)).toMatch(/Door release — HOLD USE/);
   await expect.poll(() => N.getByTestId("touch-use").textContent()).toMatch(/^HOLD/);
 
   const center = async (testId: string) => {
@@ -185,18 +253,14 @@ it.skipIf(!testHooks())("a touch player holds the door release with a finger, or
   await touchEvent(nav.cdp, "touchEnd");
   await waitView(N, "v.escape.held === false", 1500);
 
-  // a finger held on the button itself, wherever the reticle is: look away
-  // to the right so the button sits on the left (in the stick's half)
-  await N.evaluate(() => window.__btwPose?.({ x: 2.4, z: 2.75, yaw: Math.PI, pitch: -0.55 }));
+  // a finger held on the button itself, wherever the reticle is: turn right
+  // so the button sits on the left (in the stick's half)
+  const turn = 0.35;
+  await pose(yaw - turn, pitch);
   await N.waitForTimeout(500);
-  const button = await N.evaluate(() => {
-    // the release's screen position, found the way a finger finds it
-    for (let x = 0.05; x < 0.95; x += 0.02) for (let y = 0.2; y < 0.8; y += 0.03) {
-      const ndc = [x * 2 - 1, -(y * 2 - 1)];
-      if (window.__btwPick?.(ndc[0], ndc[1]) === "door-release") return { x: x * innerWidth, y: y * innerHeight };
-    }
-    return null;
-  });
+  // turning right by `turn` moves the centred button left by f·tan(turn)
+  const guess = { x: W / 2 - f * Math.tan(turn), y: H / 2 };
+  const button = await findOnScreen(N, "door-release", guess);
   expect(button, "door release not on screen").not.toBeNull();
   await touchEvent(nav.cdp, "touchStart", button!);
   await waitView(N, "v.escape.held === true", 1500);
@@ -204,4 +268,63 @@ it.skipIf(!testHooks())("a touch player holds the door release with a finger, or
   await waitView(N, "v.escape.held === false", 1500);
 
   expect(nav.errors, nav.errors.join("\n")).toEqual([]);
+});
+
+// The briefing card and the thumb controls fit the part of the screen an
+// iPhone's Safari leaves visible (its toolbars, home indicator and notch).
+// Viewports are Safari's visible area, not the device's; the safe-area insets
+// are forced, since Chromium reports 0 for env(safe-area-inset-*).
+it.skipIf(!testHooks())("the card and the thumb controls fit a phone's visible screen", async () => {
+  const shapes = [
+    { name: "portrait", width: 393, height: 659, inset: { r: 0, b: 34, l: 0 } },
+    { name: "landscape", width: 750, height: 340, inset: { r: 47, b: 21, l: 47 } },
+  ];
+  for (const shape of shapes) {
+    const a = await touchProfile(shape.width, shape.height);
+    const b = await touchProfile(shape.width, shape.height);
+    profiles.push(a, b);
+    const code = await (async () => {
+      await a.page.goto("/");
+      await a.page.getByLabel("Your callsign").fill("Ada");
+      await a.page.getByRole("button", { name: "Create voyage" }).tap();
+      return (await a.page.getByTestId("voyage-code").textContent({ timeout: 8000 }))!.trim();
+    })();
+    await b.page.goto(`/v/${code}`);
+    await b.page.getByLabel("Your callsign").fill("Lin");
+    await b.page.getByRole("button", { name: "Board the ship" }).tap();
+    await b.page.getByTestId("voyage-code").waitFor({ timeout: 8000 });
+    await a.page.getByTestId("ready").tap();
+    await b.page.locator('[data-role="ENGINEER"] .ready.yes').waitFor();
+    await b.page.getByTestId("ready").tap();
+    const P = b.page;
+    await waitView(P, "v.phase === 'PROLOGUE'");
+    await tapSkip(P);
+    await roomLoaded(P);
+    const { r, b: bottom, l } = shape.inset;
+    await P.addStyleTag({ content: `.game.touch{--pad-r:${r}px!important;--pad-b:${bottom}px!important;--pad-l:${l}px!important}` });
+
+    // the take-controls button is on the first screen, no scrolling
+    const take = (await P.getByTestId("take-controls").boundingBox())!;
+    expect(take.y + take.height, `${shape.name}: take-controls below the fold`).toBeLessThanOrEqual(shape.height);
+    expect(await P.getByTestId("touch-help").evaluate((d) => (d as HTMLDetailsElement).open)).toBe(true);
+
+    // the thumb controls clear the home indicator and the notch
+    await P.getByTestId("take-controls").tap();
+    for (const id of ["touch-use", "touch-pause", "touch-mute"]) {
+      const box = (await P.getByTestId(id).boundingBox())!;
+      expect(shape.height - (box.y + box.height), `${shape.name}: ${id} under the home indicator`).toBeGreaterThanOrEqual(bottom);
+      expect(shape.width - (box.x + box.width), `${shape.name}: ${id} under the notch`).toBeGreaterThanOrEqual(r);
+    }
+    const stick = (await P.getByTestId("touch-stick").boundingBox())!;
+    expect(stick.x, `${shape.name}: stick under the notch`).toBeGreaterThanOrEqual(l);
+    expect(shape.height - (stick.y + stick.height)).toBeGreaterThanOrEqual(bottom);
+
+    // back on the card, the controls list is folded so the button stays up top
+    await P.getByTestId("touch-pause").tap();
+    await P.getByTestId("take-controls").waitFor();
+    expect(await P.getByTestId("touch-help").evaluate((d) => (d as HTMLDetailsElement).open)).toBe(false);
+
+    expect(b.errors, b.errors.join("\n")).toEqual([]);
+    for (const p of [a, b]) await p.context.close();
+  }
 });
