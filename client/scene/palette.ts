@@ -1,0 +1,33 @@
+// Shared colours for both rooms (docs/VISUAL_DIRECTION.md). Use these rather
+// than inventing new hexes so the two rooms read as one ship.
+
+export const PALETTE = {
+  bulkhead: "#5f7a73",
+  bulkheadDark: "#3d4f4b",
+  bulkheadLow: "#34403d",
+  deck: "#3b4245",
+  deckPlate: "#474f52",
+  ceiling: "#2a3134",
+  pipe: "#4a4f52",
+  pipeDark: "#2e3235",
+  valveRed: "#b8322a",
+  brass: "#b08d4a",
+  brassDark: "#7d6230",
+  enamel: "#1c1f21",
+  dialFace: "#efe6cf",
+  dialInk: "#1b1b1b",
+  hazardYellow: "#e0b31f",
+  hazardBlack: "#1a1a1a",
+  plateBg: "#1d2328",
+  plateText: "#efe6cf",
+  lampOff: "#3a3a36",
+  lampGreen: "#39d36b",
+  lampAmber: "#ffb52e",
+  lampRed: "#ff4436",
+  screen: "#0d2a22",
+  screenInk: "#7dffb2",
+  wood: "#6b4a2f",
+  water: "#1f5a6e",
+  emergencyRed: "#ff2a1a",
+  workLight: "#ffe2b0",
+} as const;
