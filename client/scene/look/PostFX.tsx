@@ -17,6 +17,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { useStore } from "../../store.ts";
+import { BLOOM } from "./glow.ts";
 import { setQuality } from "./quality.ts";
 
 /** Live grade parameters; rooms write these in useFrame (no React state). */
@@ -114,7 +115,7 @@ function Composer() {
     composer.renderTarget1.texture.type = HalfFloatType;
     composer.renderTarget2.texture.type = HalfFloatType;
     composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new Vector2(256, 256), 0.4, 0.35, 1.1);
+    const bloom = new UnrealBloomPass(new Vector2(256, 256), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
     composer.addPass(bloom);
     const gradePass = new ShaderPass(GradeShader);
     composer.addPass(gradePass);
@@ -137,7 +138,7 @@ function Composer() {
     gradePass.uniforms.uAlarm.value = reduced ? grade.alarm * 0.5 : grade.alarm;
     gradePass.uniforms.uDark.value = grade.dark;
     gradePass.uniforms.uGrain.value = reduced ? 0.02 : 0.045;
-    bloom.strength = 0.4 * grade.bloom;
+    bloom.strength = BLOOM.strength * grade.bloom;
     composer.render(dt);
     // auto step-down: ~4 s of frames slower than 22 fps (ignoring hitches)
     if (dt > 1 / 22 && dt < 0.5) slow.current += dt;

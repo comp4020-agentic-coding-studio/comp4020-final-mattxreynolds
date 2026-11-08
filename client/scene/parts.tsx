@@ -15,6 +15,7 @@ import {
   type Material,
 } from "three";
 import { useCanvasTexture } from "./canvasTexture.ts";
+import { labelGlow } from "./look/glow.ts";
 import { PALETTE } from "./palette.ts";
 
 type V3 = [number, number, number];
@@ -224,7 +225,7 @@ export function Dial({
       <mesh geometry={S().ring} material={S().brass} scale={[r * 2.06, r * 2.06, r * 2]} position={[0, 0, 0.005]} />
       <mesh position={[0, 0, 0.003]}>
         <circleGeometry args={[r, 40]} />
-        <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={faceGlow} roughness={0.7} />
+        <meshStandardMaterial map={tex} emissiveMap={tex} emissive="#ffffff" emissiveIntensity={labelGlow(faceGlow)} roughness={0.7} />
       </mesh>
       <group ref={needle} position={[0, 0, 0.02]}>
         <mesh geometry={S().box} material={needleMat} position={[0, r * 0.38, 0]} scale={[r * 0.06, r * 0.9, 0.01]} />
